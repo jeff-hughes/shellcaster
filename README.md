@@ -1,0 +1,3 @@
+# Rust TUI podcast app
+
+Currently a very, very rough work in progress...
