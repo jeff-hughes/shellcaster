@@ -8,3 +8,4 @@ edition = "2018"
 
 [dependencies]
 pancurses = "0.16.1"
+rusqlite = "0.21.0"

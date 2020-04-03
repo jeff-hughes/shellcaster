@@ -1,11 +1,15 @@
-use std::cmp;
-
 extern crate pancurses;
-use pancurses::{Input};
+use pancurses::{newwin, Input};
+
+mod db;
+use db::Podcast;
 
 const N_OPTS: usize = 100;
 
 fn main() {
+    let db_inst = db::connect();
+    // db_inst.insert_podcast("test", "https://www.test.com");
+
     let stdscr = pancurses::initscr();
 
     // set some options
@@ -17,7 +21,9 @@ fn main() {
     stdscr.keypad(true);  // returns special characters as single key codes
 
     let (n_row, n_col) = stdscr.get_max_yx();
-    let left_pad = pancurses::newwin(n_row, n_col / 2, 0, 0);
+    let left_pad = newwin(n_row, n_col / 2, 0, 0);
+
+    let podcast_list: Vec<Podcast> = db_inst.get_podcasts();
 
     // make list of strings (probably) larger than available window
     let mut string_list: Vec<String> = Vec::with_capacity(N_OPTS);
@@ -28,8 +34,10 @@ fn main() {
 
     // for visible rows, print strings from list
     for i in 0..n_row {
-        if let Some(elem) = string_list.get(i as usize) {
-            left_pad.mvprintw(i, 0, elem);
+        // if let Some(elem) = string_list.get(i as usize) {
+        //     left_pad.mvprintw(i, 0, elem);
+        if let Some(elem) = podcast_list.get(i as usize) {
+            left_pad.mvprintw(i, 0, &elem.name);
         } else {
             break;
         }
@@ -69,7 +77,7 @@ fn main() {
                     break;
                 }
             },
-            Some(input) => (),
+            Some(_) => (),
             None => (),
         };
 
