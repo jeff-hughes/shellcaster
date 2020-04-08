@@ -5,6 +5,12 @@ extern crate pancurses;
 use pancurses::{Window, newwin, Input};
 
 #[derive(Debug)]
+pub struct UiMessage {
+    pub response: Option<String>,
+    pub message: Option<String>,
+}
+
+#[derive(Debug)]
 pub struct UI<'a, T> {
     stdscr: Window,
     n_row: i32,
@@ -15,7 +21,7 @@ pub struct UI<'a, T> {
 impl<T> UI<'_, T>
     where T: fmt::Display + convert::AsRef<str> {
 
-    pub fn getch(&mut self) -> Option<isize> {
+    pub fn getch(&mut self) -> UiMessage {
         match self.stdscr.getch() {
             Some(Input::KeyResize) => {
                 pancurses::resize_term(0, 0);
@@ -29,14 +35,106 @@ impl<T> UI<'_, T>
                 self.left_menu.scroll_up(1);
             },
             Some(Input::Character(c)) => {
+                // QUIT PROGRAM
                 if c == 'q' {
-                    return Some(0);
+                    return UiMessage {
+                        response: Some("quit".to_string()),
+                        message: None,
+                    };
+                
+                // ADD NEW PODCAST FEED
+                } else if c == 'a' {
+                    let prefix = String::from("Feed URL: ");
+                    let ins_win = newwin(1, self.n_col, self.n_row-1, 0);
+                    ins_win.overlay(&self.left_menu.window);
+                    ins_win.mv(self.n_row-1, 0);
+                    ins_win.printw(&prefix);
+                    ins_win.keypad(true);
+                    ins_win.refresh();
+                    pancurses::curs_set(2);
+                    
+                    let mut inputs = String::new();
+                    let mut cancelled = false;
+
+                    let min_x = prefix.len() as i32;
+                    let mut current_x = prefix.len() as i32;
+                    let mut cursor_x = prefix.len() as i32;
+                    loop {
+                        match ins_win.getch() {
+                            Some(Input::KeyExit) |
+                            Some(Input::Character('\u{1b}')) => {
+                                cancelled = true;
+                                break;
+                            },
+                            Some(Input::KeyEnter) |
+                            Some(Input::Character('\n')) => {
+                                break;
+                            },
+                            Some(Input::KeyBackspace) |
+                            Some(Input::Character('\u{7f}')) => {
+                                if current_x > min_x {
+                                    current_x -= 1;
+                                    cursor_x -= 1;
+                                    let _ = inputs.remove((cursor_x as usize) - prefix.len());
+                                    ins_win.mv(0, cursor_x);
+                                    ins_win.delch();
+                                }
+                            },
+                            Some(Input::KeyDC) => {
+                                if cursor_x < current_x {
+                                    let _ = inputs.remove((cursor_x as usize) - prefix.len());
+                                    ins_win.delch();
+                                }
+                            },
+                            Some(Input::KeyLeft) => {
+                                if cursor_x > min_x {
+                                    cursor_x -= 1;
+                                    ins_win.mv(0, cursor_x);
+                                }
+                            },
+                            Some(Input::KeyRight) => {
+                                if cursor_x < current_x {
+                                    cursor_x += 1;
+                                    ins_win.mv(0, cursor_x);
+                                }
+                            },
+                            Some(Input::Character(c)) => {
+                                current_x += 1;
+                                cursor_x += 1;
+                                ins_win.insch(c);
+                                ins_win.mv(0, cursor_x);
+                                inputs.push(c);
+                            },
+                            Some(_) => (),
+                            None => (),
+                        }
+                        ins_win.refresh();
+                    }
+
+                    pancurses::curs_set(0);
+                    ins_win.deleteln();
+                    ins_win.refresh();
+                    ins_win.delwin();
+
+                    if !cancelled && inputs.len() > 0 {
+                        return UiMessage {
+                            response: Some("add_feed".to_string()),
+                            message: Some(inputs),
+                        }
+                    }
+                    return UiMessage {
+                        response: Some("add_feed".to_string()),
+                        message: None,
+                    };
                 }
             },
             Some(_) => (),
             None => (),
         };
-        return None;
+        return UiMessage {
+            response: None,
+            message: None,
+        };
     }
 }
 

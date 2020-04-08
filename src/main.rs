@@ -26,9 +26,12 @@ fn main() {
     // ui.left_menu.init(&string_list);
 
     loop {
-        if let Some(res) = ui.getch() {
-            if res == 0 {
+        let mess = ui.getch();
+        if let Some(res) = mess.response {
+            if res == "quit" {
                 break;
+            } else if res == "add_feed" {
+                // TODO: Add feed
             }
         };
     }
