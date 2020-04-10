@@ -1,7 +1,9 @@
 mod db;
-use db::Podcast;
-
 mod ui;
+mod types;
+mod feeds;
+
+use crate::types::{Podcast};
 
 const N_OPTS: usize = 100;
 
@@ -31,9 +33,18 @@ fn main() {
             if res == "quit" {
                 break;
             } else if res == "add_feed" {
-                // TODO: Add feed
+                if let Some(url) = mess.message {
+                    match feeds::get_feed_data(url) {
+                        Ok(pod) => {
+                            if let Err(_err) = db_inst.insert_podcast(&pod) {
+                                // TODO: Print error somewhere to screen
+                            }
+                        },
+                        Err(_err) => (),  // TODO: Print error somewhere to screen
+                    }
+                }
             }
-        };
+        }
     }
 
     ui::tear_down();

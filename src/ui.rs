@@ -1,7 +1,6 @@
 use std::fmt;
 use std::convert;
 
-extern crate pancurses;
 use pancurses::{Window, newwin, Input};
 
 #[derive(Debug)]

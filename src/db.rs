@@ -1,54 +1,6 @@
-use std::fmt;
-use std::convert;
-
-extern crate rusqlite;
 use rusqlite::{Connection, params};
 
-#[derive(Debug)]
-pub struct Podcast {
-    pub id: i32,
-    pub title: String,
-    pub url: String,
-    pub description: String,
-    pub author: String,
-    pub explicit: bool,
-    // pub episodes: Vec<Episode>,
-}
-
-impl fmt::Display for Podcast {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.title)
-    }
-}
-
-impl convert::AsRef<str> for Podcast {
-    fn as_ref(&self) -> &str {
-        return &self.title[..];
-    }
-}
-
-#[derive(Debug)]
-pub struct Episode {
-    pub id: i32,
-    pub title: String,
-    pub url: String,
-    pub description: String,
-    pub pubdate: String,
-    pub path: String,
-    pub played: bool,
-}
-
-impl fmt::Display for Episode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.title)
-    }
-}
-
-impl convert::AsRef<str> for Episode {
-    fn as_ref(&self) -> &str {
-        return &self.title[..];
-    }
-}
+use crate::types::{Podcast};
 
 #[derive(Debug)]
 pub struct Database {
@@ -57,69 +9,65 @@ pub struct Database {
 
 impl Database {
     pub fn create(&self) {
-        if let Some(conn) = &self.conn {
-            // create podcasts table
-            match conn.execute(
-                "CREATE TABLE IF NOT EXISTS podcasts (
-                    id INTEGER PRIMARY KEY,
-                    title TEXT NOT NULL,
-                    url TEXT NOT NULL UNIQUE,
-                    description TEXT,
-                    author TEXT,
-                    explicit INTEGER
-                );",
-                params![],
-            ) {
-                Ok(_) => (),
-                Err(err) => panic!("Could not create podcasts database table: {}", err),
-            }
+        let conn = &self.conn.as_ref().unwrap();
 
-            // create episodes table
-            match conn.execute(
-                "CREATE TABLE IF NOT EXISTS episodes (
-                    id INTEGER PRIMARY KEY,
-                    podcast_id INTEGER NOT NULL,
-                    title TEXT NOT NULL,
-                    url TEXT NOT NULL UNIQUE,
-                    description TEXT,
-                    pubdate INTEGER,
-                    played INTEGER,
-                    FOREIGN KEY(podcast_id) REFERENCES podcasts(id)
-                );",
-                params![],
-            ) {
-                Ok(_) => (),
-                Err(err) => panic!("Could not create episodes database table: {}", err),
-            }
+        // create podcasts table
+        match conn.execute(
+            "CREATE TABLE IF NOT EXISTS podcasts (
+                id INTEGER PRIMARY KEY,
+                title TEXT NOT NULL,
+                url TEXT NOT NULL UNIQUE,
+                description TEXT,
+                author TEXT,
+                explicit INTEGER
+            );",
+            params![],
+        ) {
+            Ok(_) => (),
+            Err(err) => panic!("Could not create podcasts database table: {}", err),
+        }
 
-            // create files table
-            match conn.execute(
-                "CREATE TABLE IF NOT EXISTS files (
-                    id INTEGER PRIMARY KEY,
-                    episode_id INTEGER NOT NULL,
-                    path TEXT NOT NULL,
-                    FOREIGN KEY (episode_id) REFERENCES episodes(id)
-                );",
-                params![],
-            ) {
-                Ok(_) => (),
-                Err(err) => panic!("Could not create files database table: {}", err),
-            }
-        };
+        // create episodes table
+        match conn.execute(
+            "CREATE TABLE IF NOT EXISTS episodes (
+                id INTEGER PRIMARY KEY,
+                podcast_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                url TEXT NOT NULL UNIQUE,
+                description TEXT,
+                pubdate INTEGER,
+                played INTEGER,
+                FOREIGN KEY(podcast_id) REFERENCES podcasts(id)
+            );",
+            params![],
+        ) {
+            Ok(_) => (),
+            Err(err) => panic!("Could not create episodes database table: {}", err),
+        }
+
+        // create files table
+        match conn.execute(
+            "CREATE TABLE IF NOT EXISTS files (
+                id INTEGER PRIMARY KEY,
+                episode_id INTEGER NOT NULL,
+                path TEXT NOT NULL,
+                FOREIGN KEY (episode_id) REFERENCES episodes(id)
+            );",
+            params![],
+        ) {
+            Ok(_) => (),
+            Err(err) => panic!("Could not create files database table: {}", err),
+        }
     }
 
-    pub fn insert_podcast(&self, name: &str, url: &str, description: &str,
-                          author: &str, explicit: bool) {
-        if let Some(conn) = &self.conn {
-            match conn.execute(
-                "INSERT INTO podcasts (title, url, description, author, explicit)
-                    VALUES (?, ?, ?, ?, ?);",
-                params![name, url, description, author, explicit]
-            ) {
-                Ok(_) => (),
-                Err(err) => panic!("Could not insert data: {}", err),
-            }
-        }
+    pub fn insert_podcast(&self, podcast: &Podcast) -> Result<(), Box<dyn std::error::Error>> {
+        let conn = &self.conn.as_ref().unwrap();
+        let _ = conn.execute(
+            "INSERT INTO podcasts (title, url, description, author, explicit)
+                VALUES (?, ?, ?, ?, ?);",
+            params![podcast.title, podcast.url, podcast.description, podcast.author, podcast.explicit]
+        )?;
+        return Ok(());
     }
 
     pub fn get_podcasts(&self) -> Vec<Podcast> {
@@ -128,7 +76,7 @@ impl Database {
                 "SELECT * FROM podcasts;").unwrap();
             let podcast_iter = stmt.query_map(params![], |row| {
                 Ok(Podcast {
-                    id: row.get(0)?,
+                    id: Some(row.get(0)?),
                     title: row.get(1)?,
                     url: row.get(2)?,
                     description: row.get(3)?,
