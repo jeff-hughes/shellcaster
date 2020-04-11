@@ -1,9 +1,21 @@
 use rss::Channel;
+use chrono::{DateTime, Utc};
+use rfc822_sanitizer::parse_from_rfc2822_with_fallback;
+use lazy_static::lazy_static;
+use regex::{Regex, Match};
 
-use crate::types::{Podcast};
+use crate::types::{Podcast, Episode};
+
+lazy_static! {
+    static ref RE_DURATION: Regex = Regex::new(r"(\d+)(?::(\d+))?(?::(\d+))?").unwrap();
+}
 
 pub fn get_feed_data(url: String) -> Result<Podcast, Box<dyn std::error::Error>> {
     let channel = Channel::from_url(&url)?;
+
+    let title = channel.title().to_string();
+    let description = Some(channel.description().to_string());
+    let last_checked = Utc::now();
 
     let mut author = None;
     let mut explicit = None;
@@ -25,12 +37,139 @@ pub fn get_feed_data(url: String) -> Result<Podcast, Box<dyn std::error::Error>>
         };
     }
 
+    let mut episodes = Vec::new();
+    let items = channel.into_items();
+    if items.len() > 0 {
+        for item in &items {
+            let title = match item.title() {
+                Some(s) => s.to_string(),
+                None => "".to_string(),
+            };
+            let url = match item.enclosure() {
+                Some(enc) => enc.url().to_string(),
+                None => "".to_string(),
+            };
+            let description = match item.description() {
+                Some(dsc) => dsc.to_string(),
+                None => "".to_string(),
+            };
+            let pubdate = match item.pub_date() {
+                Some(pd) => match parse_from_rfc2822_with_fallback(pd) {
+                    Ok(date) => {
+                        // this is a bit ridiculous, but it seems like 
+                        // you have to convert from a DateTime<FixedOffset>
+                        // to a NaiveDateTime, and then from there create
+                        // a DateTime<Utc>; see
+                        // https://github.com/chronotope/chrono/issues/169#issue-239433186
+                        Some(DateTime::from_utc(date.naive_utc(), Utc))
+                    },
+                    Err(_) => None,
+                },
+                None => None,
+            };
+ 
+            let mut duration = None;
+            if let Some(itunes) = item.itunes_ext() {
+                duration = duration_to_int(itunes.duration());
+            }
+
+            let path = "".to_string();
+            let played = false;
+
+            episodes.push(Episode {
+                id: None,
+                title: title,
+                url: url,
+                description: description,
+                pubdate: pubdate,
+                duration: duration,
+                path: path,
+                played: played,
+            });
+        }
+    }
+
     Ok(Podcast {
         id: None,
-        title: channel.title().to_string(),
+        title: title,
         url: url,
-        description: Some(channel.description().to_string()),
+        description: description,
         author: author,
         explicit: explicit,
+        last_checked: last_checked,
+        episodes: episodes,
     })
+}
+
+fn duration_to_int(duration: Option<&str>) -> Option<i32> {
+    match duration {
+        Some(dur) => {
+            match RE_DURATION.captures(&dur) {
+                Some(cap) => {
+                    /*
+                     * Provided that the regex succeeds, we should have
+                     * 4 capture groups (with 0th being the full match).
+                     * Depending on the string format, however, some of
+                     * these may return None. We first loop through the
+                     * capture groups and push Some results to a vector.
+                     * After that, we convert from a vector of Results to
+                     * a Result with a vector, using the collect() method.
+                     * This will fail on the first error, so the duration
+                     * is parsed only if all components of it were
+                     * successfully converted to integers. Finally, we
+                     * convert hours, minutes, and seconds into a total
+                     * duration in seconds and return.
+                     */
+
+                    let mut times = Vec::new();
+                    let mut first = true;
+                    for c in cap.iter() {
+                        // cap[0] is always full match
+                        if first {
+                            first = false;
+                            continue;
+                        }
+
+                        if let Some(value) = c {
+                            times.push(regex_to_int(value));
+                        }
+                    }
+
+                    match times.len() {
+                        // HH:MM:SS
+                        3 => {
+                            let result: Result<Vec<_>, _> = times.into_iter().collect();
+                            match result {
+                                Ok(v) => Some(v[0]*60*60 + v[1]*60 + v[2]),
+                                Err(_) => None,
+                            }
+                        },
+                        // MM:SS
+                        2 => {
+                            let result: Result<Vec<_>, _> = times.into_iter().collect();
+                            match result {
+                                Ok(v) => Some(v[0]*60 + v[1]),
+                                Err(_) => None,
+                            }
+                        },
+                        // SS
+                        1 => {
+                            match times[0] {
+                                Ok(i) => Some(i),
+                                Err(_) => None,
+                            }
+                        },
+                        _ => None,
+                    }
+                },
+                None => None,
+            }
+        },
+        None => None,
+    }
+}
+
+fn regex_to_int(re_match: Match) -> Result<i32, std::num::ParseIntError> {
+    let mstr = re_match.as_str();
+    mstr.parse::<i32>()
 }

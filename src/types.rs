@@ -1,5 +1,6 @@
 use std::fmt;
 use std::convert;
+use chrono::{DateTime, Utc};
 
 #[derive(Debug)]
 pub struct Podcast {
@@ -9,7 +10,8 @@ pub struct Podcast {
     pub description: Option<String>,
     pub author: Option<String>,
     pub explicit: Option<bool>,
-    // pub episodes: Vec<Episode>,
+    pub last_checked: DateTime<Utc>,
+    pub episodes: Vec<Episode>,
 }
 
 impl fmt::Display for Podcast {
@@ -29,8 +31,9 @@ pub struct Episode {
     pub id: Option<i32>,
     pub title: String,
     pub url: String,
-    pub description: Option<String>,
-    pub pubdate: String,
+    pub description: String,
+    pub pubdate: Option<DateTime<Utc>>,
+    pub duration: Option<i32>,
     pub path: String,
     pub played: bool,
 }
