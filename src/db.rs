@@ -3,12 +3,17 @@ use chrono::{NaiveDateTime, DateTime, Utc};
 
 use crate::types::{Podcast, Episode};
 
+/// Struct holding a sqlite database connection, with methods to interact
+/// with this connection.
 #[derive(Debug)]
 pub struct Database {
     conn: Option<Connection>,
 }
 
 impl Database {
+    /// Creates the necessary database tables, if they do not already
+    /// exist. Panics if database cannot be accessed, or if tables cannot
+    /// be created.
     pub fn create(&self) {
         let conn = &self.conn.as_ref().unwrap();
 
@@ -63,6 +68,8 @@ impl Database {
         }
     }
 
+    /// Inserts a new podcast and list of podcast episodes into the
+    /// database.
     pub fn insert_podcast(&self, podcast: Podcast) ->
         Result<usize, Box<dyn std::error::Error>> {
 
@@ -94,6 +101,7 @@ impl Database {
         return Ok(num_episodes);
     }
 
+    /// Inserts a podcast episode into the database.
     pub fn insert_episode(&self, podcast_id: &i32, episode: &Episode) ->
         Result<(), Box<dyn std::error::Error>> {
 
@@ -120,6 +128,8 @@ impl Database {
         return Ok(());
     }
 
+    /// Generates list of all podcasts in database.
+    /// TODO: Currently does not pull list of episodes for each podcast.
     pub fn get_podcasts(&self) -> Vec<Podcast> {
         if let Some(conn) = &self.conn {
             let mut stmt = conn.prepare(
@@ -148,6 +158,8 @@ impl Database {
     }
 }
 
+/// Creates a new connection to the database (and creates database if it
+/// does not already exist). Panics if database cannot be accessed.
 pub fn connect() -> Database {
     match Connection::open("data.db") {
         Ok(conn) => {

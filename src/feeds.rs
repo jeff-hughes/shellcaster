@@ -7,9 +7,16 @@ use regex::{Regex, Match};
 use crate::types::{Podcast, Episode};
 
 lazy_static! {
+    /// Regex for parsing an episode "duration", which could take the form
+    /// of HH:MM:SS, MM:SS, or SS.
     static ref RE_DURATION: Regex = Regex::new(r"(\d+)(?::(\d+))?(?::(\d+))?").unwrap();
 }
 
+/// Given a URL, This attempts to pull the data about a podcast and its
+/// episodes from an RSS feed. There are existing specifications for
+/// podcast RSS feeds that a feed should adhere to, but this does try to
+/// make some attempt to account for the possibility that a feed might
+/// not be valid according to the spec.
 pub fn get_feed_data(url: String) -> Result<Podcast, Box<dyn std::error::Error>> {
     let channel = Channel::from_url(&url)?;
 
@@ -101,6 +108,10 @@ pub fn get_feed_data(url: String) -> Result<Podcast, Box<dyn std::error::Error>>
     })
 }
 
+/// Given a string representing an episode duration, this attempts to
+/// convert to an integer representing the duration in seconds. Covers
+/// formats HH:MM:SS, MM:SS, and SS. If the duration cannot be converted
+/// (covering numerous reasons), it will return None.
 fn duration_to_int(duration: Option<&str>) -> Option<i32> {
     match duration {
         Some(dur) => {
@@ -169,6 +180,8 @@ fn duration_to_int(duration: Option<&str>) -> Option<i32> {
     }
 }
 
+/// Helper function converting a match from a regex capture group into an
+/// integer.
 fn regex_to_int(re_match: Match) -> Result<i32, std::num::ParseIntError> {
     let mstr = re_match.as_str();
     mstr.parse::<i32>()

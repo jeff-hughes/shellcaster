@@ -3,12 +3,19 @@ use std::convert;
 
 use pancurses::{Window, newwin, Input};
 
+/// Struct used for communicating back to the main controller after user
+/// input has been captured by the UI. `response` can be any String, and
+/// `message` includes any corresponding details going along with the 
+/// response (e.g., user has inputted a podcast feed URL).
 #[derive(Debug)]
 pub struct UiMessage {
     pub response: Option<String>,
     pub message: Option<String>,
 }
 
+/// Struct containing all interface elements of the TUI. Functionally, it
+/// encapsulates the pancurses windows, and holds data about the size of
+/// the screen.
 #[derive(Debug)]
 pub struct UI<'a, T> {
     stdscr: Window,
@@ -20,6 +27,14 @@ pub struct UI<'a, T> {
 impl<T> UI<'_, T>
     where T: fmt::Display + convert::AsRef<str> {
 
+    /// Waits for user input and, where necessary, provides UiMessages
+    /// back to the main controller.
+    /// 
+    /// Anything UI-related (e.g., scrolling up and down menus) is handled
+    /// internally, producing an empty UiMessage. This allows for some
+    /// greater degree of abstraction; for example, input to add a new
+    /// podcast feed spawns a UI window to capture the feed URL, and only
+    /// then passes this data back to the main controller.
     pub fn getch(&mut self) -> UiMessage {
         match self.stdscr.getch() {
             Some(Input::KeyResize) => {
@@ -137,11 +152,22 @@ impl<T> UI<'_, T>
     }
 }
 
-/* 
- * both `pad_selected` and `old_selected` are relative to the window,
- * i.e., they will be values between 0 and n_row - 1; `pad_top_row` is
- * relative to string_list index
- */
+/// Generic struct holding details about a list menu. These menus are
+/// contained by the UI, and hold the list of podcasts or podcast
+/// episodes. They also hold the pancurses window used to display the menu
+/// to the user.
+/// 
+/// * `n_row` and `n_col` store the size of the `window`
+/// * `top_row` indicates the top line of text that is shown on screen
+///   (since the list of items can be longer than the available size of
+///   the screen). `top_row` is calculated relative to the `items` index,
+///   i.e., it will be a value between 0 and items.len()
+/// * `selected` indicates which item on screen is currently highlighted.
+///   It is calculated relative to the screen itself, i.e., a value between
+///   0 and (n_row - 1)
+/// * `old_selected` indicates which item on screen *was* highlighted,
+///   which is used when the user is scrolling through the list (TODO:
+///   this will probably be changed at some point)
 #[derive(Debug)]
 pub struct Menu<'a, T> {
     window: Window,
@@ -156,6 +182,8 @@ pub struct Menu<'a, T> {
 impl<T> Menu<'_, T>
     where T: fmt::Display + convert::AsRef<str> {
 
+    /// Prints the list of visible items to the pancurses window and
+    /// refreshes it.
     pub fn init(&mut self) {
         // for visible rows, print strings from list
         for i in 0..self.n_row {
@@ -170,18 +198,24 @@ impl<T> Menu<'_, T>
         self.window.refresh();
     }
 
+    /// Scrolls down the menu by `lines` lines.
     pub fn scroll_down(&mut self, lines: i32) {
         self.old_selected = self.selected;
         self.selected += lines;
         self.update();
     }
 
+    /// Scrolls up the menu by `lines` lines.
     pub fn scroll_up(&mut self, lines: i32) {
         self.old_selected = self.selected;
         self.selected -= lines;
         self.update();
     }
 
+    /// When the user has scrolled up or down the menu, this function
+    /// examines the new selected value, ensures it does not fall out of
+    /// bounds, and then updates the pancurses window to represent the
+    /// new visible list.
     pub fn update(&mut self) {
         // TODO: currently only handles scroll value of 1; need to extend
         // to be able to scroll multiple lines at a time
@@ -220,6 +254,9 @@ impl<T> Menu<'_, T>
 }
 
 
+/// Initializes the UI with a list of podcasts and podcast episodes,
+/// creates the pancurses window and draws it to the screen, and returns
+/// a UI object for future manipulation.
 pub fn init<'a, T>(items: &'a Vec<T>) -> UI<'a, T>
     where T: fmt::Display + convert::AsRef<str> {
     let stdscr = pancurses::initscr();
@@ -259,6 +296,8 @@ pub fn init<'a, T>(items: &'a Vec<T>) -> UI<'a, T>
     }
 }
 
+/// When the program is ending, this performs tear-down functions so that
+/// the terminal is properly restored to its prior settings.
 pub fn tear_down() {
     pancurses::endwin();
 }

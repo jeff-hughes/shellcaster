@@ -2,6 +2,8 @@ use std::fmt;
 use std::convert;
 use chrono::{DateTime, Utc};
 
+/// Struct holding data about an individual podcast feed. This includes a
+/// (possibly empty) vector of episodes.
 #[derive(Debug)]
 pub struct Podcast {
     pub id: Option<i32>,
@@ -26,6 +28,10 @@ impl convert::AsRef<str> for Podcast {
     }
 }
 
+/// Struct holding data about an individual podcast episode. Most of this
+/// is metadata, but if the episode has been downloaded to the local
+/// machine, the filepath will be included here as well. `played` indicates
+/// whether the podcast has been marked as played or unplayed.
 #[derive(Debug)]
 pub struct Episode {
     pub id: Option<i32>,
