@@ -1,5 +1,6 @@
 use std::fmt;
 use std::convert;
+use std::cmp::min;
 use std::rc::Rc;
 use core::cell::RefCell;
 
@@ -57,7 +58,6 @@ impl<T, U> UI<T, U>
             n_col: n_col / 2,
             top_row: 0,
             selected: 0,
-            old_selected: 0,
         };
 
         stdscr.noutrefresh();
@@ -77,7 +77,6 @@ impl<T, U> UI<T, U>
             n_col: n_col / 2,
             top_row: 0,
             selected: 0,
-            old_selected: 0,
         };
 
         right_menu.init();
@@ -110,10 +109,10 @@ impl<T, U> UI<T, U>
                 // TODO: Need to handle increasing and decreasing rows
             },
             Some(Input::KeyDown) => {
-                self.left_menu.scroll_down(1);
+                self.left_menu.scroll(1);
             },
             Some(Input::KeyUp) => {
-                self.left_menu.scroll_up(1);
+                self.left_menu.scroll(-1);
             },
             Some(Input::Character(c)) => {
                 // QUIT PROGRAM
@@ -288,7 +287,6 @@ pub struct Menu<T> {
     n_col: i32,
     top_row: i32,  // top row of text shown in window
     selected: i32,  // which line of text is highlighted
-    old_selected: i32,  // which line of text WAS highlighted
 }
 
 impl<T> Menu<T>
@@ -309,27 +307,25 @@ impl<T> Menu<T>
         self.window.refresh();
     }
 
-    /// Scrolls down the menu by `lines` lines.
-    pub fn scroll_down(&mut self, lines: i32) {
-        self.old_selected = self.selected;
-        self.selected += lines;
-        self.scroll_menu();
-    }
-
-    /// Scrolls up the menu by `lines` lines.
-    pub fn scroll_up(&mut self, lines: i32) {
-        self.old_selected = self.selected;
-        self.selected -= lines;
-        self.scroll_menu();
-    }
-
-    /// When the user has scrolled up or down the menu, this function
-    /// examines the new selected value, ensures it does not fall out of
-    /// bounds, and then updates the pancurses window to represent the
-    /// new visible list.
-    fn scroll_menu(&mut self) {
+    /// Scrolls the menu up or down by `lines` lines. Negative values of
+    /// `lines` will scroll the menu up.
+    /// 
+    /// This function examines the new selected value, ensures it does
+    /// not fall out of bounds, and then updates the pancurses window to
+    /// represent the new visible list.
+    fn scroll(&mut self, lines: i32) {
         // TODO: currently only handles scroll value of 1; need to extend
         // to be able to scroll multiple lines at a time
+        let mut old_selected = self.selected;
+        self.selected += lines;
+
+        // don't allow scrolling past last item in list (if shorter than
+        // self.n_row)
+        let abs_bottom = min(self.n_row,
+            (self.items.borrow().len() - 1) as i32);
+        if self.selected > abs_bottom {
+            self.selected = abs_bottom;
+        }
 
         // scroll list if necessary
         if self.selected > (self.n_row - 1) {
@@ -338,7 +334,7 @@ impl<T> Menu<T>
                 self.top_row += 1;
                 self.window.mv(0, 0);
                 self.window.deleteln();
-                self.old_selected -= 1;
+                old_selected -= 1;
 
                 self.window.mv(self.n_row-1, 0);
                 self.window.clrtoeol();
@@ -351,14 +347,14 @@ impl<T> Menu<T>
                 self.top_row -= 1;
                 self.window.mv(0, 0);
                 self.window.insertln();
-                self.old_selected += 1;
+                old_selected += 1;
 
                 self.window.mv(0, 0);
                 self.window.addstr(elem);
             }
         }
 
-        self.window.mvchgat(self.old_selected, 0, -1, pancurses::A_NORMAL, 0);
+        self.window.mvchgat(old_selected, 0, -1, pancurses::A_NORMAL, 0);
         self.window.mvchgat(self.selected, 0, -1, pancurses::A_REVERSE, 0);
         self.window.refresh();
     }
