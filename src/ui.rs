@@ -29,6 +29,48 @@ pub struct UI<T> {
 impl<T> UI<T>
     where T: fmt::Display + convert::AsRef<str> {
 
+    /// Initializes the UI with a list of podcasts and podcast episodes,
+    /// creates the pancurses window and draws it to the screen, and
+    /// returns a UI object for future manipulation.
+    pub fn new(items: &MutableVec<Podcast>) -> UI<Podcast> {
+        let stdscr = pancurses::initscr();
+
+        // set some options
+        pancurses::cbreak();  // allows characters to be read one by one
+        pancurses::noecho();  // turns off automatic echoing of characters
+                              // to the screen as they are input
+        pancurses::start_color();  // allows colours if available
+        pancurses::curs_set(0);  // turn off cursor
+        stdscr.keypad(true);  // returns special characters as single
+                              // key codes
+
+        let (n_row, n_col) = stdscr.get_max_yx();
+
+        let left_menu_win = newwin(n_row, n_col / 2, 0, 0);
+        let mut left_menu = Menu {
+            window: left_menu_win,
+            items: Rc::clone(items),
+            n_row: n_row,
+            n_col: n_col / 2,
+            top_row: 0,
+            selected: 0,
+            old_selected: 0,
+        };
+
+        stdscr.noutrefresh();
+        left_menu.init();
+        left_menu.window.mvchgat(left_menu.selected, 0, -1, pancurses::A_REVERSE, 0);
+        left_menu.window.noutrefresh();
+        pancurses::doupdate();
+
+        return UI {
+            stdscr,
+            n_row,
+            n_col,
+            left_menu: left_menu,
+        }
+    }
+
     /// Waits for user input and, where necessary, provides UiMessages
     /// back to the main controller.
     /// 
@@ -186,8 +228,16 @@ impl<T> UI<T>
         msg_win.delwin();
     }
 
+    /// Forces the menus to check the list of podcasts/episodes again and
+    /// update.
     pub fn update_menus(&mut self) {
         self.left_menu.update_items();
+    }
+
+    /// When the program is ending, this performs tear-down functions so
+    /// that the terminal is properly restored to its prior settings.
+    pub fn tear_down(&self) {
+        pancurses::endwin();
     }
 }
 
@@ -303,54 +353,6 @@ impl<T> Menu<T>
         }
         self.window.refresh();
     }
-}
-
-
-/// Initializes the UI with a list of podcasts and podcast episodes,
-/// creates the pancurses window and draws it to the screen, and returns
-/// a UI object for future manipulation.
-pub fn init(items: &MutableVec<Podcast>) -> UI<Podcast> {
-    let stdscr = pancurses::initscr();
-
-    // set some options
-    pancurses::cbreak();  // allows characters to be read one by one
-    pancurses::noecho();  // turns off automatic echoing of characters
-                        // to the screen as they are input
-    pancurses::start_color(); // allows colours if available
-    pancurses::curs_set(0); // turn off cursor
-    stdscr.keypad(true);  // returns special characters as single key codes
-
-    let (n_row, n_col) = stdscr.get_max_yx();
-
-    let left_menu_win = newwin(n_row, n_col / 2, 0, 0);
-    let mut left_menu = Menu {
-        window: left_menu_win,
-        items: Rc::clone(items),
-        n_row: n_row,
-        n_col: n_col / 2,
-        top_row: 0,
-        selected: 0,
-        old_selected: 0,
-    };
-
-    stdscr.noutrefresh();
-    left_menu.init();
-    left_menu.window.mvchgat(left_menu.selected, 0, -1, pancurses::A_REVERSE, 0);
-    left_menu.window.noutrefresh();
-    pancurses::doupdate();
-
-    return UI {
-        stdscr,
-        n_row,
-        n_col,
-        left_menu: left_menu,
-    }
-}
-
-/// When the program is ending, this performs tear-down functions so that
-/// the terminal is properly restored to its prior settings.
-pub fn tear_down() {
-    pancurses::endwin();
 }
 
 

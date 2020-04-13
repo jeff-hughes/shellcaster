@@ -11,6 +11,21 @@ pub struct Database {
 }
 
 impl Database {
+    /// Creates a new connection to the database (and creates database if
+    /// it does not already exist). Panics if database cannot be accessed.
+    pub fn connect() -> Database {
+        match Connection::open("data.db") {
+            Ok(conn) => {
+                let db_conn = Database {
+                    conn: Some(conn),
+                };
+                db_conn.create();
+                return db_conn;
+            },
+            Err(err) => panic!("Could not open database: {}", err),
+        };
+    }
+
     /// Creates the necessary database tables, if they do not already
     /// exist. Panics if database cannot be accessed, or if tables cannot
     /// be created.
@@ -156,19 +171,4 @@ impl Database {
             return Vec::new();
         }
     }
-}
-
-/// Creates a new connection to the database (and creates database if it
-/// does not already exist). Panics if database cannot be accessed.
-pub fn connect() -> Database {
-    match Connection::open("data.db") {
-        Ok(conn) => {
-            let db_conn = Database {
-                conn: Some(conn),
-            };
-            db_conn.create();
-            return db_conn;
-        },
-        Err(err) => panic!("Could not open database: {}", err),
-    };
 }

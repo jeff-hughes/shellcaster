@@ -6,6 +6,8 @@ mod ui;
 mod types;
 mod feeds;
 
+use crate::ui::UI;
+use crate::db::Database;
 use crate::types::{Podcast, MutableVec};
 
 /// Main controller for shellcaster program.
@@ -20,7 +22,7 @@ use crate::types::{Podcast, MutableVec};
 /// to quit the program breaks the loop, tears down the UI, and ends the
 /// program.
 fn main() {
-    let db_inst = db::connect();
+    let db_inst = Database::connect();
 
     // create vector of podcasts, where references are checked at runtime;
     // this is necessary because we want main.rs to hold the "ground truth"
@@ -28,7 +30,7 @@ fn main() {
     // this list and update the screen when necessary
     let podcast_list: MutableVec<Podcast> = Rc::new(
         RefCell::new(db_inst.get_podcasts()));
-    let mut ui = ui::init(&podcast_list);
+    let mut ui = UI::<Podcast>::new(&podcast_list);
 
     loop {
         let mess = ui.getch();
@@ -56,5 +58,5 @@ fn main() {
         }
     }
 
-    ui::tear_down();
+    ui.tear_down();
 }
