@@ -91,7 +91,7 @@ impl<T> UI<T>
         let input_win = newwin(1, self.n_col, self.n_row-1, 0);
         // input_win.overlay(&self.left_menu.window);
         input_win.mv(self.n_row-1, 0);
-        input_win.printw(&prefix);
+        input_win.addstr(&prefix);
         input_win.keypad(true);
         input_win.refresh();
         pancurses::curs_set(2);
@@ -174,7 +174,7 @@ impl<T> UI<T>
     pub fn spawn_msg_win(&mut self, message: &str, duration: i32) {
         let msg_win = newwin(1, self.n_col, self.n_row-1, 0);
         msg_win.mv(self.n_row-1, 0);
-        msg_win.printw(&message);
+        msg_win.addstr(&message);
         msg_win.refresh();
 
         // TODO: This probably should be some async function, but this
@@ -227,7 +227,7 @@ impl<T> Menu<T>
         // for visible rows, print strings from list
         for i in 0..self.n_row {
             if let Some(elem) = self.items.borrow().get(i as usize) {
-                self.window.mvprintw(i, 0, format!("{}", elem));
+                self.window.mvaddstr(i, 0, elem.to_string());
             } else {
                 break;
             }
@@ -269,7 +269,7 @@ impl<T> Menu<T>
 
                 self.window.mv(self.n_row-1, 0);
                 self.window.clrtoeol();
-                self.window.printw(elem);
+                self.window.addstr(elem);
             }
 
         } else if self.selected < 0 {
@@ -281,7 +281,7 @@ impl<T> Menu<T>
                 self.old_selected += 1;
 
                 self.window.mv(0, 0);
-                self.window.printw(elem);
+                self.window.addstr(elem);
             }
         }
 
@@ -296,7 +296,7 @@ impl<T> Menu<T>
         // for visible rows, print strings from list
         for i in self.top_row..(self.top_row + self.n_row - 1) {
             if let Some(elem) = self.items.borrow().get(i as usize) {
-                self.window.mvprintw(i, 0, format!("{}", elem));
+                self.window.mvaddstr(i, 0, elem.to_string());
             } else {
                 break;
             }
@@ -351,4 +351,14 @@ pub fn init(items: &MutableVec<Podcast>) -> UI<Podcast> {
 /// the terminal is properly restored to its prior settings.
 pub fn tear_down() {
     pancurses::endwin();
+}
+
+
+// TESTS -----------------------------------------------------------------
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn it_works() {
+        assert_eq!(2 + 2, 4);
+    }
 }
