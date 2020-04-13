@@ -1,6 +1,6 @@
 use std::fmt;
 use std::convert;
-use std::cmp::min;
+use std::cmp::{min, max};
 use std::rc::Rc;
 use core::cell::RefCell;
 
@@ -21,22 +21,20 @@ pub struct UiMessage {
 /// encapsulates the pancurses windows, and holds data about the size of
 /// the screen.
 #[derive(Debug)]
-pub struct UI<T, U> {
+pub struct UI {
     stdscr: Window,
     n_row: i32,
     n_col: i32,
-    pub left_menu: Menu<T>,
-    pub right_menu: Menu<U>,
+    podcast_menu: Menu<Podcast>,
+    episode_menu: Menu<Episode>,
+    active_menu: i32,
 }
 
-impl<T, U> UI<T, U>
-    where T: fmt::Display + convert::AsRef<str>,
-          U: fmt::Display + convert::AsRef<str> {
-
+impl UI {
     /// Initializes the UI with a list of podcasts and podcast episodes,
     /// creates the pancurses window and draws it to the screen, and
     /// returns a UI object for future manipulation.
-    pub fn new(items: &MutableVec<Podcast>) -> UI<Podcast, Episode> {
+    pub fn new(items: &MutableVec<Podcast>) -> UI {
         let stdscr = pancurses::initscr();
 
         // set some options
@@ -50,9 +48,9 @@ impl<T, U> UI<T, U>
 
         let (n_row, n_col) = stdscr.get_max_yx();
 
-        let left_menu_win = newwin(n_row, n_col / 2, 0, 0);
-        let mut left_menu = Menu {
-            window: left_menu_win,
+        let podcast_menu_win = newwin(n_row, n_col / 2, 0, 0);
+        let mut podcast_menu = Menu {
+            window: podcast_menu_win,
             items: Rc::clone(items),
             n_row: n_row,
             n_col: n_col / 2,
@@ -61,17 +59,17 @@ impl<T, U> UI<T, U>
         };
 
         stdscr.noutrefresh();
-        left_menu.init();
-        left_menu.window.mvchgat(left_menu.selected, 0, -1, pancurses::A_REVERSE, 0);
-        left_menu.window.noutrefresh();
+        podcast_menu.init();
+        podcast_menu.window.mvchgat(podcast_menu.selected, 0, -1, pancurses::A_REVERSE, 0);
+        podcast_menu.window.noutrefresh();
 
-        let right_menu_win = newwin(n_row, n_col / 2, 0, n_col / 2);
+        let episode_menu_win = newwin(n_row, n_col / 2, 0, n_col / 2);
         let first_pod = match items.borrow().get(0) {
             Some(pod) => Rc::clone(&pod.episodes),
             None => Rc::new(RefCell::new(Vec::new())),
         };
-        let mut right_menu = Menu {
-            window: right_menu_win,
+        let mut episode_menu = Menu {
+            window: episode_menu_win,
             items: first_pod,
             n_row: n_row,
             n_col: n_col / 2,
@@ -79,17 +77,17 @@ impl<T, U> UI<T, U>
             selected: 0,
         };
 
-        right_menu.init();
-        right_menu.window.mvchgat(right_menu.selected, 0, -1, pancurses::A_REVERSE, 0);
-        right_menu.window.noutrefresh();
+        episode_menu.init();
+        episode_menu.window.noutrefresh();
         pancurses::doupdate();
 
         return UI {
             stdscr,
             n_row,
             n_col,
-            left_menu: left_menu,
-            right_menu: right_menu,
+            podcast_menu: podcast_menu,
+            episode_menu: episode_menu,
+            active_menu: 0,
         }
     }
 
@@ -109,10 +107,54 @@ impl<T, U> UI<T, U>
                 // TODO: Need to handle increasing and decreasing rows
             },
             Some(Input::KeyDown) => {
-                self.left_menu.scroll(1);
+                if self.active_menu == 0 {
+                    self.podcast_menu.scroll(1);
+
+                    self.episode_menu.top_row = 0;
+                    self.episode_menu.selected = 0;
+
+                    // update episodes menu with new list
+                    self.episode_menu.items = self.podcast_menu.get_episodes();
+                    self.episode_menu.update_items();
+                } else if self.active_menu == 1 {
+                    self.episode_menu.scroll(1);
+                }
             },
             Some(Input::KeyUp) => {
-                self.left_menu.scroll(-1);
+                if self.active_menu == 0 {
+                    self.podcast_menu.scroll(-1);
+
+                    self.episode_menu.top_row = 0;
+                    self.episode_menu.selected = 0;
+
+                    // update episodes menu with new list
+                    self.episode_menu.items = self.podcast_menu.get_episodes();
+                    self.episode_menu.update_items();
+                } else if self.active_menu == 1 {
+                    self.episode_menu.scroll(-1);
+                }
+            },
+            Some(Input::KeyLeft) => {
+                self.active_menu = min(0, self.active_menu - 1);
+
+                if self.active_menu == 0 {
+                    self.podcast_menu.activate();
+                    self.episode_menu.deactivate();
+                } else if self.active_menu == 1 {
+                    self.episode_menu.activate();
+                    // self.podcast_menu.deactivate();
+                }
+            },
+            Some(Input::KeyRight) => {
+                self.active_menu = max(1, self.active_menu + 1);
+
+                if self.active_menu == 0 {
+                    self.podcast_menu.activate();
+                    self.episode_menu.deactivate();
+                } else if self.active_menu == 1 {
+                    self.episode_menu.activate();
+                    // self.podcast_menu.deactivate();
+                }
             },
             Some(Input::Character(c)) => {
                 // QUIT PROGRAM
@@ -153,7 +195,7 @@ impl<T, U> UI<T, U>
     /// empty.
     pub fn spawn_input_win(&mut self, prefix: &str) -> String {
         let input_win = newwin(1, self.n_col, self.n_row-1, 0);
-        // input_win.overlay(&self.left_menu.window);
+        // input_win.overlay(&self.podcast_menu.window);
         input_win.mv(self.n_row-1, 0);
         input_win.addstr(&prefix);
         input_win.keypad(true);
@@ -253,7 +295,8 @@ impl<T, U> UI<T, U>
     /// Forces the menus to check the list of podcasts/episodes again and
     /// update.
     pub fn update_menus(&mut self) {
-        self.left_menu.update_items();
+        self.podcast_menu.update_items();
+        self.episode_menu.update_items();
     }
 
     /// When the program is ending, this performs tear-down functions so
@@ -359,11 +402,26 @@ impl<T> Menu<T>
         self.window.refresh();
     }
 
+    /// Controls how the window changes when it is active (i.e., available
+    /// for user input to modify state).
+    pub fn activate(&mut self) {
+        self.window.mvchgat(self.selected, 0, -1, pancurses::A_REVERSE, 0);
+        self.window.refresh();
+    }
+
+    /// Controls how the window changes when it is inactive (i.e., not
+    /// available for user input to modify state).
+    pub fn deactivate(&mut self) {
+        self.window.mvchgat(self.selected, 0, -1, pancurses::A_NORMAL, 0);
+        self.window.refresh();
+    }
+
     /// Given a new vector of items, this reprints the list of visible
     /// items to the screen.
     pub fn update_items(&mut self) {
+        self.window.erase();
         // for visible rows, print strings from list
-        for i in self.top_row..(self.top_row + self.n_row - 1) {
+        for i in self.top_row..(self.top_row + self.n_row) {
             if let Some(elem) = self.items.borrow().get(i as usize) {
                 self.window.mvaddstr(i, 0, elem.to_string());
             } else {
@@ -371,6 +429,16 @@ impl<T> Menu<T>
             }
         }
         self.window.refresh();
+    }
+}
+
+impl Menu<Podcast> {
+    /// Returns a cloned reference to the list of episodes from the
+    /// currently selected podcast.
+    pub fn get_episodes(&self) -> MutableVec<Episode> {
+        let index = self.selected + self.top_row;
+        return Rc::clone(&self.items.borrow()
+            .get(index as usize).unwrap().episodes);
     }
 }
 

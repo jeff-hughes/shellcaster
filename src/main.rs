@@ -8,7 +8,7 @@ mod feeds;
 
 use crate::ui::UI;
 use crate::db::Database;
-use crate::types::{Podcast, Episode, MutableVec};
+use crate::types::{Podcast, MutableVec};
 
 /// Main controller for shellcaster program.
 /// 
@@ -30,7 +30,7 @@ fn main() {
     // this list and update the screen when necessary
     let podcast_list: MutableVec<Podcast> = Rc::new(
         RefCell::new(db_inst.get_podcasts()));
-    let mut ui = UI::<Podcast, Episode>::new(&podcast_list);
+    let mut ui = UI::new(&podcast_list);
 
     loop {
         let mess = ui.getch();
