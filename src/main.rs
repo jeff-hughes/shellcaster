@@ -1,9 +1,12 @@
+use std::rc::Rc;
+use core::cell::RefCell;
+
 mod db;
 mod ui;
 mod types;
 mod feeds;
 
-use crate::types::{Podcast};
+use crate::types::{Podcast, MutableVec};
 
 /// Main controller for shellcaster program.
 /// 
@@ -18,7 +21,13 @@ use crate::types::{Podcast};
 /// program.
 fn main() {
     let db_inst = db::connect();
-    let podcast_list: Vec<Podcast> = db_inst.get_podcasts();
+
+    // create vector of podcasts, where references are checked at runtime;
+    // this is necessary because we want main.rs to hold the "ground truth"
+    // list of podcasts, and it must be mutable, but UI needs to check
+    // this list and update the screen when necessary
+    let podcast_list: MutableVec<Podcast> = Rc::new(
+        RefCell::new(db_inst.get_podcasts()));
     let mut ui = ui::init(&podcast_list);
 
     loop {
@@ -30,11 +39,17 @@ fn main() {
                 if let Some(url) = mess.message {
                     match feeds::get_feed_data(url) {
                         Ok(pod) => {
-                            if let Err(_err) = db_inst.insert_podcast(pod) {
-                                // TODO: Print error somewhere to screen
+                            match db_inst.insert_podcast(pod) {
+                                Ok(num_ep) => {
+                                    *podcast_list.borrow_mut() = db_inst.get_podcasts();
+                                    ui.update_menus();
+                                    ui.spawn_msg_win(
+                                    &format!("Successfully added {} episodes.", num_ep), 5000);
+                                },
+                                Err(_err) => ui.spawn_msg_win("Error adding podcast to database.", 5000),
                             }
                         },
-                        Err(_err) => (),  // TODO: Print error somewhere to screen
+                        Err(_err) => ui.spawn_msg_win("Error retrieving RSS feed.", 5000),
                     }
                 }
             }

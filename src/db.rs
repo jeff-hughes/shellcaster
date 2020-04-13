@@ -133,7 +133,7 @@ impl Database {
     pub fn get_podcasts(&self) -> Vec<Podcast> {
         if let Some(conn) = &self.conn {
             let mut stmt = conn.prepare(
-                "SELECT * FROM podcasts;").unwrap();
+                "SELECT * FROM podcasts ORDER BY title;").unwrap();
             let podcast_iter = stmt.query_map(params![], |row| {
                 let naivedt = NaiveDateTime::from_timestamp(row.get(6)?, 0);
                 Ok(Podcast {

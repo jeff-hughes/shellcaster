@@ -1,5 +1,7 @@
 use std::fmt;
 use std::convert;
+use std::rc::Rc;
+use core::cell::RefCell;
 use chrono::{DateTime, Utc};
 
 /// Struct holding data about an individual podcast feed. This includes a
@@ -55,3 +57,6 @@ impl convert::AsRef<str> for Episode {
         return &self.title[..];
     }
 }
+
+
+pub type MutableVec<T> = Rc<RefCell<Vec<T>>>;
