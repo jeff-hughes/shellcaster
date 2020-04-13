@@ -1,3 +1,6 @@
+use std::rc::Rc;
+use core::cell::RefCell;
+
 use rusqlite::{Connection, params};
 use chrono::{NaiveDateTime, DateTime, Utc};
 
@@ -107,9 +110,9 @@ impl Database {
         let pod_id = stmt
             .query_row::<i32,_,_>(params![podcast.url], |row| row.get(0))
             .unwrap();
-        let num_episodes = podcast.episodes.len();
+        let num_episodes = podcast.episodes.borrow().len();
 
-        for ep in podcast.episodes.into_iter().rev() {
+        for ep in podcast.episodes.borrow().iter().rev() {
             let _ = &self.insert_episode(&pod_id, &ep)?;
         }
 
@@ -144,13 +147,13 @@ impl Database {
     }
 
     /// Generates list of all podcasts in database.
-    /// TODO: Currently does not pull list of episodes for each podcast.
+    /// TODO: This should probably use a JOIN statement instead.
     pub fn get_podcasts(&self) -> Vec<Podcast> {
         if let Some(conn) = &self.conn {
             let mut stmt = conn.prepare(
                 "SELECT * FROM podcasts ORDER BY title;").unwrap();
             let podcast_iter = stmt.query_map(params![], |row| {
-                let naivedt = NaiveDateTime::from_timestamp(row.get(6)?, 0);
+                let episodes = self.get_episodes(row.get(0)?);
                 Ok(Podcast {
                     id: Some(row.get(0)?),
                     title: row.get(1)?,
@@ -158,8 +161,8 @@ impl Database {
                     description: row.get(3)?,
                     author: row.get(4)?,
                     explicit: row.get(5)?,
-                    last_checked: DateTime::from_utc(naivedt, Utc),
-                    episodes: Vec::new(),
+                    last_checked: convert_date(row.get(6)).unwrap(),
+                    episodes: Rc::new(RefCell::new(episodes)),
                 })
             }).unwrap();
             let mut podcasts = Vec::new();
@@ -171,4 +174,49 @@ impl Database {
             return Vec::new();
         }
     }
+
+    /// Generates list of episodes for a given podcast.
+    pub fn get_episodes(&self, pod_id: i32) -> Vec<Episode> {
+        if let Some(conn) = &self.conn {
+            let mut stmt = conn.prepare(
+                "SELECT * FROM episodes WHERE podcast_id = ?
+                 ORDER BY pubdate DESC;").unwrap();
+            let episode_iter = stmt.query_map(params![pod_id], |row| {
+                Ok(Episode {
+                    id: Some(row.get(0)?),
+                    title: row.get(2)?,
+                    url: row.get(3)?,
+                    description: row.get(4)?,
+                    pubdate: convert_date(row.get(5)),
+                    duration: row.get(6)?,
+                    path: "".to_string(),  // TODO: Not yet implemented
+                    played: row.get(7)?,
+                })
+            }).unwrap();
+            let mut episodes = Vec::new();
+            for ep in episode_iter {
+                episodes.push(ep.unwrap());
+            }
+            return episodes;
+        } else {
+            return Vec::new();
+        }
+    }
+}
+
+
+/// Helper function converting an (optional) Unix timestamp to a
+/// DateTime<Utc> object
+fn convert_date(result: Result<i64, rusqlite::Error>) ->
+    Option<DateTime<Utc>> {
+
+    return match result {
+        Ok(timestamp) => {
+            match NaiveDateTime::from_timestamp_opt(timestamp, 0) {
+                Some(ndt) => Some(DateTime::from_utc(ndt, Utc)),
+                None => None,
+            }
+        },
+        Err(_) => None,
+    };
 }

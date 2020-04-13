@@ -1,3 +1,6 @@
+use std::rc::Rc;
+use core::cell::RefCell;
+
 use rss::Channel;
 use chrono::{DateTime, Utc};
 use rfc822_sanitizer::parse_from_rfc2822_with_fallback;
@@ -104,7 +107,7 @@ pub fn get_feed_data(url: String) -> Result<Podcast, Box<dyn std::error::Error>>
         author: author,
         explicit: explicit,
         last_checked: last_checked,
-        episodes: episodes,
+        episodes: Rc::new(RefCell::new(episodes)),
     })
 }
 

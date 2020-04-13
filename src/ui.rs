@@ -1,9 +1,10 @@
 use std::fmt;
 use std::convert;
 use std::rc::Rc;
+use core::cell::RefCell;
 
 use pancurses::{Window, newwin, Input};
-use crate::types::{Podcast, MutableVec};
+use crate::types::{Podcast, Episode, MutableVec};
 
 /// Struct used for communicating back to the main controller after user
 /// input has been captured by the UI. `response` can be any String, and
@@ -19,20 +20,22 @@ pub struct UiMessage {
 /// encapsulates the pancurses windows, and holds data about the size of
 /// the screen.
 #[derive(Debug)]
-pub struct UI<T> {
+pub struct UI<T, U> {
     stdscr: Window,
     n_row: i32,
     n_col: i32,
     pub left_menu: Menu<T>,
+    pub right_menu: Menu<U>,
 }
 
-impl<T> UI<T>
-    where T: fmt::Display + convert::AsRef<str> {
+impl<T, U> UI<T, U>
+    where T: fmt::Display + convert::AsRef<str>,
+          U: fmt::Display + convert::AsRef<str> {
 
     /// Initializes the UI with a list of podcasts and podcast episodes,
     /// creates the pancurses window and draws it to the screen, and
     /// returns a UI object for future manipulation.
-    pub fn new(items: &MutableVec<Podcast>) -> UI<Podcast> {
+    pub fn new(items: &MutableVec<Podcast>) -> UI<Podcast, Episode> {
         let stdscr = pancurses::initscr();
 
         // set some options
@@ -61,6 +64,25 @@ impl<T> UI<T>
         left_menu.init();
         left_menu.window.mvchgat(left_menu.selected, 0, -1, pancurses::A_REVERSE, 0);
         left_menu.window.noutrefresh();
+
+        let right_menu_win = newwin(n_row, n_col / 2, 0, n_col / 2);
+        let first_pod = match items.borrow().get(0) {
+            Some(pod) => Rc::clone(&pod.episodes),
+            None => Rc::new(RefCell::new(Vec::new())),
+        };
+        let mut right_menu = Menu {
+            window: right_menu_win,
+            items: first_pod,
+            n_row: n_row,
+            n_col: n_col / 2,
+            top_row: 0,
+            selected: 0,
+            old_selected: 0,
+        };
+
+        right_menu.init();
+        right_menu.window.mvchgat(right_menu.selected, 0, -1, pancurses::A_REVERSE, 0);
+        right_menu.window.noutrefresh();
         pancurses::doupdate();
 
         return UI {
@@ -68,6 +90,7 @@ impl<T> UI<T>
             n_row,
             n_col,
             left_menu: left_menu,
+            right_menu: right_menu,
         }
     }
 

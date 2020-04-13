@@ -15,7 +15,7 @@ pub struct Podcast {
     pub author: Option<String>,
     pub explicit: Option<bool>,
     pub last_checked: DateTime<Utc>,
-    pub episodes: Vec<Episode>,
+    pub episodes: MutableVec<Episode>,
 }
 
 impl fmt::Display for Podcast {
