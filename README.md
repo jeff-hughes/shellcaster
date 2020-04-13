@@ -6,15 +6,15 @@ The end goal is to provide a terminal UI (i.e., ncurses) to allow users to subsc
 
 ## Current progress
 
-Right now the program only has the barest of functionality. You can add a new podcast feed by typing "a", then typing the URL of the feed at the prompt, followed by <Enter>. (<Esc> will get you out of the prompt.) Data about the podcast and its episodes will be stored in a sqlite database, and the current list of all podcasts will be presented in an ncurses menu on the screen. Pressing "q" will quit the program.
+Right now the program only has the barest of functionality. You can add a new podcast feed by typing "a", then typing the URL of the feed at the prompt, followed by &lt;Enter&gt;. (&lt;Esc&gt; will get you out of the prompt.) Data about the podcast and its episodes will be stored in a sqlite database, and the current list of all podcasts will be presented in an ncurses menu on the screen. Navigating with the arrow keys will let you select different podcasts, with the episode list changing accordingly. Pressing "q" will quit the program.
 
-## Eventual keybindings (will be configurable)
+## Eventual keybindings (will be configurable; current keybindings are in bold)
 
 | Key     | Action         |
 | ------- | -------------- |
-| Arrow keys / h,j,k,l | Navigate menus |
-| a       | Add new feed   |
-| q       | Quit program   |
+| **Arrow keys** / h,j,k,l | Navigate menus |
+| **a**       | Add new feed   |
+| **q**       | Quit program   |
 | s       | Synchronize selected feed |
 | Shift+S | Synchronize all feeds |
 | Enter / p | Play selected episode |
