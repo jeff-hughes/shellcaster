@@ -33,7 +33,7 @@ impl Database {
     /// exist. Panics if database cannot be accessed, or if tables cannot
     /// be created.
     pub fn create(&self) {
-        let conn = &self.conn.as_ref().unwrap();
+        let conn = self.conn.as_ref().unwrap();
 
         // create podcasts table
         match conn.execute(
@@ -91,7 +91,7 @@ impl Database {
     pub fn insert_podcast(&self, podcast: Podcast) ->
         Result<usize, Box<dyn std::error::Error>> {
 
-        let conn = &self.conn.as_ref().unwrap();
+        let conn = self.conn.as_ref().unwrap();
         let _ = conn.execute(
             "INSERT INTO podcasts (title, url, description, author, explicit, last_checked)
                 VALUES (?, ?, ?, ?, ?, ?);",
@@ -123,7 +123,7 @@ impl Database {
     pub fn insert_episode(&self, podcast_id: &i32, episode: &Episode) ->
         Result<(), Box<dyn std::error::Error>> {
 
-        let conn = &self.conn.as_ref().unwrap();
+        let conn = self.conn.as_ref().unwrap();
 
         let pubdate = match episode.pubdate {
             Some(dt) => Some(dt.timestamp()),
@@ -153,15 +153,16 @@ impl Database {
             let mut stmt = conn.prepare(
                 "SELECT * FROM podcasts ORDER BY title;").unwrap();
             let podcast_iter = stmt.query_map(params![], |row| {
-                let episodes = self.get_episodes(row.get(0)?);
+                let pod_id = row.get("id")?;
+                let episodes = self.get_episodes(pod_id);
                 Ok(Podcast {
-                    id: Some(row.get(0)?),
-                    title: row.get(1)?,
-                    url: row.get(2)?,
-                    description: row.get(3)?,
-                    author: row.get(4)?,
-                    explicit: row.get(5)?,
-                    last_checked: convert_date(row.get(6)).unwrap(),
+                    id: Some(pod_id),
+                    title: row.get("title")?,
+                    url: row.get("url")?,
+                    description: row.get("description")?,
+                    author: row.get("author")?,
+                    explicit: row.get("explicit")?,
+                    last_checked: convert_date(row.get("last_checked")).unwrap(),
                     episodes: Rc::new(RefCell::new(episodes)),
                 })
             }).unwrap();
@@ -183,14 +184,14 @@ impl Database {
                  ORDER BY pubdate DESC;").unwrap();
             let episode_iter = stmt.query_map(params![pod_id], |row| {
                 Ok(Episode {
-                    id: Some(row.get(0)?),
-                    title: row.get(2)?,
-                    url: row.get(3)?,
-                    description: row.get(4)?,
-                    pubdate: convert_date(row.get(5)),
-                    duration: row.get(6)?,
+                    id: Some(row.get("id")?),
+                    title: row.get("title")?,
+                    url: row.get("url")?,
+                    description: row.get("description")?,
+                    pubdate: convert_date(row.get("pubdate")),
+                    duration: row.get("duration")?,
                     path: "".to_string(),  // TODO: Not yet implemented
-                    played: row.get(7)?,
+                    played: row.get("played")?,
                 })
             }).unwrap();
             let mut episodes = Vec::new();
