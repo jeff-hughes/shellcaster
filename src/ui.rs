@@ -338,16 +338,7 @@ impl<T> Menu<T>
     /// Prints the list of visible items to the pancurses window and
     /// refreshes it.
     pub fn init(&mut self) {
-        // for visible rows, print strings from list
-        for i in 0..self.n_row {
-            if let Some(elem) = self.items.borrow().get(i as usize) {
-                self.window.mvaddstr(i, 0, elem.to_string());
-            } else {
-                break;
-            }
-        }
-
-        self.window.refresh();
+        self.update_items();
     }
 
     /// Scrolls the menu up or down by `lines` lines. Negative values of
@@ -416,8 +407,8 @@ impl<T> Menu<T>
         self.window.refresh();
     }
 
-    /// Given a new vector of items, this reprints the list of visible
-    /// items to the screen.
+    /// Prints or reprints the list of visible items to the pancurses
+    /// window and refreshes it.
     pub fn update_items(&mut self) {
         self.window.erase();
         // for visible rows, print strings from list
