@@ -441,13 +441,3 @@ impl Menu<Podcast> {
             .get(index as usize).unwrap().episodes);
     }
 }
-
-
-// TESTS -----------------------------------------------------------------
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}

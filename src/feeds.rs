@@ -1,7 +1,7 @@
 use std::rc::Rc;
 use core::cell::RefCell;
 
-use rss::Channel;
+use rss::{Channel, Item};
 use chrono::{DateTime, Utc};
 use rfc822_sanitizer::parse_from_rfc2822_with_fallback;
 use lazy_static::lazy_static;
@@ -15,15 +15,21 @@ lazy_static! {
     static ref RE_DURATION: Regex = Regex::new(r"(\d+)(?::(\d+))?(?::(\d+))?").unwrap();
 }
 
-/// Given a URL, This attempts to pull the data about a podcast and its
-/// episodes from an RSS feed. There are existing specifications for
-/// podcast RSS feeds that a feed should adhere to, but this does try to
-/// make some attempt to account for the possibility that a feed might
-/// not be valid according to the spec.
+/// Given a URL, this attempts to pull the data about a podcast and its
+/// episodes from an RSS feed.
 pub fn get_feed_data(url: String) -> Result<Podcast, Box<dyn std::error::Error>> {
     let channel = Channel::from_url(&url)?;
+    return parse_feed_data(channel);
+}
 
+/// Given a Channel with the RSS feed data, this parses the data about a
+/// podcast and its episodes and returns a Podcast. There are existing
+/// specifications for podcast RSS feeds that a feed should adhere to, but
+/// this does try to make some attempt to account for the possibility that
+/// a feed might not be valid according to the spec.
+pub fn parse_feed_data(channel: Channel) -> Result<Podcast, Box<dyn std::error::Error>> {
     let title = channel.title().to_string();
+    let url = channel.link().to_string();
     let description = Some(channel.description().to_string());
     let last_checked = Utc::now();
 
@@ -51,51 +57,7 @@ pub fn get_feed_data(url: String) -> Result<Podcast, Box<dyn std::error::Error>>
     let items = channel.into_items();
     if items.len() > 0 {
         for item in &items {
-            let title = match item.title() {
-                Some(s) => s.to_string(),
-                None => "".to_string(),
-            };
-            let url = match item.enclosure() {
-                Some(enc) => enc.url().to_string(),
-                None => "".to_string(),
-            };
-            let description = match item.description() {
-                Some(dsc) => dsc.to_string(),
-                None => "".to_string(),
-            };
-            let pubdate = match item.pub_date() {
-                Some(pd) => match parse_from_rfc2822_with_fallback(pd) {
-                    Ok(date) => {
-                        // this is a bit ridiculous, but it seems like 
-                        // you have to convert from a DateTime<FixedOffset>
-                        // to a NaiveDateTime, and then from there create
-                        // a DateTime<Utc>; see
-                        // https://github.com/chronotope/chrono/issues/169#issue-239433186
-                        Some(DateTime::from_utc(date.naive_utc(), Utc))
-                    },
-                    Err(_) => None,
-                },
-                None => None,
-            };
- 
-            let mut duration = None;
-            if let Some(itunes) = item.itunes_ext() {
-                duration = duration_to_int(itunes.duration());
-            }
-
-            let path = "".to_string();
-            let played = false;
-
-            episodes.push(Episode {
-                id: None,
-                title: title,
-                url: url,
-                description: description,
-                pubdate: pubdate,
-                duration: duration,
-                path: path,
-                played: played,
-            });
+            episodes.push(parse_episode_data(item));
         }
     }
 
@@ -109,6 +71,59 @@ pub fn get_feed_data(url: String) -> Result<Podcast, Box<dyn std::error::Error>>
         last_checked: last_checked,
         episodes: Rc::new(RefCell::new(episodes)),
     })
+}
+
+/// For an item (episode) in an RSS feed, this pulls data about the item
+/// and converts it to an Episode. There are existing specifications for
+/// podcast RSS feeds that a feed should adhere to, but this does try to
+/// make some attempt to account for the possibility that a feed might
+/// not be valid according to the spec.
+fn parse_episode_data(item: &Item) -> Episode {
+    let title = match item.title() {
+        Some(s) => s.to_string(),
+        None => "".to_string(),
+    };
+    let url = match item.enclosure() {
+        Some(enc) => enc.url().to_string(),
+        None => "".to_string(),
+    };
+    let description = match item.description() {
+        Some(dsc) => dsc.to_string(),
+        None => "".to_string(),
+    };
+    let pubdate = match item.pub_date() {
+        Some(pd) => match parse_from_rfc2822_with_fallback(pd) {
+            Ok(date) => {
+                // this is a bit ridiculous, but it seems like 
+                // you have to convert from a DateTime<FixedOffset>
+                // to a NaiveDateTime, and then from there create
+                // a DateTime<Utc>; see
+                // https://github.com/chronotope/chrono/issues/169#issue-239433186
+                Some(DateTime::from_utc(date.naive_utc(), Utc))
+            },
+            Err(_) => None,
+        },
+        None => None,
+    };
+
+    let mut duration = None;
+    if let Some(itunes) = item.itunes_ext() {
+        duration = duration_to_int(itunes.duration());
+    }
+
+    let path = "".to_string();
+    let played = false;
+
+    return Episode {
+        id: None,
+        title: title,
+        url: url,
+        description: description,
+        pubdate: pubdate,
+        duration: duration,
+        path: path,
+        played: played,
+    };
 }
 
 /// Given a string representing an episode duration, this attempts to
@@ -188,4 +203,107 @@ fn duration_to_int(duration: Option<&str>) -> Option<i32> {
 fn regex_to_int(re_match: Match) -> Result<i32, std::num::ParseIntError> {
     let mstr = re_match.as_str();
     mstr.parse::<i32>()
+}
+
+
+// TESTS -----------------------------------------------------------------
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::File;
+    use std::io::BufReader;
+
+    fn open_file(path: &str) -> BufReader<File> {
+        return BufReader::new(File::open(path).unwrap());
+    }
+
+    #[test]
+    fn no_description() {
+        let path = "./tests/test_no_description.xml";
+        let channel = Channel::read_from(open_file(path)).unwrap();
+        let data = parse_feed_data(channel).unwrap();
+        assert_eq!(data.description, Some("".to_string()));
+    }
+
+    #[test]
+    fn invalid_explicit() {
+        let path = "./tests/test_inval_explicit.xml";
+        let channel = Channel::read_from(open_file(path)).unwrap();
+        let data = parse_feed_data(channel).unwrap();
+        assert_eq!(data.explicit, None);
+    }
+
+    #[test]
+    fn no_episodes() {
+        let path = "./tests/test_no_episodes.xml";
+        let channel = Channel::read_from(open_file(path)).unwrap();
+        let data = parse_feed_data(channel).unwrap();
+        assert_eq!(data.episodes.borrow().len(), 0);
+    }
+
+    #[test]
+    fn nan_duration() {
+        let duration = String::from("nan");
+        assert_eq!(duration_to_int(Some(&duration)), None);
+    }
+
+    #[test]
+    fn nonnumeric_duration() {
+        let duration = String::from("some string");
+        assert_eq!(duration_to_int(Some(&duration)), None);
+    }
+
+    #[test]
+    fn duration_hhhmmss() {
+        let duration = String::from("31:38:42");
+        assert_eq!(duration_to_int(Some(&duration)), Some(113922));
+    }
+
+    #[test]
+    fn duration_hhmmss() {
+        let duration = String::from("01:38:42");
+        assert_eq!(duration_to_int(Some(&duration)), Some(5922));
+    }
+
+    #[test]
+    fn duration_hmmss() {
+        let duration = String::from("1:38:42");
+        assert_eq!(duration_to_int(Some(&duration)), Some(5922));
+    }
+
+    #[test]
+    fn duration_mmmss() {
+        let duration = String::from("68:42");
+        assert_eq!(duration_to_int(Some(&duration)), Some(4122));
+    }
+
+    #[test]
+    fn duration_mmss() {
+        let duration = String::from("08:42");
+        assert_eq!(duration_to_int(Some(&duration)), Some(522));
+    }
+
+    #[test]
+    fn duration_mss() {
+        let duration = String::from("8:42");
+        assert_eq!(duration_to_int(Some(&duration)), Some(522));
+    }
+
+    #[test]
+    fn duration_sss() {
+        let duration = String::from("142");
+        assert_eq!(duration_to_int(Some(&duration)), Some(142));
+    }
+
+    #[test]
+    fn duration_ss() {
+        let duration = String::from("08");
+        assert_eq!(duration_to_int(Some(&duration)), Some(8));
+    }
+
+    #[test]
+    fn duration_s() {
+        let duration = String::from("8");
+        assert_eq!(duration_to_int(Some(&duration)), Some(8));
+    }
 }

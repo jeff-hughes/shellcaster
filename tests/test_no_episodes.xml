@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:googleplay="http://www.google.com/schemas/play-podcasts/1.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <atom:link href="https://feeds.megaphone.fm/replyall" rel="self" type="application/rss+xml"/>
+    <title>Reply All</title>
+    <link>http://gimletmedia.com/shows/reply-all</link>
+    <language>en</language>
+    <copyright>All rights reserved</copyright>
+    <description>"'A podcast about the internet' that is actually an unfailingly original exploration of modern life and how to survive it." - The Guardian. Hosted by PJ Vogt and Alex Goldman, from Gimlet.</description>
+    <image>
+      <url>https://images.megaphone.fm/Fmg2NhYTx-ZrkbE9r1-XyHTlb45Kja8RrXmED7PeyF8/plain/s3://megaphone-prod/podcasts/05f71746-a825-11e5-aeb5-a7a572df575e/image/uploads_2F1569901799455-iwzhcytult-23e425914607b342a7b8aaaefebf8005_2FReplyAll_093019.jpg</url>
+      <title>Reply All</title>
+      <link>http://gimletmedia.com/shows/reply-all</link>
+    </image>
+    <itunes:explicit>yes</itunes:explicit>
+    <itunes:type>episodic</itunes:type>
+    <itunes:subtitle>"'A podcast about the internet' that is actually an unfailingly original exploration of modern life and how to survive it." - The Guardian. Hosted by PJ Vogt and Alex Goldman, from Gimlet.</itunes:subtitle>
+    <itunes:author>Gimlet</itunes:author>
+    <itunes:summary>"'A podcast about the internet' that is actually an unfailingly original exploration of modern life and how to survive it." - The Guardian. Hosted by PJ Vogt and Alex Goldman, from Gimlet.</itunes:summary>
+    <content:encoded>
+      <![CDATA[<p>"'A podcast about the internet' that is actually an unfailingly original exploration of modern life and how to survive it." - The Guardian. Hosted by PJ Vogt and Alex Goldman, from Gimlet.</p>]]>
+    </content:encoded>
+    <itunes:owner>
+      <itunes:name>Gimlet</itunes:name>
+      <itunes:email>feeds@soundcloud.com</itunes:email>
+    </itunes:owner>
+    <itunes:image href="https://images.megaphone.fm/Fmg2NhYTx-ZrkbE9r1-XyHTlb45Kja8RrXmED7PeyF8/plain/s3://megaphone-prod/podcasts/05f71746-a825-11e5-aeb5-a7a572df575e/image/uploads_2F1569901799455-iwzhcytult-23e425914607b342a7b8aaaefebf8005_2FReplyAll_093019.jpg"/>
+    <itunes:category text="Technology">
+    </itunes:category>
+    <itunes:category text="Society &amp; Culture">
+    </itunes:category>
+    <itunes:category text="Arts">
+    </itunes:category>
+    <itunes:new-feed-url>https://feeds.megaphone.fm/replyall</itunes:new-feed-url>
+  </channel>
+</rss>
