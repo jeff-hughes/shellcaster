@@ -1,6 +1,6 @@
 use std::fmt;
 use std::convert;
-use std::cmp::{min, max};
+use std::cmp::min;
 use std::rc::Rc;
 use core::cell::RefCell;
 
@@ -17,6 +17,13 @@ pub struct UiMessage {
     pub message: Option<String>,
 }
 
+/// Simple enum to identify which menu is currently active.
+#[derive(Debug)]
+enum ActiveMenu {
+    PodcastMenu,
+    EpisodeMenu,
+}
+
 /// Struct containing all interface elements of the TUI. Functionally, it
 /// encapsulates the pancurses windows, and holds data about the size of
 /// the screen.
@@ -27,7 +34,7 @@ pub struct UI {
     n_col: i32,
     podcast_menu: Menu<Podcast>,
     episode_menu: Menu<Episode>,
-    active_menu: i32,
+    active_menu: ActiveMenu,
 }
 
 impl UI {
@@ -87,7 +94,7 @@ impl UI {
             n_col,
             podcast_menu: podcast_menu,
             episode_menu: episode_menu,
-            active_menu: 0,
+            active_menu: ActiveMenu::PodcastMenu,
         }
     }
 
@@ -107,53 +114,63 @@ impl UI {
                 // TODO: Need to handle increasing and decreasing rows
             },
             Some(Input::KeyDown) => {
-                if self.active_menu == 0 {
-                    self.podcast_menu.scroll(1);
+                match self.active_menu {
+                    ActiveMenu::PodcastMenu => {
+                        self.podcast_menu.scroll(1);
 
-                    self.episode_menu.top_row = 0;
-                    self.episode_menu.selected = 0;
+                        self.episode_menu.top_row = 0;
+                        self.episode_menu.selected = 0;
 
-                    // update episodes menu with new list
-                    self.episode_menu.items = self.podcast_menu.get_episodes();
-                    self.episode_menu.update_items();
-                } else if self.active_menu == 1 {
-                    self.episode_menu.scroll(1);
+                        // update episodes menu with new list
+                        self.episode_menu.items = self.podcast_menu.get_episodes();
+                        self.episode_menu.update_items();
+                    },
+                    ActiveMenu::EpisodeMenu => {
+                        self.episode_menu.scroll(1);
+                    },
                 }
             },
             Some(Input::KeyUp) => {
-                if self.active_menu == 0 {
-                    self.podcast_menu.scroll(-1);
+                match self.active_menu {
+                    ActiveMenu::PodcastMenu => {
+                        self.podcast_menu.scroll(-1);
 
-                    self.episode_menu.top_row = 0;
-                    self.episode_menu.selected = 0;
+                        self.episode_menu.top_row = 0;
+                        self.episode_menu.selected = 0;
 
-                    // update episodes menu with new list
-                    self.episode_menu.items = self.podcast_menu.get_episodes();
-                    self.episode_menu.update_items();
-                } else if self.active_menu == 1 {
-                    self.episode_menu.scroll(-1);
+                        // update episodes menu with new list
+                        self.episode_menu.items = self.podcast_menu.get_episodes();
+                        self.episode_menu.update_items();
+                    },
+                    ActiveMenu::EpisodeMenu => {
+                        self.episode_menu.scroll(-1);
+                    },
                 }
             },
             Some(Input::KeyLeft) => {
-                self.active_menu = min(0, self.active_menu - 1);
-
-                if self.active_menu == 0 {
-                    self.podcast_menu.activate();
-                    self.episode_menu.deactivate();
-                } else if self.active_menu == 1 {
-                    self.episode_menu.activate();
-                    // self.podcast_menu.deactivate();
+                match self.active_menu {
+                    ActiveMenu::PodcastMenu => {
+                        self.podcast_menu.activate();
+                        self.episode_menu.deactivate();
+                    },
+                    ActiveMenu::EpisodeMenu => {
+                        self.active_menu = ActiveMenu::PodcastMenu;
+                        self.episode_menu.activate();
+                        // self.podcast_menu.deactivate();
+                    },
                 }
             },
             Some(Input::KeyRight) => {
-                self.active_menu = max(1, self.active_menu + 1);
-
-                if self.active_menu == 0 {
-                    self.podcast_menu.activate();
-                    self.episode_menu.deactivate();
-                } else if self.active_menu == 1 {
-                    self.episode_menu.activate();
-                    // self.podcast_menu.deactivate();
+                match self.active_menu {
+                    ActiveMenu::PodcastMenu => {
+                        self.active_menu = ActiveMenu::EpisodeMenu;
+                        self.podcast_menu.activate();
+                        self.episode_menu.deactivate();
+                    },
+                    ActiveMenu::EpisodeMenu => {
+                        self.episode_menu.activate();
+                        // self.podcast_menu.deactivate();
+                    },
                 }
             },
             Some(Input::Character(c)) => {
