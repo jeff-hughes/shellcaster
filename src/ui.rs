@@ -5,6 +5,8 @@ use std::rc::Rc;
 use core::cell::RefCell;
 
 use pancurses::{Window, newwin, Input};
+use crate::config::Config;
+use crate::keymap::{Keybindings, UserAction};
 use crate::types::{Podcast, Episode, MutableVec};
 
 /// Struct used for communicating back to the main controller after user
@@ -28,20 +30,21 @@ enum ActiveMenu {
 /// encapsulates the pancurses windows, and holds data about the size of
 /// the screen.
 #[derive(Debug)]
-pub struct UI {
+pub struct UI<'a> {
     stdscr: Window,
     n_row: i32,
     n_col: i32,
+    keymap: &'a Keybindings,
     podcast_menu: Menu<Podcast>,
     episode_menu: Menu<Episode>,
     active_menu: ActiveMenu,
 }
 
-impl UI {
+impl<'a> UI<'a> {
     /// Initializes the UI with a list of podcasts and podcast episodes,
     /// creates the pancurses window and draws it to the screen, and
     /// returns a UI object for future manipulation.
-    pub fn new(items: &MutableVec<Podcast>) -> UI {
+    pub fn new(config: &'a Config, items: &MutableVec<Podcast>) -> UI<'a> {
         let stdscr = pancurses::initscr();
 
         // set some options
@@ -92,10 +95,11 @@ impl UI {
             stdscr,
             n_row,
             n_col,
+            keymap: &config.keybindings,
             podcast_menu: podcast_menu,
             episode_menu: episode_menu,
             active_menu: ActiveMenu::PodcastMenu,
-        }
+        };
     }
 
     /// Waits for user input and, where necessary, provides UiMessages
@@ -113,92 +117,98 @@ impl UI {
                 // (n_row, n_col) = stdscr.get_max_yx();
                 // TODO: Need to handle increasing and decreasing rows
             },
-            Some(Input::KeyDown) => {
-                match self.active_menu {
-                    ActiveMenu::PodcastMenu => {
-                        self.podcast_menu.scroll(1);
+            Some(input) => {
+                match self.keymap.get_from_input(&input) {
+                    Some(UserAction::Down) => {
+                        match self.active_menu {
+                            ActiveMenu::PodcastMenu => {
+                                self.podcast_menu.scroll(1);
 
-                        self.episode_menu.top_row = 0;
-                        self.episode_menu.selected = 0;
+                                self.episode_menu.top_row = 0;
+                                self.episode_menu.selected = 0;
 
-                        // update episodes menu with new list
-                        self.episode_menu.items = self.podcast_menu.get_episodes();
-                        self.episode_menu.update_items();
+                                // update episodes menu with new list
+                                self.episode_menu.items = self.podcast_menu.get_episodes();
+                                self.episode_menu.update_items();
+                            },
+                            ActiveMenu::EpisodeMenu => {
+                                self.episode_menu.scroll(1);
+                            },
+                        }
                     },
-                    ActiveMenu::EpisodeMenu => {
-                        self.episode_menu.scroll(1);
-                    },
-                }
-            },
-            Some(Input::KeyUp) => {
-                match self.active_menu {
-                    ActiveMenu::PodcastMenu => {
-                        self.podcast_menu.scroll(-1);
+                    Some(UserAction::Up) => {
+                        match self.active_menu {
+                            ActiveMenu::PodcastMenu => {
+                                self.podcast_menu.scroll(-1);
 
-                        self.episode_menu.top_row = 0;
-                        self.episode_menu.selected = 0;
+                                self.episode_menu.top_row = 0;
+                                self.episode_menu.selected = 0;
 
-                        // update episodes menu with new list
-                        self.episode_menu.items = self.podcast_menu.get_episodes();
-                        self.episode_menu.update_items();
+                                // update episodes menu with new list
+                                self.episode_menu.items = self.podcast_menu.get_episodes();
+                                self.episode_menu.update_items();
+                            },
+                            ActiveMenu::EpisodeMenu => {
+                                self.episode_menu.scroll(-1);
+                            },
+                        }
                     },
-                    ActiveMenu::EpisodeMenu => {
-                        self.episode_menu.scroll(-1);
+                    Some(UserAction::Left) => {
+                        match self.active_menu {
+                            ActiveMenu::PodcastMenu => (),
+                            ActiveMenu::EpisodeMenu => {
+                                self.active_menu = ActiveMenu::PodcastMenu;
+                                self.podcast_menu.activate();
+                                self.episode_menu.deactivate();
+                            },
+                        }
                     },
-                }
-            },
-            Some(Input::KeyLeft) => {
-                match self.active_menu {
-                    ActiveMenu::PodcastMenu => {
-                        self.podcast_menu.activate();
-                        self.episode_menu.deactivate();
+                    Some(UserAction::Right) => {
+                        match self.active_menu {
+                            ActiveMenu::PodcastMenu => {
+                                self.active_menu = ActiveMenu::EpisodeMenu;
+                                // self.podcast_menu.deactivate();
+                                self.episode_menu.activate();
+                            },
+                            ActiveMenu::EpisodeMenu => (),
+                        }
                     },
-                    ActiveMenu::EpisodeMenu => {
-                        self.active_menu = ActiveMenu::PodcastMenu;
-                        self.episode_menu.activate();
-                        // self.podcast_menu.deactivate();
-                    },
-                }
-            },
-            Some(Input::KeyRight) => {
-                match self.active_menu {
-                    ActiveMenu::PodcastMenu => {
-                        self.active_menu = ActiveMenu::EpisodeMenu;
-                        self.podcast_menu.activate();
-                        self.episode_menu.deactivate();
-                    },
-                    ActiveMenu::EpisodeMenu => {
-                        self.episode_menu.activate();
-                        // self.podcast_menu.deactivate();
-                    },
-                }
-            },
-            Some(Input::Character(c)) => {
-                // QUIT PROGRAM
-                if c == 'q' {
-                    return UiMessage {
-                        response: Some("quit".to_string()),
-                        message: None,
-                    };
-                
-                // ADD NEW PODCAST FEED
-                } else if c == 'a' {
-                    let url = &self.spawn_input_win("Feed URL: ");
-                    if url.len() > 0 {
+                    Some(UserAction::AddFeed) => {
+                        let url = &self.spawn_input_win("Feed URL: ");
+                        if url.len() > 0 {
+                            return UiMessage {
+                                response: Some("add_feed".to_string()),
+                                message: Some(url.to_string()),
+                            }
+                        }
                         return UiMessage {
                             response: Some("add_feed".to_string()),
-                            message: Some(url.to_string()),
-                        }
-                    }
-                    return UiMessage {
-                        response: Some("add_feed".to_string()),
-                        message: None,
-                    };
-                }
+                            message: None,
+                        };
+                    },
+                    Some(UserAction::Sync) => {},
+                    Some(UserAction::SyncAll) => {},
+                    Some(UserAction::Play) => {},
+                    Some(UserAction::MarkPlayed) => {},
+                    Some(UserAction::MarkAllPlayed) => {},
+                    Some(UserAction::Download) => {},
+                    Some(UserAction::DownloadAll) => {},
+                    Some(UserAction::Delete) => {},
+                    Some(UserAction::DeleteAll) => {},
+                    Some(UserAction::Remove) => {},
+                    Some(UserAction::RemoveAll) => {},
+                    Some(UserAction::Search) => {},
+                    Some(UserAction::Quit) => {
+                        return UiMessage {
+                            response: Some("quit".to_string()),
+                            message: None,
+                        };
+                    },
+                    None => (),
+                }  // end of input match
             },
-            Some(_) => (),
             None => (),
-        };
+        };  // end of getch() match
         return UiMessage {
             response: None,
             message: None,

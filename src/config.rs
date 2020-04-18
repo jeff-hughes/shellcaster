@@ -7,7 +7,7 @@ use crate::keymap::{Keybindings, UserAction};
 /// Holds information about user configuration of program. 
 #[derive(Debug)]
 pub struct Config {
-    keybindings: Keybindings,
+    pub keybindings: Keybindings,
 }
 
 /// A temporary struct used to deserialize data from the TOML configuration
@@ -47,14 +47,16 @@ struct KeybindingsFromToml {
 /// Given a file path, this reads a TOML config file and returns a Config
 /// struct with keybindings, etc. Inserts defaults if config file does
 /// not exist, or if specific values are not set.
-pub fn parse_config_file(path: &str) -> Result<Config, Box<dyn std::error::Error>> {
+pub fn parse_config_file(path: &str) -> Config {
     let mut config_string = String::new();
     let config_toml: ConfigFromToml;
 
     match File::open(&path) {
         Ok(mut file) => {
-            file.read_to_string(&mut config_string)?;
-            config_toml = toml::from_str(&config_string)?;
+            file.read_to_string(&mut config_string)
+                .expect("Error reading config.toml. Please ensure file is readable.");
+            config_toml = toml::from_str(&config_string)
+                .expect("Error parsing config.toml. Please check file syntax.");
         },
         Err(_) => {
             // if we can't find the file, set everything to empty
@@ -85,7 +87,7 @@ pub fn parse_config_file(path: &str) -> Result<Config, Box<dyn std::error::Error
         }
     }
 
-    return Ok(set_keymap(&config_toml));
+    return set_keymap(&config_toml);
 }
 
 /// Takes the deserialized TOML configuration, and creates a Config struct

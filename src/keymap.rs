@@ -47,19 +47,13 @@ impl Keybindings {
 
     /// Takes an Input object from pancurses and returns the associated
     /// user action, if one exists.
-    pub fn _get_from_input(&self, input: &Input) -> Option<&UserAction> {
-        match _input_to_str(input) {
+    pub fn get_from_input(&self, input: &Input) -> Option<&UserAction> {
+        match input_to_str(input) {
             Some(code) => {
                 self.map.get(&code)
             },
             None => None,
         }
-    }
-
-    /// Takes a string representing a keycode and returns the associated
-    /// user action, if one exists. 
-    pub fn _get_from_str<S: Into<String>>(&self, code: S) -> Option<&UserAction> {
-        return self.map.get(&code.into());
     }
 
     /// Inserts a new keybinding into the hash map. Will overwrite the
@@ -83,7 +77,7 @@ impl Keybindings {
 /// This function is a bit ridiculous, given that 95% of keyboards probably
 /// don't even have half these special keys, but at any rate...they're
 /// mapped, if anyone wants them.
-pub fn _input_to_str(input: &Input) -> Option<String> {
+pub fn input_to_str(input: &Input) -> Option<String> {
     let mut tmp = [0; 4];
     let code = match input {
         Input::KeyCodeYes => "CodeYes",
