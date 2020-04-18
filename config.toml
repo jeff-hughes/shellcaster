@@ -1,0 +1,43 @@
+# other settings here...not sure what yet
+
+[keybindings]
+
+# Keybindings must be an array of one or more strings.
+# If you want to distinguish between a regular alphanumeric key
+# and Shift+key, you can use the capital letter that you would normally
+# type when pressing Shift+key (e.g., Shift+"r" will give you "R").
+
+# Other special characters and their config string:
+# Arrow keys: "Left", "Right", "Up", "Down"
+# Ctrl+key: "C-key" (e.g., "C-r" means Ctrl+"r")
+# Shift+key: "S-key" (e.g., "S-Del" means Shift+Delete)
+# Insert ("Ins"), Delete ("Del"), Home ("Home"), End ("End"),
+# Page up ("PgUp"), Page down ("PgDn"), Tab ("Tab")
+# Enter ("Enter"), Escape ("Esc") -- be aware that on some terminals the
+# Escape key waits for further input before passing it along to
+# shellcaster, so you might notice a delay with this key
+
+# Don't try to use backslash, or you're gonna have a bad time
+
+left = [ "Left", "h" ]
+right = [ "Right", "l" ]
+up = [ "Up", "k" ]
+down = [ "Down", "j" ]
+
+add_feed = [ "a" ]
+sync = [ "s" ]
+sync_all = [ "S" ]
+
+play = [ "Enter", "p" ]
+mark_played = [ "m" ]
+mark_all_played = [ "M" ]
+
+download = [ "d" ]
+download_all = [ "D" ]
+delete = [ "x" ]
+delete_all = [ "X" ]
+remove = [ "r" ]
+remove_all = [ "R" ]
+
+search = [ "/" ]
+quit = [ "q" ]

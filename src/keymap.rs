@@ -3,7 +3,7 @@ use pancurses::Input;
 
 /// Enum delineating all actions that may be performed by the user, and
 /// thus have keybindings associated with them.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum UserAction {
     Left,
     Right,
@@ -27,7 +27,6 @@ pub enum UserAction {
 
     Search,
     Quit,
-    Noop,
 }
 
 /// Wrapper around a hash map that keeps track of all keybindings. Multiple
@@ -39,6 +38,7 @@ pub struct Keybindings {
 }
 
 impl Keybindings {
+    /// Returns a new Keybindings struct.
     pub fn new() -> Keybindings {
         return Keybindings {
             map: HashMap::new(),
@@ -47,8 +47,8 @@ impl Keybindings {
 
     /// Takes an Input object from pancurses and returns the associated
     /// user action, if one exists.
-    pub fn get_from_input(&self, input: &Input) -> Option<&UserAction> {
-        match input_to_str(input) {
+    pub fn _get_from_input(&self, input: &Input) -> Option<&UserAction> {
+        match _input_to_str(input) {
             Some(code) => {
                 self.map.get(&code)
             },
@@ -58,18 +58,22 @@ impl Keybindings {
 
     /// Takes a string representing a keycode and returns the associated
     /// user action, if one exists. 
-    pub fn get_from_str(&self, code: &str) -> Option<&UserAction> {
-        return self.map.get(&code.to_string());
+    pub fn _get_from_str<S: Into<String>>(&self, code: S) -> Option<&UserAction> {
+        return self.map.get(&code.into());
     }
 
-    /// Inserts a new keybinding into the hash map.
-    pub fn insert(&mut self, code: &str, action: UserAction) -> bool {
-        // ensures that earlier settings take priority over later settings
-        if self.map.contains_key(&code.to_string()) {
-            return false;
-        } else {
-            self.map.insert(code.to_string(), action);
-            return true;
+    /// Inserts a new keybinding into the hash map. Will overwrite the
+    /// value of a key if it already exists.
+    pub fn insert(&mut self, code: String, action: UserAction) {
+        self.map.insert(code, action);
+    }
+
+    /// Inserts a set of new keybindings into the hash map, each one
+    /// corresponding to the same UserAction. Will overwrite the value
+    /// of keys that already exist.
+    pub fn insert_from_vec(&mut self, vec: &Vec<String>, action: UserAction) {
+        for key in vec.into_iter() {
+            self.insert(key.to_string(), action);
         }
     }
 }
@@ -79,7 +83,8 @@ impl Keybindings {
 /// This function is a bit ridiculous, given that 95% of keyboards probably
 /// don't even have half these special keys, but at any rate...they're
 /// mapped, if anyone wants them.
-pub fn input_to_str(input: &Input) -> Option<String> {
+pub fn _input_to_str(input: &Input) -> Option<String> {
+    let mut tmp = [0; 4];
     let code = match input {
         Input::KeyCodeYes => "CodeYes",
         Input::KeyBreak => "Break",
@@ -199,10 +204,10 @@ pub fn input_to_str(input: &Input) -> Option<String> {
             } else if c == &'\t' {
                 "Tab"
             } else {
-                &c.to_string()[..]
+                c.encode_utf8(&mut tmp)
             }
         },
-        _ => "",
+        _ => ""
     };
     if code == "" {
         return None;

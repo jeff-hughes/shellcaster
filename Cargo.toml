@@ -9,8 +9,10 @@ edition = "2018"
 [dependencies]
 pancurses = "0.16.1"
 rusqlite = "0.21.0"
+rss = { version = "1.9.0", features = ["from_url"] }
+toml = "0.5.6"
+serde = "1.0.106"
 chrono = "0.4.11"
 rfc822_sanitizer = "0.3.3"
 lazy_static = "1.4.0"
 regex = "1.3.6"
-rss = { version = "1.9.0", features = ["from_url"] }
