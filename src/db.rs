@@ -63,6 +63,7 @@ impl Database {
                 pubdate INTEGER,
                 duration INTEGER,
                 played INTEGER,
+                hidden INTEGER,
                 FOREIGN KEY(podcast_id) REFERENCES podcasts(id)
             );",
             params![],
@@ -131,8 +132,8 @@ impl Database {
         };
 
         let _ = conn.execute(
-            "INSERT INTO episodes (podcast_id, title, url, description, pubdate, duration, played)
-                VALUES (?, ?, ?, ?, ?, ?, ?);",
+            "INSERT INTO episodes (podcast_id, title, url, description, pubdate, duration, played, hidden)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?);",
             params![
                 podcast_id,
                 episode.title,
@@ -140,6 +141,7 @@ impl Database {
                 episode.description,
                 pubdate,
                 episode.duration,
+                false,
                 false,
             ]
         )?;
@@ -181,7 +183,8 @@ impl Database {
         if let Some(conn) = &self.conn {
             let mut stmt = conn.prepare(
                 "SELECT * FROM episodes WHERE podcast_id = ?
-                 ORDER BY pubdate DESC;").unwrap();
+                      AND hidden = 0
+                      ORDER BY pubdate DESC;").unwrap();
             let episode_iter = stmt.query_map(params![pod_id], |row| {
                 Ok(Episode {
                     id: Some(row.get("id")?),
