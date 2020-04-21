@@ -1,12 +1,15 @@
 use std::fs::File;
 use std::io::Read;
 use serde::Deserialize;
+use std::path::PathBuf;
 
 use crate::keymap::{Keybindings, UserAction};
 
 /// Holds information about user configuration of program. 
 #[derive(Debug)]
 pub struct Config {
+    pub config_path: PathBuf,
+    pub download_path: PathBuf,
     pub keybindings: Keybindings,
 }
 
@@ -15,6 +18,8 @@ pub struct Config {
 #[derive(Debug)]
 #[derive(Deserialize)]
 struct ConfigFromToml {
+    config_path: Option<String>,
+    download_path: Option<String>,
     keybindings: KeybindingsFromToml,
 }
 
@@ -82,18 +87,21 @@ pub fn parse_config_file(path: &str) -> Config {
                 quit: None,
             };
             config_toml = ConfigFromToml {
+                config_path: None,
+                download_path: None,
                 keybindings: keybindings,
             };
         }
     }
 
-    return set_keymap(&config_toml);
+    return config_with_defaults(&config_toml);
 }
 
 /// Takes the deserialized TOML configuration, and creates a Config struct
 /// that specifies user settings where indicated, and defaults for any
 /// settings that were not specified by the user.
-fn set_keymap(config_toml: &ConfigFromToml) -> Config {
+fn config_with_defaults(config_toml: &ConfigFromToml) -> Config {
+    // specify all default keybindings for actions
     let action_map: Vec<(&Option<Vec<String>>, UserAction, Vec<String>)> = vec![
         (&config_toml.keybindings.left, UserAction::Left, vec!["Left".to_string(), "h".to_string()]),
         (&config_toml.keybindings.right, UserAction::Right, vec!["Right".to_string(), "l".to_string()]),
@@ -119,6 +127,8 @@ fn set_keymap(config_toml: &ConfigFromToml) -> Config {
         (&config_toml.keybindings.quit, UserAction::Quit, vec!["q".to_string()]),
     ];
 
+    // for each action, if user preference is set, use that, otherwise,
+    // use the default
     let mut keymap = Keybindings::new();
     for (config, action, defaults) in action_map.iter() {
         match config {
@@ -127,7 +137,53 @@ fn set_keymap(config_toml: &ConfigFromToml) -> Config {
         }
     }
 
+    // paths are set by user, or they resolve to OS-specific path as
+    // provided by dirs crate
+    let config_path = parse_create_dir(
+        config_toml.config_path.as_deref(),
+        dirs::config_dir());
+
+    let download_path = parse_create_dir(
+        config_toml.download_path.as_deref(),
+        dirs::data_local_dir());
+
     return Config {
+        config_path: config_path,
+        download_path: download_path,
         keybindings: keymap,
     };
+}
+
+
+/// Helper function that takes an (optionally specified) user directory
+/// and an (OS-dependent) default directory, expands any environment
+/// variables, ~ alias, etc. Returns a PathBuf. Panics if environment
+/// variables cannot be found, if OS could not produce the appropriate
+/// default directory, or if the specified directories in the path could
+/// not be created.
+fn parse_create_dir(user_dir: Option<&str>, default: Option<PathBuf>) -> PathBuf {
+    let final_path = match user_dir {
+        Some(path) => {
+            match shellexpand::full(path) {
+                Ok(realpath) => PathBuf::from(realpath.as_ref()),
+                Err(err) => panic!("Could not parse environment variable {} in config.toml. Reason: {}", err.var_name, err.cause),
+            }
+        },
+        None => {
+            match default {
+                Some(mut path) => {
+                    path.push("shellcaster");
+                    path
+                },
+                None => panic!("Could not identify a default directory for your OS. Please specify paths manually in config.toml."),
+            }
+        },
+    };
+
+    // create directories if they do not exist
+    if let Err(err) = std::fs::create_dir_all(&final_path) {
+        panic!("Could not create filepath: {}", err);
+    }
+
+    return final_path;
 }
