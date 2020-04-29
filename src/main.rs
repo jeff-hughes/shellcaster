@@ -91,6 +91,7 @@ fn main() {
                         Ok(ff) => {
                             match ff {
                                 Some(path) => {
+                                    let _ = db_inst.insert_file(episode.id.unwrap(), &path);
                                     episode.path = Some(path.clone());
                                     borrowed_ep_list[ep_index as usize] = episode;
                                     success = true;

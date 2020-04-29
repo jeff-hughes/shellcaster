@@ -1,5 +1,6 @@
 use std::rc::Rc;
 use core::cell::RefCell;
+use std::path::PathBuf;
 
 use rusqlite::{Connection, params};
 use chrono::{NaiveDateTime, DateTime, Utc};
@@ -94,7 +95,8 @@ impl Database {
 
         let conn = self.conn.as_ref().unwrap();
         let _ = conn.execute(
-            "INSERT INTO podcasts (title, url, description, author, explicit, last_checked)
+            "INSERT INTO podcasts (title, url, description, author,
+                explicit, last_checked)
                 VALUES (?, ?, ?, ?, ?, ?);",
             params![
                 podcast.title,
@@ -132,7 +134,8 @@ impl Database {
         };
 
         let _ = conn.execute(
-            "INSERT INTO episodes (podcast_id, title, url, description, pubdate, duration, played, hidden)
+            "INSERT INTO episodes (podcast_id, title, url,
+                description, pubdate, duration, played, hidden)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?);",
             params![
                 podcast_id,
@@ -143,6 +146,23 @@ impl Database {
                 episode.duration,
                 false,
                 false,
+            ]
+        )?;
+        return Ok(());
+    }
+
+    /// Inserts a filepath to a downloaded episode.
+    pub fn insert_file(&self, episode_id: i32, path: &PathBuf) -> 
+        Result<(), Box<dyn std::error::Error>> {
+
+        let conn = self.conn.as_ref().unwrap();
+
+        let _ = conn.execute(
+            "INSERT INTO files (episode_id, path)
+                VALUES (?, ?);",
+            params![
+                episode_id,
+                path.to_str(),
             ]
         )?;
         return Ok(());
@@ -182,10 +202,16 @@ impl Database {
     pub fn get_episodes(&self, pod_id: i32) -> Vec<Episode> {
         if let Some(conn) = &self.conn {
             let mut stmt = conn.prepare(
-                "SELECT * FROM episodes WHERE podcast_id = ?
-                      AND hidden = 0
-                      ORDER BY pubdate DESC;").unwrap();
+                "SELECT * FROM episodes
+                    LEFT JOIN files ON episodes.id = files.episode_id
+                    WHERE episodes.podcast_id = ?
+                    AND episodes.hidden = 0
+                    ORDER BY pubdate DESC;").unwrap();
             let episode_iter = stmt.query_map(params![pod_id], |row| {
+                let path = match row.get::<&str, String>("path") {
+                    Ok(val) => Some(PathBuf::from(val)),
+                    Err(_) => None,
+                };
                 Ok(Episode {
                     id: Some(row.get("id")?),
                     title: row.get("title")?,
@@ -193,7 +219,7 @@ impl Database {
                     description: row.get("description")?,
                     pubdate: convert_date(row.get("pubdate")),
                     duration: row.get("duration")?,
-                    path: None,  // TODO: Not yet implemented
+                    path: path,
                     played: row.get("played")?,
                 })
             }).unwrap();
