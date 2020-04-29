@@ -8,6 +8,7 @@ mod ui;
 mod types;
 mod feeds;
 mod downloads;
+mod execute;
 
 use crate::ui::{UI, UiMessage};
 use crate::db::Database;
@@ -56,6 +57,36 @@ fn main() {
                         }
                     },
                     Err(_err) => ui.spawn_msg_win("Error retrieving RSS feed.", 5000),
+                }
+            },
+
+            UiMessage::Play(pod_index, ep_index) => {
+                let borrowed_pod_list = podcast_list.borrow();
+                let borrowed_podcast = borrowed_pod_list
+                    .get(pod_index as usize).unwrap();
+                let borrowed_ep_list = borrowed_podcast
+                    .episodes.borrow();
+                // TODO: Try to find a way to do this without having
+                // to clone the episode...
+                let episode = borrowed_ep_list
+                    .get(ep_index as usize).unwrap().clone();
+
+                match episode.path {
+                    Some(path) => {
+                        match path.to_str() {
+                            Some(p) => {
+                                if let Err(_) = execute::execute(&p) {
+                                    ui.spawn_msg_win("Error: Could not play file. Check configuration.", 5000);
+                                }
+                            },
+                            None => ui.spawn_msg_win("Error: Filepath is not valid Unicode.", 5000),
+                        }
+                    },
+                    None => {
+                        if let Err(_) = execute::execute(&episode.url) {
+                            ui.spawn_msg_win("Error: Could not stream URL.", 5000);
+                        }
+                    }
                 }
             },
 

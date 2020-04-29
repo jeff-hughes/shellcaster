@@ -16,6 +16,7 @@ use crate::types::{Podcast, Episode, MutableVec};
 #[derive(Debug)]
 pub enum UiMessage {
     AddFeed(String),
+    Play(i32, i32),
     Download(i32, i32),
     DownloadAll(i32),
     Quit,
@@ -189,7 +190,13 @@ impl<'a> UI<'a> {
 
                     Some(UserAction::Sync) => {},
                     Some(UserAction::SyncAll) => {},
-                    Some(UserAction::Play) => {},
+                    Some(UserAction::Play) => {
+                        let pod_index = self.podcast_menu.selected +
+                            self.podcast_menu.top_row;
+                        let ep_index = self.episode_menu.selected +
+                            self.episode_menu.top_row;
+                        return UiMessage::Play(pod_index, ep_index);
+                    },
                     Some(UserAction::MarkPlayed) => {},
                     Some(UserAction::MarkAllPlayed) => {},
 
@@ -310,8 +317,8 @@ impl<'a> UI<'a> {
 
     /// Adds a one-line pancurses window to the bottom of the screen for
     /// displaying messages to the user. `duration` indicates how long
-    /// this message will remain on screen. Useful for presenting error
-    /// messages, among other things.
+    /// (in milliseconds) this message will remain on screen. Useful for
+    /// presenting error messages, among other things.
     pub fn spawn_msg_win(&mut self, message: &str, duration: i32) {
         let msg_win = newwin(1, self.n_col, self.n_row-1, 0);
         msg_win.mv(self.n_row-1, 0);
