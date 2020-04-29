@@ -7,8 +7,9 @@ mod db;
 mod ui;
 mod types;
 mod feeds;
+mod downloads;
 
-use crate::ui::UI;
+use crate::ui::{UI, UiMessage};
 use crate::db::Database;
 use crate::types::{Podcast, MutableVec};
 
@@ -26,6 +27,7 @@ use crate::types::{Podcast, MutableVec};
 fn main() {
     let db_inst = Database::connect();
     let config = config::parse_config_file("./config.toml");
+    let download_manager = downloads::DownloadManager::new();
 
     // create vector of podcasts, where references are checked at runtime;
     // this is necessary because we want main.rs to hold the "ground truth"
@@ -37,27 +39,35 @@ fn main() {
 
     loop {
         let mess = ui.getch();
-        if let Some(res) = mess.response {
-            if res == "quit" {
-                break;
-            } else if res == "add_feed" {
-                if let Some(url) = mess.message {
-                    match feeds::get_feed_data(url) {
-                        Ok(pod) => {
-                            match db_inst.insert_podcast(pod) {
-                                Ok(num_ep) => {
-                                    *podcast_list.borrow_mut() = db_inst.get_podcasts();
-                                    ui.update_menus();
-                                    ui.spawn_msg_win(
-                                    &format!("Successfully added {} episodes.", num_ep), 5000);
-                                },
-                                Err(_err) => ui.spawn_msg_win("Error adding podcast to database.", 5000),
-                            }
-                        },
-                        Err(_err) => ui.spawn_msg_win("Error retrieving RSS feed.", 5000),
-                    }
+        match mess {
+            UiMessage::Quit => break,
+            UiMessage::AddFeed(url) => {
+                match feeds::get_feed_data(url) {
+                    Ok(pod) => {
+                        match db_inst.insert_podcast(pod) {
+                            Ok(num_ep) => {
+                                *podcast_list.borrow_mut() = db_inst.get_podcasts();
+                                ui.update_menus();
+                                ui.spawn_msg_win(
+                                &format!("Successfully added {} episodes.", num_ep), 5000);
+                            },
+                            Err(_err) => ui.spawn_msg_win("Error adding podcast to database.", 5000),
+                        }
+                    },
+                    Err(_err) => ui.spawn_msg_win("Error retrieving RSS feed.", 5000),
                 }
-            }
+            },
+            UiMessage::Download(pod_index, ep_index) => {
+                let borrowed_pod_list = podcast_list.borrow();
+                let borrowed_ep_list = borrowed_pod_list
+                    .get(pod_index as usize)
+                    .unwrap()
+                    .episodes.borrow();
+                let episode = borrowed_ep_list
+                    .get(ep_index as usize).unwrap();
+                download_manager.download_list(&vec![episode], &config.download_path);
+            },
+            UiMessage::Noop => (),
         }
     }
 

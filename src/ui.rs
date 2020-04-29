@@ -9,14 +9,16 @@ use crate::config::Config;
 use crate::keymap::{Keybindings, UserAction};
 use crate::types::{Podcast, Episode, MutableVec};
 
-/// Struct used for communicating back to the main controller after user
+/// Enum used for communicating back to the main controller after user
 /// input has been captured by the UI. `response` can be any String, and
 /// `message` includes any corresponding details going along with the 
 /// response (e.g., user has inputted a podcast feed URL).
 #[derive(Debug)]
-pub struct UiMessage {
-    pub response: Option<String>,
-    pub message: Option<String>,
+pub enum UiMessage {
+    AddFeed(String),
+    Download(i32, i32),
+    Quit,
+    Noop,
 }
 
 /// Simple enum to identify which menu is currently active.
@@ -176,22 +178,23 @@ impl<'a> UI<'a> {
                     Some(UserAction::AddFeed) => {
                         let url = &self.spawn_input_win("Feed URL: ");
                         if url.len() > 0 {
-                            return UiMessage {
-                                response: Some("add_feed".to_string()),
-                                message: Some(url.to_string()),
-                            }
+                            return UiMessage::AddFeed(url.to_string());
                         }
-                        return UiMessage {
-                            response: Some("add_feed".to_string()),
-                            message: None,
-                        };
                     },
                     Some(UserAction::Sync) => {},
                     Some(UserAction::SyncAll) => {},
                     Some(UserAction::Play) => {},
                     Some(UserAction::MarkPlayed) => {},
                     Some(UserAction::MarkAllPlayed) => {},
-                    Some(UserAction::Download) => {},
+                    Some(UserAction::Download) => {
+                        let pod_index = self.podcast_menu.selected +
+                            self.podcast_menu.top_row;
+                        let ep_index = self.episode_menu.selected +
+                            self.episode_menu.top_row;
+                        // let episode = self.episode_menu.items.borrow()
+                        //         .get(index as usize).unwrap();
+                        return UiMessage::Download(pod_index, ep_index);
+                    },
                     Some(UserAction::DownloadAll) => {},
                     Some(UserAction::Delete) => {},
                     Some(UserAction::DeleteAll) => {},
@@ -199,20 +202,14 @@ impl<'a> UI<'a> {
                     Some(UserAction::RemoveAll) => {},
                     Some(UserAction::Search) => {},
                     Some(UserAction::Quit) => {
-                        return UiMessage {
-                            response: Some("quit".to_string()),
-                            message: None,
-                        };
+                        return UiMessage::Quit;
                     },
                     None => (),
                 }  // end of input match
             },
             None => (),
         };  // end of getch() match
-        return UiMessage {
-            response: None,
-            message: None,
-        };
+        return UiMessage::Noop;
     }
 
     /// Adds a one-line pancurses window to the bottom of the screen to
