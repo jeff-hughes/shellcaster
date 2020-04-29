@@ -111,7 +111,7 @@ fn parse_episode_data(item: &Item) -> Episode {
         duration = duration_to_int(itunes.duration());
     }
 
-    let path = "".to_string();
+    let path = None;
     let played = false;
 
     return Episode {

@@ -17,6 +17,7 @@ use crate::types::{Podcast, Episode, MutableVec};
 pub enum UiMessage {
     AddFeed(String),
     Download(i32, i32),
+    DownloadAll(i32),
     Quit,
     Noop,
 }
@@ -138,6 +139,7 @@ impl<'a> UI<'a> {
                             },
                         }
                     },
+
                     Some(UserAction::Up) => {
                         match self.active_menu {
                             ActiveMenu::PodcastMenu => {
@@ -155,6 +157,7 @@ impl<'a> UI<'a> {
                             },
                         }
                     },
+
                     Some(UserAction::Left) => {
                         match self.active_menu {
                             ActiveMenu::PodcastMenu => (),
@@ -165,6 +168,7 @@ impl<'a> UI<'a> {
                             },
                         }
                     },
+
                     Some(UserAction::Right) => {
                         match self.active_menu {
                             ActiveMenu::PodcastMenu => {
@@ -175,32 +179,39 @@ impl<'a> UI<'a> {
                             ActiveMenu::EpisodeMenu => (),
                         }
                     },
+
                     Some(UserAction::AddFeed) => {
                         let url = &self.spawn_input_win("Feed URL: ");
                         if url.len() > 0 {
                             return UiMessage::AddFeed(url.to_string());
                         }
                     },
+
                     Some(UserAction::Sync) => {},
                     Some(UserAction::SyncAll) => {},
                     Some(UserAction::Play) => {},
                     Some(UserAction::MarkPlayed) => {},
                     Some(UserAction::MarkAllPlayed) => {},
+
                     Some(UserAction::Download) => {
                         let pod_index = self.podcast_menu.selected +
                             self.podcast_menu.top_row;
                         let ep_index = self.episode_menu.selected +
                             self.episode_menu.top_row;
-                        // let episode = self.episode_menu.items.borrow()
-                        //         .get(index as usize).unwrap();
                         return UiMessage::Download(pod_index, ep_index);
                     },
-                    Some(UserAction::DownloadAll) => {},
+
+                    Some(UserAction::DownloadAll) => {
+                        let pod_index = self.podcast_menu.selected + self.podcast_menu.top_row;
+                        return UiMessage::DownloadAll(pod_index);
+                    },
+
                     Some(UserAction::Delete) => {},
                     Some(UserAction::DeleteAll) => {},
                     Some(UserAction::Remove) => {},
                     Some(UserAction::RemoveAll) => {},
                     Some(UserAction::Search) => {},
+
                     Some(UserAction::Quit) => {
                         return UiMessage::Quit;
                     },

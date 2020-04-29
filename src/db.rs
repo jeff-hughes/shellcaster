@@ -193,7 +193,7 @@ impl Database {
                     description: row.get("description")?,
                     pubdate: convert_date(row.get("pubdate")),
                     duration: row.get("duration")?,
-                    path: "".to_string(),  // TODO: Not yet implemented
+                    path: None,  // TODO: Not yet implemented
                     played: row.get("played")?,
                 })
             }).unwrap();

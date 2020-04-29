@@ -1,12 +1,13 @@
 use std::fmt;
 use std::convert;
+use std::path::PathBuf;
 use std::rc::Rc;
 use core::cell::RefCell;
 use chrono::{DateTime, Utc};
 
 /// Struct holding data about an individual podcast feed. This includes a
 /// (possibly empty) vector of episodes.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Podcast {
     pub id: Option<i32>,
     pub title: String,
@@ -34,7 +35,7 @@ impl convert::AsRef<str> for Podcast {
 /// is metadata, but if the episode has been downloaded to the local
 /// machine, the filepath will be included here as well. `played` indicates
 /// whether the podcast has been marked as played or unplayed.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Episode {
     pub id: Option<i32>,
     pub title: String,
@@ -42,13 +43,16 @@ pub struct Episode {
     pub description: String,
     pub pubdate: Option<DateTime<Utc>>,
     pub duration: Option<i32>,
-    pub path: String,
+    pub path: Option<PathBuf>,
     pub played: bool,
 }
 
 impl fmt::Display for Episode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.title)
+        match self.path {
+            Some(_) => write!(f, "[D] {}", self.title),
+            None => write!(f, "{}", self.title),
+        }
     }
 }
 

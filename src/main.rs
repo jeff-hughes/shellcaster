@@ -41,6 +41,7 @@ fn main() {
         let mess = ui.getch();
         match mess {
             UiMessage::Quit => break,
+
             UiMessage::AddFeed(url) => {
                 match feeds::get_feed_data(url) {
                     Ok(pod) => {
@@ -57,16 +58,92 @@ fn main() {
                     Err(_err) => ui.spawn_msg_win("Error retrieving RSS feed.", 5000),
                 }
             },
+
             UiMessage::Download(pod_index, ep_index) => {
-                let borrowed_pod_list = podcast_list.borrow();
-                let borrowed_ep_list = borrowed_pod_list
-                    .get(pod_index as usize)
-                    .unwrap()
-                    .episodes.borrow();
-                let episode = borrowed_ep_list
-                    .get(ep_index as usize).unwrap();
-                download_manager.download_list(&vec![episode], &config.download_path);
+                let mut success = false;
+
+                // limit scope so that we drop the mutable borrow;
+                // otherwise, will panic once we try to update the UI
+                {
+                    let borrowed_pod_list = podcast_list.borrow();
+                    let mut borrowed_ep_list = borrowed_pod_list
+                        .get(pod_index as usize)
+                        .unwrap()
+                        .episodes.borrow_mut();
+                    // TODO: Try to find a way to do this without having
+                    // to clone the episode...
+                    let mut episode = borrowed_ep_list
+                        .get(ep_index as usize).unwrap().clone();
+                    let file_paths = download_manager
+                        .download_list(&vec![&episode], &config.download_path);
+
+                    match &file_paths[0] {
+                        Ok(ff) => {
+                            match ff {
+                                Some(path) => {
+                                    episode.path = Some(path.clone());
+                                    borrowed_ep_list[ep_index as usize] = episode;
+                                    success = true;
+                                },
+                                None => (),
+                            }
+                        },
+                        Err(_) => (),
+                    }
+                }
+
+                if success {
+                    ui.update_menus();
+                }
             },
+
+            UiMessage::DownloadAll(pod_index) => {
+                let mut success = false;
+
+                // limit scope so that we drop the mutable borrow;
+                // otherwise, will panic once we try to update the UI
+                {
+                    let borrowed_pod_list = podcast_list.borrow();
+                    let mut borrowed_ep_list = borrowed_pod_list
+                        .get(pod_index as usize)
+                        .unwrap()
+                        .episodes.borrow_mut();
+
+                    // TODO: Try to find a way to do this without having
+                    // to clone the episodes...
+                    let mut episodes = Vec::new();
+                    let mut episode_refs = Vec::new();
+                    for e in borrowed_ep_list.iter() {
+                        episodes.push(e.clone());
+                        episode_refs.push(e);
+                    }
+
+                    let file_paths = download_manager
+                        .download_list(&episode_refs, &config.download_path);
+
+                    for (i, f) in file_paths.iter().enumerate() {
+                        match f {
+                            Ok(ff) => {
+                                match ff {
+                                    Some(path) => {
+                                        episodes[i].path = Some(path.clone());
+                                        borrowed_ep_list[i] = episodes[i].clone();
+                                        success = true;
+                                    },
+                                    None => (),
+                                }
+                            },
+                            Err(_) => (),
+                        }
+                    }
+                }
+
+                // update if even one file downloaded successfully
+                if success {
+                    ui.update_menus();
+                }
+            },
+
             UiMessage::Noop => (),
         }
     }
