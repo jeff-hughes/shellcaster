@@ -66,16 +66,26 @@ fn main() {
                 // otherwise, will panic once we try to update the UI
                 {
                     let borrowed_pod_list = podcast_list.borrow();
-                    let mut borrowed_ep_list = borrowed_pod_list
-                        .get(pod_index as usize)
-                        .unwrap()
+                    let borrowed_podcast = borrowed_pod_list
+                        .get(pod_index as usize).unwrap();
+                    let mut borrowed_ep_list = borrowed_podcast
                         .episodes.borrow_mut();
                     // TODO: Try to find a way to do this without having
                     // to clone the episode...
                     let mut episode = borrowed_ep_list
                         .get(ep_index as usize).unwrap().clone();
+
+                    // add directory for podcast, create if it does not exist
+                    let mut download_path = config.download_path.clone();
+                    download_path.push(borrowed_podcast.title.clone());
+                    if let Err(_) = std::fs::create_dir_all(&download_path) {
+                        ui.spawn_msg_win(
+                            &format!("Could not create dir: {}", borrowed_podcast.title.clone())[..],
+                            5000);
+                    }
+
                     let file_paths = download_manager
-                        .download_list(&vec![&episode], &config.download_path);
+                        .download_list(&vec![&episode], &download_path);
 
                     match &file_paths[0] {
                         Ok(ff) => {
@@ -104,9 +114,9 @@ fn main() {
                 // otherwise, will panic once we try to update the UI
                 {
                     let borrowed_pod_list = podcast_list.borrow();
-                    let mut borrowed_ep_list = borrowed_pod_list
-                        .get(pod_index as usize)
-                        .unwrap()
+                    let borrowed_podcast = borrowed_pod_list
+                        .get(pod_index as usize).unwrap();
+                    let mut borrowed_ep_list = borrowed_podcast
                         .episodes.borrow_mut();
 
                     // TODO: Try to find a way to do this without having
@@ -118,8 +128,17 @@ fn main() {
                         episode_refs.push(e);
                     }
 
+                    // add directory for podcast, create if it does not exist
+                    let mut download_path = config.download_path.clone();
+                    download_path.push(borrowed_podcast.title.clone());
+                    if let Err(_) = std::fs::create_dir_all(&download_path) {
+                        ui.spawn_msg_win(
+                            &format!("Could not create dir: {}", borrowed_podcast.title.clone())[..],
+                            5000);
+                    }
+
                     let file_paths = download_manager
-                        .download_list(&episode_refs, &config.download_path);
+                        .download_list(&episode_refs, &download_path);
 
                     for (i, f) in file_paths.iter().enumerate() {
                         match f {
