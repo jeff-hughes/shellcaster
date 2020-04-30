@@ -18,6 +18,12 @@ config_path = "~/.config/shellcaster/"
 
 download_path = "~/shellcaster/"
 
+# Command to use to play episodes. Use "%s" to indicate where file/URL
+# will be entered to the command.
+# Default: vlc %s
+
+play_command = "vlc %s"
+
 
 [keybindings]
 

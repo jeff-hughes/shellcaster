@@ -10,6 +10,7 @@ use crate::keymap::{Keybindings, UserAction};
 pub struct Config {
     pub config_path: PathBuf,
     pub download_path: PathBuf,
+    pub play_command: String,
     pub keybindings: Keybindings,
 }
 
@@ -20,6 +21,7 @@ pub struct Config {
 struct ConfigFromToml {
     config_path: Option<String>,
     download_path: Option<String>,
+    play_command: Option<String>,
     keybindings: KeybindingsFromToml,
 }
 
@@ -89,6 +91,7 @@ pub fn parse_config_file(path: &str) -> Config {
             config_toml = ConfigFromToml {
                 config_path: None,
                 download_path: None,
+                play_command: None,
                 keybindings: keybindings,
             };
         }
@@ -147,9 +150,15 @@ fn config_with_defaults(config_toml: &ConfigFromToml) -> Config {
         config_toml.download_path.as_deref(),
         dirs::data_local_dir());
 
+    let play_command = match config_toml.play_command.as_deref() {
+        Some(cmd) => cmd.to_string(),
+        None => "vlc %s".to_string(),
+    };
+
     return Config {
         config_path: config_path,
         download_path: download_path,
+        play_command: play_command,
         keybindings: keymap,
     };
 }

@@ -8,7 +8,7 @@ mod ui;
 mod types;
 mod feeds;
 mod downloads;
-mod execute;
+mod play_file;
 
 use crate::ui::{UI, UiMessage};
 use crate::db::Database;
@@ -75,7 +75,7 @@ fn main() {
                     Some(path) => {
                         match path.to_str() {
                             Some(p) => {
-                                if let Err(_) = execute::execute(&p) {
+                                if let Err(_) = play_file::execute(&config.play_command, &p) {
                                     ui.spawn_msg_win("Error: Could not play file. Check configuration.", 5000);
                                 }
                             },
@@ -83,7 +83,7 @@ fn main() {
                         }
                     },
                     None => {
-                        if let Err(_) = execute::execute(&episode.url) {
+                        if let Err(_) = play_file::execute(&config.play_command, &episode.url) {
                             ui.spawn_msg_win("Error: Could not stream URL.", 5000);
                         }
                     }
