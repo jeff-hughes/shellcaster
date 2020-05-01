@@ -124,6 +124,10 @@ impl<'a> UI<'a> {
                 // TODO: Need to handle increasing and decreasing rows
             },
             Some(input) => {
+                let current_pod_index = self.podcast_menu.selected +
+                    self.podcast_menu.top_row;
+                let current_ep_index = self.episode_menu.selected +
+                    self.episode_menu.top_row;
                 match self.keymap.get_from_input(&input) {
                     Some(UserAction::Down) => {
                         match self.active_menu {
@@ -191,34 +195,23 @@ impl<'a> UI<'a> {
                     },
 
                     Some(UserAction::Sync) => {
-                        let pod_index = self.podcast_menu.selected +
-                            self.podcast_menu.top_row;
-                        return UiMessage::Sync(pod_index);
+                        return UiMessage::Sync(current_pod_index);
                     },
                     Some(UserAction::SyncAll) => {
                         return UiMessage::SyncAll;
                     },
                     Some(UserAction::Play) => {
-                        let pod_index = self.podcast_menu.selected +
-                            self.podcast_menu.top_row;
-                        let ep_index = self.episode_menu.selected +
-                            self.episode_menu.top_row;
-                        return UiMessage::Play(pod_index, ep_index);
+                        return UiMessage::Play(current_pod_index, current_ep_index);
                     },
                     Some(UserAction::MarkPlayed) => {},
                     Some(UserAction::MarkAllPlayed) => {},
 
                     Some(UserAction::Download) => {
-                        let pod_index = self.podcast_menu.selected +
-                            self.podcast_menu.top_row;
-                        let ep_index = self.episode_menu.selected +
-                            self.episode_menu.top_row;
-                        return UiMessage::Download(pod_index, ep_index);
+                        return UiMessage::Download(current_pod_index, current_ep_index);
                     },
 
                     Some(UserAction::DownloadAll) => {
-                        let pod_index = self.podcast_menu.selected + self.podcast_menu.top_row;
-                        return UiMessage::DownloadAll(pod_index);
+                        return UiMessage::DownloadAll(current_pod_index);
                     },
 
                     Some(UserAction::Delete) => {},
