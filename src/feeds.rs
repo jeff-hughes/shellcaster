@@ -19,7 +19,7 @@ lazy_static! {
 /// episodes from an RSS feed.
 pub fn get_feed_data(url: String) -> Result<Podcast, Box<dyn std::error::Error>> {
     let channel = Channel::from_url(&url)?;
-    return parse_feed_data(channel);
+    return parse_feed_data(channel, &url);
 }
 
 /// Given a Channel with the RSS feed data, this parses the data about a
@@ -27,9 +27,9 @@ pub fn get_feed_data(url: String) -> Result<Podcast, Box<dyn std::error::Error>>
 /// specifications for podcast RSS feeds that a feed should adhere to, but
 /// this does try to make some attempt to account for the possibility that
 /// a feed might not be valid according to the spec.
-pub fn parse_feed_data(channel: Channel) -> Result<Podcast, Box<dyn std::error::Error>> {
+pub fn parse_feed_data(channel: Channel, url: &str) -> Result<Podcast, Box<dyn std::error::Error>> {
     let title = channel.title().to_string();
-    let url = channel.link().to_string();
+    let url = url.to_string();
     let description = Some(channel.description().to_string());
     let last_checked = Utc::now();
 
@@ -221,7 +221,7 @@ mod tests {
     fn no_description() {
         let path = "./tests/test_no_description.xml";
         let channel = Channel::read_from(open_file(path)).unwrap();
-        let data = parse_feed_data(channel).unwrap();
+        let data = parse_feed_data(channel, "dummy_url").unwrap();
         assert_eq!(data.description, Some("".to_string()));
     }
 
@@ -229,7 +229,7 @@ mod tests {
     fn invalid_explicit() {
         let path = "./tests/test_inval_explicit.xml";
         let channel = Channel::read_from(open_file(path)).unwrap();
-        let data = parse_feed_data(channel).unwrap();
+        let data = parse_feed_data(channel, "dummy_url").unwrap();
         assert_eq!(data.explicit, None);
     }
 
@@ -237,7 +237,7 @@ mod tests {
     fn no_episodes() {
         let path = "./tests/test_no_episodes.xml";
         let channel = Channel::read_from(open_file(path)).unwrap();
-        let data = parse_feed_data(channel).unwrap();
+        let data = parse_feed_data(channel, "dummy_url").unwrap();
         assert_eq!(data.episodes.borrow().len(), 0);
     }
 

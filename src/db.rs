@@ -224,6 +224,10 @@ impl Database {
             match ep_map.get(&(ep.url.clone(), ep.pubdate.unwrap().timestamp())) {
                 // update existing episode
                 Some(id) => {
+                    let pubdate = match ep.pubdate {
+                        Some(dt) => Some(dt.timestamp()),
+                        None => None,
+                    };
                     let _ = conn.execute(
                         "UPDATE episodes SET title = ?, url = ?,
                             description = ?, pubdate = ?, duration = ?
@@ -232,7 +236,7 @@ impl Database {
                             ep.title,
                             ep.url,
                             ep.description,
-                            ep.pubdate.unwrap().timestamp(),
+                            pubdate,
                             ep.duration,
                             id,
                         ]

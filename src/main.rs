@@ -90,7 +90,34 @@ fn main() {
                 }
             },
 
-            UiMessage::SyncAll => {},
+            UiMessage::SyncAll => {
+                let mut success = true;
+                {
+                    let borrowed_pod_list = podcast_list.borrow();
+                    for podcast in borrowed_pod_list.iter() {
+                        let url = podcast.url.clone();
+                        let id = podcast.id;
+                        match feeds::get_feed_data(url) {
+                            Ok(mut pod) => {
+                                pod.id = id;
+                                match db_inst.update_podcast(pod) {
+                                    Ok(_) => (),
+                                    Err(_) => success = false,
+                                }
+                            },
+                            Err(_) => success = false,
+                        }
+                    }
+                }
+
+                *podcast_list.borrow_mut() = db_inst.get_podcasts();
+                ui.update_menus();
+                if success {
+                    ui.spawn_msg_win("Synchronized all feeds.", 5000);
+                } else {
+                    ui.spawn_msg_win("Error occurred while synchronizing feeds.", 5000);
+                }
+            },
 
             UiMessage::Play(pod_index, ep_index) => {
                 let borrowed_pod_list = podcast_list.borrow();
