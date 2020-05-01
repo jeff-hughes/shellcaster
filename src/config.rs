@@ -54,11 +54,11 @@ struct KeybindingsFromToml {
 /// Given a file path, this reads a TOML config file and returns a Config
 /// struct with keybindings, etc. Inserts defaults if config file does
 /// not exist, or if specific values are not set.
-pub fn parse_config_file(path: &str) -> Config {
+pub fn parse_config_file(path: &PathBuf) -> Config {
     let mut config_string = String::new();
     let config_toml: ConfigFromToml;
 
-    match File::open(&path) {
+    match File::open(path) {
         Ok(mut file) => {
             file.read_to_string(&mut config_string)
                 .expect("Error reading config.toml. Please ensure file is readable.");

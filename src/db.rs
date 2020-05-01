@@ -18,8 +18,10 @@ pub struct Database {
 impl Database {
     /// Creates a new connection to the database (and creates database if
     /// it does not already exist). Panics if database cannot be accessed.
-    pub fn connect() -> Database {
-        match Connection::open("data.db") {
+    pub fn connect(path: &PathBuf) -> Database {
+        let mut db_path = path.clone();
+        db_path.push("data.db");
+        match Connection::open(db_path) {
             Ok(conn) => {
                 let db_conn = Database {
                     conn: Some(conn),

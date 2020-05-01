@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::rc::Rc;
 use core::cell::RefCell;
 
@@ -26,8 +27,29 @@ use crate::types::{Podcast, MutableVec};
 /// to quit the program breaks the loop, tears down the UI, and ends the
 /// program.
 fn main() {
-    let db_inst = Database::connect();
-    let config = config::parse_config_file("./config.toml");
+    // figure out where config file is located -- either specified from
+    // command line args, or using default config location for OS
+    let mut config_path;
+    let args: Vec<String> = std::env::args().collect();
+    match args.len() {
+        3 => {
+            config_path = PathBuf::from(&args[2]);
+        },
+        _ => {
+            let default_config = dirs::config_dir();
+            match default_config {
+                Some(path) => {
+                    config_path = path;
+                    config_path.push("shellcaster");
+                    config_path.push("config.toml");
+                },
+                None => panic!("Could not identify your operating system's default directory to store configuration files. Please specify paths manually using config.toml and use `-c` or `--config` flag to specify where config.toml is located when launching the program."),
+            } 
+        }
+    }
+    let config = config::parse_config_file(&config_path);
+    
+    let db_inst = Database::connect(&config.config_path);
     let download_manager = downloads::DownloadManager::new();
 
     // create vector of podcasts, where references are checked at runtime;
