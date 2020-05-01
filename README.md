@@ -32,6 +32,38 @@ Keybindings can be modified in the config.toml file. Actions can be
 mapped to more than one key, but a single key may not do more than one
 action.
 
+## Compiling shellcaster
+
+To reiterate, shellcaster does *not* yet have a stable release -- it's not even at an alpha stage. But if you're interested in compiling it yourself, you can build the binaries with the following commands.
+
+**Note:** This assumes you already have Rust + cargo installed, and are using a Unix shell (e.g., bash, zsh, fish). You can probably compile it on Windows as well, but you're on your own for that right now.
+
+```
+git clone https://github.com/jeff-hughes/shellcaster.git
+cd shellcaster
+cargo build --release
+sudo cp target/release/shellcaster /usr/local/bin/
+shellcaster  # to run
+```
+
+If you want to change configuration settings:
+
+```
+# on Linux
+mkdir -p ~/.config/shellcaster
+cp config.toml ~/.config/shellcaster/
+
+# on MacOS
+mkdir -p ~/Library/Preferences/shellcaster
+cp config.toml ~/Library/Preferences/shellcaster/
+```
+
+Or you can put `config.toml` in a place of your choosing, and specify the location at runtime:
+
+```
+shellcaster -c /path/to/config.toml
+```
+
 ## Why "shellcaster"?
 
 I was trying to come up with a play on the word "podcast", and I liked the use of the word "shell" for several reasons. "Shell" is a synonym for the word "pod". The terminal is also referred to as a shell (and shellcaster is a terminal-based program). In addition, the program is built on Rust, whose mascot is Ferris the crab. Finally, I just personally enjoy that "shellcaster" sounds a lot like "spellcaster", so you can feel like a wizard when you use the program...
