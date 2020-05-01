@@ -6,7 +6,7 @@ The end goal is to provide a terminal UI (i.e., ncurses) to allow users to subsc
 
 ## Current progress
 
-Right now the program only has bare-bones functionality. Currently you can add new feeds, download files, play them, and navigate through the list of podcasts and episodes. Synchronizing feeds is still on the to-do list. It also does not yet keep track of whether an episode has been played or not.
+Right now the program only has bare-bones functionality. Currently you can add new feeds, synchronize them, download files, play them, and navigate through the list of podcasts and episodes. It does not yet keep track of whether an episode has been played or not, and deleting files, and removing podcasts/episodes is not yet implemented.
 
 ## Keybindings (currently implemented functions are in bold)
 
@@ -15,8 +15,8 @@ Right now the program only has bare-bones functionality. Currently you can add n
 | Arrow keys / h,j,k,l | **Navigate menus** |
 | a       | **Add new feed** |
 | q       | **Quit program** |
-| s       | Synchronize selected feed |
-| Shift+S | Synchronize all feeds |
+| s       | **Synchronize selected feed** |
+| Shift+S | **Synchronize all feeds** |
 | Enter / p | **Play selected episode** |
 | m       | Mark selected episode as played/unplayed |
 | Shift+M | Mark all episodes as played/unplayed |
