@@ -60,6 +60,38 @@ fn main() {
                 }
             },
 
+            UiMessage::Sync(pod_index) => {
+                let url;
+                let id;
+                {
+                    let borrowed_pod_list = podcast_list.borrow();
+                    let borrowed_podcast = borrowed_pod_list
+                        .get(pod_index as usize).unwrap();
+                    url = borrowed_podcast.url.clone();
+                    id = borrowed_podcast.id;
+                }
+                match feeds::get_feed_data(url) {
+                    Ok(mut pod) => {
+                        let title = pod.title.clone();
+                        pod.id = id;
+                        match db_inst.update_podcast(pod) {
+                            Ok(_) => {
+                                *podcast_list.borrow_mut() = db_inst.get_podcasts();
+                                ui.update_menus();
+                                ui.spawn_msg_win(
+                                &format!("Synchronized {}.", title), 5000);
+                            },
+                            Err(_err) => ui.spawn_msg_win(
+                                &format!("Error synchronizing {}.", title),
+                                5000),
+                        }
+                    },
+                    Err(_err) => ui.spawn_msg_win("Error retrieving RSS feed.", 5000),
+                }
+            },
+
+            UiMessage::SyncAll => {},
+
             UiMessage::Play(pod_index, ep_index) => {
                 let borrowed_pod_list = podcast_list.borrow();
                 let borrowed_podcast = borrowed_pod_list

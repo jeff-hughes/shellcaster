@@ -1,11 +1,12 @@
 use std::rc::Rc;
 use core::cell::RefCell;
 use std::path::PathBuf;
+use std::collections::HashMap;
 
 use rusqlite::{Connection, params};
 use chrono::{NaiveDateTime, DateTime, Utc};
 
-use crate::types::{Podcast, Episode};
+use crate::types::{Podcast, Episode, MutableVec};
 
 /// Struct holding a sqlite database connection, with methods to interact
 /// with this connection.
@@ -166,6 +167,84 @@ impl Database {
             ]
         )?;
         return Ok(());
+    }
+
+    /// Updates an existing podcast in the database, where metadata is
+    /// changed if necessary, and episodes are updated (modified episodes
+    /// are updated, new episodes are inserted).
+    pub fn update_podcast(&self, podcast: Podcast) -> Result<usize, Box<dyn std::error::Error>> {
+        let conn = self.conn.as_ref().unwrap();
+        let _ = conn.execute(
+            "UPDATE podcasts SET title = ?, url = ?, description = ?,
+            author = ?, explicit = ?, last_checked = ?
+            WHERE id = ?;",
+            params![
+                podcast.title,
+                podcast.url,
+                podcast.description,
+                podcast.author,
+                podcast.explicit,
+                podcast.last_checked.timestamp(),
+                podcast.id,
+            ]
+        )?;
+
+        let num_episodes = podcast.episodes.borrow().len();
+        self.update_episodes(&podcast.id.unwrap(), podcast.episodes);
+
+        return Ok(num_episodes);
+    }
+
+    /// Updates metadata about episodes that already exist in database,
+    /// or inserts new episodes.
+    ///
+    /// Episodes are checked against the URL and published data in
+    /// order to determine if they already exist. As such, an existing
+    /// episode that has changed either of these fields will show up as
+    /// a "new" episode. The old version will still remain in the
+    /// database.
+    fn update_episodes(&self, podcast_id: &i32, episodes: MutableVec<Episode>) {
+        let conn = self.conn.as_ref().unwrap();
+
+        let mut stmt = conn.prepare(
+            "SELECT id, url, pubdate FROM episodes
+                WHERE podcast_id = ?;").unwrap();
+        let episode_iter = stmt.query_map(params![podcast_id], |row| {
+            Ok((row.get("id")?, row.get("url")?, row.get("pubdate")?))
+        }).unwrap();
+
+        // create hashmap of all episodes, indexed by URL and pub date
+        let mut ep_map: HashMap<(String, i64), i32> = HashMap::new();
+        for ep in episode_iter {
+            let epuw = ep.unwrap();
+            ep_map.insert((epuw.1, epuw.2), epuw.0);
+        }
+
+        for ep in episodes.borrow().iter().rev() {
+            match ep_map.get(&(ep.url.clone(), ep.pubdate.unwrap().timestamp())) {
+                // update existing episode
+                Some(id) => {
+                    let _ = conn.execute(
+                        "UPDATE episodes SET title = ?, url = ?,
+                            description = ?, pubdate = ?, duration = ?
+                            WHERE id = ?;",
+                        params![
+                            ep.title,
+                            ep.url,
+                            ep.description,
+                            ep.pubdate.unwrap().timestamp(),
+                            ep.duration,
+                            id,
+                        ]
+                    ).unwrap();
+                },
+
+                // insert new episode
+                None => {
+                    let _ = &self.insert_episode(&podcast_id, &ep).unwrap();
+                }
+            }
+        }
     }
 
     /// Generates list of all podcasts in database.

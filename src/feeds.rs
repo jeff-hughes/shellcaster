@@ -61,7 +61,7 @@ pub fn parse_feed_data(channel: Channel) -> Result<Podcast, Box<dyn std::error::
         }
     }
 
-    Ok(Podcast {
+    return Ok(Podcast {
         id: None,
         title: title,
         url: url,
@@ -70,7 +70,7 @@ pub fn parse_feed_data(channel: Channel) -> Result<Podcast, Box<dyn std::error::
         explicit: explicit,
         last_checked: last_checked,
         episodes: Rc::new(RefCell::new(episodes)),
-    })
+    });
 }
 
 /// For an item (episode) in an RSS feed, this pulls data about the item

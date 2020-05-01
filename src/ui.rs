@@ -17,6 +17,8 @@ use crate::types::{Podcast, Episode, MutableVec};
 pub enum UiMessage {
     AddFeed(String),
     Play(i32, i32),
+    Sync(i32),
+    SyncAll,
     Download(i32, i32),
     DownloadAll(i32),
     Quit,
@@ -188,8 +190,14 @@ impl<'a> UI<'a> {
                         }
                     },
 
-                    Some(UserAction::Sync) => {},
-                    Some(UserAction::SyncAll) => {},
+                    Some(UserAction::Sync) => {
+                        let pod_index = self.podcast_menu.selected +
+                            self.podcast_menu.top_row;
+                        return UiMessage::Sync(pod_index);
+                    },
+                    Some(UserAction::SyncAll) => {
+                        return UiMessage::SyncAll;
+                    },
                     Some(UserAction::Play) => {
                         let pod_index = self.podcast_menu.selected +
                             self.podcast_menu.top_row;
