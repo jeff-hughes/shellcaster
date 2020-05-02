@@ -7,7 +7,7 @@
 # $HOME/Library/Preferences/shellcaster/ on Mac
 # C:\Users\<User>\AppData\Roaming\shellcaster\ on Windows
 
-config_path = "~/.config/shellcaster/"
+#config_path = "~/.config/shellcaster/"
 
 
 # Specifies where podcast episodes that are downloaded will be stored.
@@ -16,7 +16,7 @@ config_path = "~/.config/shellcaster/"
 # $HOME/Library/Application Support/shellcaster/ on Mac
 # C:\Users\<User>\AppData\Local\shellcaster\ on Windows
 
-download_path = "~/shellcaster/"
+#download_path = "~/.local/share/shellcaster/"
 
 # Command to use to play episodes. Use "%s" to indicate where file/URL
 # will be entered to the command.
