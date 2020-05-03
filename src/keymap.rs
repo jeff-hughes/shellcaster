@@ -3,7 +3,7 @@ use pancurses::Input;
 
 /// Enum delineating all actions that may be performed by the user, and
 /// thus have keybindings associated with them.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum UserAction {
     Left,
     Right,
@@ -69,6 +69,18 @@ impl Keybindings {
         for key in vec.into_iter() {
             self.insert(key.to_string(), action);
         }
+    }
+
+    pub fn keys_for_action(&self, action: UserAction) -> Vec<String> {
+        return self.map.iter()
+            .filter_map(|(key, &val)| {
+                if val == action {
+                    Some(key.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
     }
 }
 

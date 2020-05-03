@@ -44,6 +44,7 @@ pub struct UI<'a> {
     podcast_menu: Menu<Podcast>,
     episode_menu: Menu<Episode>,
     active_menu: ActiveMenu,
+    welcome_win: Option<Window>,
 }
 
 impl<'a> UI<'a> {
@@ -92,9 +93,15 @@ impl<'a> UI<'a> {
             top_row: 0,
             selected: 0,
         };
-
         episode_menu.init();
         episode_menu.window.noutrefresh();
+
+        // welcome screen if user does not have any podcasts yet
+        let mut welcome_win = None;
+        if items.borrow().len() == 0 {
+            welcome_win = Some(UI::make_welcome_win(&config, n_row, n_col));
+        }
+
         pancurses::doupdate();
 
         return UI {
@@ -105,6 +112,7 @@ impl<'a> UI<'a> {
             podcast_menu: podcast_menu,
             episode_menu: episode_menu,
             active_menu: ActiveMenu::PodcastMenu,
+            welcome_win: welcome_win,
         };
     }
 
@@ -124,25 +132,39 @@ impl<'a> UI<'a> {
                 // TODO: Need to handle increasing and decreasing rows
             },
             Some(input) => {
+                let pod_len = self.podcast_menu.items.borrow().len();
+                let ep_len = self.episode_menu.items.borrow().len();
                 let current_pod_index = self.podcast_menu.selected +
                     self.podcast_menu.top_row;
                 let current_ep_index = self.episode_menu.selected +
                     self.episode_menu.top_row;
+
+                // get rid of the "welcome" window once the podcast list
+                // is no longer empty
+                if pod_len > 0 && self.welcome_win.is_some() {
+                    let ww = self.welcome_win.take().unwrap();
+                    ww.delwin();
+                }
+
                 match self.keymap.get_from_input(&input) {
                     Some(UserAction::Down) => {
                         match self.active_menu {
                             ActiveMenu::PodcastMenu => {
-                                self.podcast_menu.scroll(1);
+                                if pod_len > 0 {
+                                    self.podcast_menu.scroll(1);
 
-                                self.episode_menu.top_row = 0;
-                                self.episode_menu.selected = 0;
+                                    self.episode_menu.top_row = 0;
+                                    self.episode_menu.selected = 0;
 
-                                // update episodes menu with new list
-                                self.episode_menu.items = self.podcast_menu.get_episodes();
-                                self.episode_menu.update_items();
+                                    // update episodes menu with new list
+                                    self.episode_menu.items = self.podcast_menu.get_episodes();
+                                    self.episode_menu.update_items();
+                                }
                             },
                             ActiveMenu::EpisodeMenu => {
-                                self.episode_menu.scroll(1);
+                                if ep_len > 0 {
+                                    self.episode_menu.scroll(1);
+                                }
                             },
                         }
                     },
@@ -150,40 +172,48 @@ impl<'a> UI<'a> {
                     Some(UserAction::Up) => {
                         match self.active_menu {
                             ActiveMenu::PodcastMenu => {
-                                self.podcast_menu.scroll(-1);
+                                if pod_len > 0 {
+                                    self.podcast_menu.scroll(-1);
 
-                                self.episode_menu.top_row = 0;
-                                self.episode_menu.selected = 0;
+                                    self.episode_menu.top_row = 0;
+                                    self.episode_menu.selected = 0;
 
-                                // update episodes menu with new list
-                                self.episode_menu.items = self.podcast_menu.get_episodes();
-                                self.episode_menu.update_items();
+                                    // update episodes menu with new list
+                                    self.episode_menu.items = self.podcast_menu.get_episodes();
+                                    self.episode_menu.update_items();
+                                }
                             },
                             ActiveMenu::EpisodeMenu => {
-                                self.episode_menu.scroll(-1);
+                                if pod_len > 0 {
+                                    self.episode_menu.scroll(-1);
+                                }
                             },
                         }
                     },
 
                     Some(UserAction::Left) => {
-                        match self.active_menu {
-                            ActiveMenu::PodcastMenu => (),
-                            ActiveMenu::EpisodeMenu => {
-                                self.active_menu = ActiveMenu::PodcastMenu;
-                                self.podcast_menu.activate();
-                                self.episode_menu.deactivate();
-                            },
+                        if pod_len > 0 {
+                            match self.active_menu {
+                                ActiveMenu::PodcastMenu => (),
+                                ActiveMenu::EpisodeMenu => {
+                                    self.active_menu = ActiveMenu::PodcastMenu;
+                                    self.podcast_menu.activate();
+                                    self.episode_menu.deactivate();
+                                },
+                            }
                         }
                     },
 
                     Some(UserAction::Right) => {
-                        match self.active_menu {
-                            ActiveMenu::PodcastMenu => {
-                                self.active_menu = ActiveMenu::EpisodeMenu;
-                                // self.podcast_menu.deactivate();
-                                self.episode_menu.activate();
-                            },
-                            ActiveMenu::EpisodeMenu => (),
+                        if pod_len > 0 && ep_len > 0 {
+                            match self.active_menu {
+                                ActiveMenu::PodcastMenu => {
+                                    self.active_menu = ActiveMenu::EpisodeMenu;
+                                    // self.podcast_menu.deactivate();
+                                    self.episode_menu.activate();
+                                },
+                                ActiveMenu::EpisodeMenu => (),
+                            }
                         }
                     },
 
@@ -201,17 +231,23 @@ impl<'a> UI<'a> {
                         return UiMessage::SyncAll;
                     },
                     Some(UserAction::Play) => {
-                        return UiMessage::Play(current_pod_index, current_ep_index);
+                        if ep_len > 0 {
+                            return UiMessage::Play(current_pod_index, current_ep_index);
+                        }
                     },
                     Some(UserAction::MarkPlayed) => {},
                     Some(UserAction::MarkAllPlayed) => {},
 
                     Some(UserAction::Download) => {
-                        return UiMessage::Download(current_pod_index, current_ep_index);
+                        if ep_len > 0 {
+                            return UiMessage::Download(current_pod_index, current_ep_index);
+                        }
                     },
 
                     Some(UserAction::DownloadAll) => {
-                        return UiMessage::DownloadAll(current_pod_index);
+                        if pod_len > 0 {
+                            return UiMessage::DownloadAll(current_pod_index);
+                        }
                     },
 
                     Some(UserAction::Delete) => {},
@@ -236,7 +272,7 @@ impl<'a> UI<'a> {
     /// for the user at the beginning of the input line. This returns the
     /// user's input; if the user cancels their input, the String will be
     /// empty.
-    pub fn spawn_input_win(&mut self, prefix: &str) -> String {
+    pub fn spawn_input_win(&self, prefix: &str) -> String {
         let input_win = newwin(1, self.n_col, self.n_row-1, 0);
         // input_win.overlay(&self.podcast_menu.window);
         input_win.mv(self.n_row-1, 0);
@@ -320,7 +356,7 @@ impl<'a> UI<'a> {
     /// displaying messages to the user. `duration` indicates how long
     /// (in milliseconds) this message will remain on screen. Useful for
     /// presenting error messages, among other things.
-    pub fn spawn_msg_win(&mut self, message: &str, duration: i32) {
+    pub fn spawn_msg_win(&self, message: &str, duration: i32) {
         let msg_win = newwin(1, self.n_col, self.n_row-1, 0);
         msg_win.mv(self.n_row-1, 0);
         msg_win.addstr(&message);
@@ -341,11 +377,61 @@ impl<'a> UI<'a> {
         self.podcast_menu.update_items();
         self.episode_menu.update_items();
     }
-
+    
     /// When the program is ending, this performs tear-down functions so
     /// that the terminal is properly restored to its prior settings.
     pub fn tear_down(&self) {
         pancurses::endwin();
+    }
+
+    /// Creates a pancurses window with a welcome message for when users
+    /// start the program for the first time. Responsibility for managing
+    /// the window is given back to the main UI object.
+    pub fn make_welcome_win(config: &Config,
+        n_row: i32, n_col:i32) -> Window {
+
+        let add_keys = config.keybindings.keys_for_action(UserAction::AddFeed);
+        let quit_keys = config.keybindings.keys_for_action(UserAction::Quit);
+
+        let add_str = match add_keys.len() {
+            0 => "<missing>".to_string(),
+            1 => format!("\"{}\"", &add_keys[0]),
+            2 => format!("\"{}\" or \"{}\"", add_keys[0], add_keys[1]),
+            _ => {
+                let mut s = "".to_string();
+                for i in 0..add_keys.len() {
+                    if i == add_keys.len() - 1 {
+                        s = format!("{}, \"{}\"", s, add_keys[i]);
+                    } else {
+                        s = format!("{}, or \"{}\"", s, add_keys[i]);
+                    }
+                }
+                s
+            }
+        };
+
+        let quit_str = match quit_keys.len() {
+            0 => "<missing>".to_string(),
+            1 => format!("\"{}\"", &quit_keys[0]),
+            2 => format!("\"{}\" or \"{}\"", quit_keys[0], quit_keys[1]),
+            _ => {
+                let mut s = "".to_string();
+                for i in 0..quit_keys.len() {
+                    if i == quit_keys.len() - 1 {
+                        s = format!("{}, \"{}\"", s, quit_keys[i]);
+                    } else {
+                        s = format!("{}, or \"{}\"", s, quit_keys[i]);
+                    }
+                }
+                s
+            }
+        };
+
+        let welcome_win = newwin(n_row, n_col, 0, 0);
+        welcome_win.mv(0, 0);
+        welcome_win.addstr(format!("Welcome to shellcaster!\n\nYour podcast list is currently empty. Press {} to add a new podcast feed, or {} to quit.\n\nOther keybindings can be found on the Github repo readme:\nhttps://github.com/jeff-hughes/shellcaster", add_str, quit_str));
+        welcome_win.refresh();
+        return welcome_win;
     }
 }
 
