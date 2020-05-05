@@ -2,6 +2,9 @@ use std::cmp::min;
 use std::rc::Rc;
 use core::cell::RefCell;
 
+use std::thread;
+use std::time::Duration;
+
 use pancurses::{Window, newwin, Input};
 use crate::config::Config;
 use crate::keymap::{Keybindings, UserAction};
@@ -397,19 +400,26 @@ impl<'a> UI<'a> {
     /// displaying messages to the user. `duration` indicates how long
     /// (in milliseconds) this message will remain on screen. Useful for
     /// presenting error messages, among other things.
-    pub fn spawn_msg_win(&self, message: &str, duration: i32) {
-        let msg_win = newwin(1, self.n_col, self.n_row-1, 0);
-        msg_win.mv(self.n_row-1, 0);
-        msg_win.addstr(&message);
-        msg_win.refresh();
+    pub fn spawn_msg_win(&self, message: &str, duration: u64) {
+        let n_col = self.n_col;
+        let begy = self.n_row - 1;
+        let msg = message.to_string();
+        thread::spawn(move || {
+            let msg_win = newwin(1, n_col, begy, 0);
+            msg_win.mv(begy, 0);
+            msg_win.attrset(pancurses::A_NORMAL);
+            msg_win.addstr(msg);
+            msg_win.refresh();
 
-        // TODO: This probably should be some async function, but this
-        // works for now
-        pancurses::napms(duration);
-        
-        msg_win.deleteln();
-        msg_win.refresh();
-        msg_win.delwin();
+            // TODO: This probably should be some async function, but this
+            // works for now
+            // pancurses::napms(duration);
+            thread::sleep(Duration::from_millis(duration));
+            
+            msg_win.erase();
+            msg_win.refresh();
+            msg_win.delwin();
+        });
     }
 
     /// Forces the menus to check the list of podcasts/episodes again and
