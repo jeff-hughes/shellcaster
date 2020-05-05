@@ -1,9 +1,14 @@
-use std::fmt;
-use std::convert;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::ops::{Bound, RangeBounds};
 use core::cell::RefCell;
 use chrono::{DateTime, Utc};
+
+/// Defines interface used for both podcasts and episodes, to be
+/// used and displayed in menus.
+pub trait Menuable {
+    fn get_title(&self, length: usize) -> String;
+}
 
 /// Struct holding data about an individual podcast feed. This includes a
 /// (possibly empty) vector of episodes.
@@ -19,15 +24,9 @@ pub struct Podcast {
     pub episodes: MutableVec<Episode>,
 }
 
-impl fmt::Display for Podcast {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.title)
-    }
-}
-
-impl convert::AsRef<str> for Podcast {
-    fn as_ref(&self) -> &str {
-        return &self.title[..];
+impl Menuable for Podcast {
+    fn get_title(&self, length: usize) -> String {
+        return self.title[..].substring(0, length).to_string();
     }
 }
 
@@ -47,20 +46,66 @@ pub struct Episode {
     pub played: bool,
 }
 
-impl fmt::Display for Episode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.path {
-            Some(_) => write!(f, "[D] {}", self.title),
-            None => write!(f, "{}", self.title),
-        }
-    }
-}
-
-impl convert::AsRef<str> for Episode {
-    fn as_ref(&self) -> &str {
-        return &self.title[..];
+impl Menuable for Episode {
+    fn get_title(&self, length: usize) -> String {
+        return match self.path {
+            Some(_) => format!("[D] {}", self.title[..].substring(0, length-4)),
+            None => self.title[..].substring(0, length).to_string(),
+        };
     }
 }
 
 
 pub type MutableVec<T> = Rc<RefCell<Vec<T>>>;
+
+
+
+
+// some utilities for dealing with UTF-8 substrings that split properly
+// on character boundaries. From:
+// https://users.rust-lang.org/t/how-to-get-a-substring-of-a-string/1351/11
+// Note that using UnicodeSegmentation::graphemes() from the
+// `unicode-segmentation` crate might still end up being preferable...
+pub trait StringUtils {
+    fn substring(&self, start: usize, len: usize) -> &str;
+    fn slice(&self, range: impl RangeBounds<usize>) -> &str;
+}
+
+impl StringUtils for str {
+    fn substring(&self, start: usize, len: usize) -> &str {
+        let mut char_pos = 0;
+        let mut byte_start = 0;
+        let mut it = self.chars();
+        loop {
+            if char_pos == start { break; }
+            if let Some(c) = it.next() {
+                char_pos += 1;
+                byte_start += c.len_utf8();
+            }
+            else { break; }
+        }
+        char_pos = 0;
+        let mut byte_end = byte_start;
+        loop {
+            if char_pos == len { break; }
+            if let Some(c) = it.next() {
+                char_pos += 1;
+                byte_end += c.len_utf8();
+            }
+            else { break; }
+        }
+        &self[byte_start..byte_end]
+    }
+    fn slice(&self, range: impl RangeBounds<usize>) -> &str {
+        let start = match range.start_bound() {
+            Bound::Included(bound) | Bound::Excluded(bound) => *bound,
+            Bound::Unbounded => 0,
+        };
+        let len = match range.end_bound() {
+            Bound::Included(bound) => *bound + 1,
+            Bound::Excluded(bound) => *bound,
+            Bound::Unbounded => self.len(),
+        } - start;
+        self.substring(start, len)
+    }
+}

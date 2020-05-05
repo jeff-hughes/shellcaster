@@ -1,5 +1,3 @@
-use std::fmt;
-use std::convert;
 use std::cmp::min;
 use std::rc::Rc;
 use core::cell::RefCell;
@@ -7,7 +5,7 @@ use core::cell::RefCell;
 use pancurses::{Window, newwin, Input};
 use crate::config::Config;
 use crate::keymap::{Keybindings, UserAction};
-use crate::types::{Podcast, Episode, MutableVec};
+use crate::types::{Podcast, Episode, MutableVec, Menuable};
 
 /// Enum used for communicating back to the main controller after user
 /// input has been captured by the UI. `response` can be any String, and
@@ -65,12 +63,20 @@ impl<'a> UI<'a> {
 
         let (n_row, n_col) = stdscr.get_max_yx();
 
-        let podcast_menu_win = newwin(n_row, n_col / 2, 0, 0);
+        let pod_col = n_col / 2;
+        let ep_col;
+        if n_col % 2 == 0 {
+            ep_col = n_col / 2;
+        } else {
+            ep_col = n_col / 2 + 1;
+        }
+
+        let podcast_menu_win = newwin(n_row, pod_col, 0, 0);
         let mut podcast_menu = Menu {
             window: podcast_menu_win,
             items: Rc::clone(items),
             n_row: n_row,
-            n_col: n_col / 2,
+            n_col: pod_col,
             top_row: 0,
             selected: 0,
         };
@@ -80,7 +86,7 @@ impl<'a> UI<'a> {
         podcast_menu.window.mvchgat(podcast_menu.selected, 0, -1, pancurses::A_REVERSE, 0);
         podcast_menu.window.noutrefresh();
 
-        let episode_menu_win = newwin(n_row, n_col / 2, 0, n_col / 2);
+        let episode_menu_win = newwin(n_row, ep_col, 0, pod_col);
         let first_pod = match items.borrow().get(0) {
             Some(pod) => Rc::clone(&pod.episodes),
             None => Rc::new(RefCell::new(Vec::new())),
@@ -89,7 +95,7 @@ impl<'a> UI<'a> {
             window: episode_menu_win,
             items: first_pod,
             n_row: n_row,
-            n_col: n_col / 2,
+            n_col: ep_col,
             top_row: 0,
             selected: 0,
         };
@@ -128,9 +134,44 @@ impl<'a> UI<'a> {
         match self.stdscr.getch() {
             Some(Input::KeyResize) => {
                 pancurses::resize_term(0, 0);
-                // (n_row, n_col) = stdscr.get_max_yx();
-                // TODO: Need to handle increasing and decreasing rows
+                let (n_row, n_col) = self.stdscr.get_max_yx();
+                self.n_row = n_row;
+                self.n_col = n_col;
+
+                let pod_col = n_col / 2;
+                let ep_col;
+                if n_col % 2 == 0 {
+                    ep_col = n_col / 2;
+                } else {
+                    ep_col = n_col / 2 + 1;
+                }
+                self.podcast_menu.resize(n_row, pod_col);
+                self.episode_menu.resize(n_row, ep_col);
+
+                // apparently pancurses does not implement `wresize()`
+                // from ncurses, so instead we create an entirely new
+                // window every time the terminal is resized...not ideal,
+                // but c'est la vie
+                let pod_oldwin = std::mem::replace(
+                    &mut self.podcast_menu.window,
+                    newwin(n_row, pod_col, 0, 0));
+                let ep_oldwin = std::mem::replace(
+                    &mut self.episode_menu.window,
+                    newwin(n_row, ep_col, 0, pod_col));
+                pod_oldwin.delwin();
+                ep_oldwin.delwin();
+                self.stdscr.refresh();
+                self.update_menus();
+
+                match self.active_menu {
+                    ActiveMenu::PodcastMenu => self.podcast_menu.activate(),
+                    ActiveMenu::EpisodeMenu => {
+                        self.podcast_menu.activate();
+                        self.episode_menu.activate();
+                    },
+                }
             },
+
             Some(input) => {
                 let pod_len = self.podcast_menu.items.borrow().len();
                 let ep_len = self.episode_menu.items.borrow().len();
@@ -461,9 +502,7 @@ pub struct Menu<T> {
     selected: i32,  // which line of text is highlighted
 }
 
-impl<T> Menu<T>
-    where T: fmt::Display + convert::AsRef<str> {
-
+impl<T: Menuable> Menu<T> {
     /// Prints the list of visible items to the pancurses window and
     /// refreshes it.
     pub fn init(&mut self) {
@@ -501,7 +540,7 @@ impl<T> Menu<T>
 
                 self.window.mv(self.n_row-1, 0);
                 self.window.clrtoeol();
-                self.window.addstr(elem);
+                self.window.addstr(elem.get_title(self.n_col as usize));
             }
 
         } else if self.selected < 0 {
@@ -513,7 +552,7 @@ impl<T> Menu<T>
                 old_selected += 1;
 
                 self.window.mv(0, 0);
-                self.window.addstr(elem);
+                self.window.addstr(elem.get_title(self.n_col as usize));
             }
         }
 
@@ -524,31 +563,45 @@ impl<T> Menu<T>
 
     /// Controls how the window changes when it is active (i.e., available
     /// for user input to modify state).
-    pub fn activate(&mut self) {
+    fn activate(&mut self) {
         self.window.mvchgat(self.selected, 0, -1, pancurses::A_REVERSE, 0);
         self.window.refresh();
     }
 
     /// Controls how the window changes when it is inactive (i.e., not
     /// available for user input to modify state).
-    pub fn deactivate(&mut self) {
+    fn deactivate(&mut self) {
         self.window.mvchgat(self.selected, 0, -1, pancurses::A_NORMAL, 0);
         self.window.refresh();
     }
 
     /// Prints or reprints the list of visible items to the pancurses
     /// window and refreshes it.
-    pub fn update_items(&mut self) {
+    fn update_items(&mut self) {
         self.window.erase();
         // for visible rows, print strings from list
-        for i in self.top_row..(self.top_row + self.n_row) {
-            if let Some(elem) = self.items.borrow().get(i as usize) {
-                self.window.mvaddstr(i, 0, elem.to_string());
+        for i in 0..self.n_row {
+            let item_idx = self.top_row + i;
+            if let Some(elem) = self.items.borrow().get(item_idx as usize) {
+                self.window.mvaddstr(i, 0, elem.get_title(self.n_col as usize));
             } else {
                 break;
             }
         }
         self.window.refresh();
+    }
+
+    /// Updates window size
+    fn resize(&mut self, n_row: i32, n_col: i32) {
+        self.n_row = n_row;
+        self.n_col = n_col;
+
+        // if resizing moves selected item off screen, scroll the list
+        // upwards to keep same item selected
+        if self.selected > (self.n_row - 1) {
+            self.top_row = self.top_row + self.selected - (self.n_row - 1);
+            self.selected = self.n_row - 1;
+        }
     }
 }
 
