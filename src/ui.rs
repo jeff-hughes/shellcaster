@@ -67,12 +67,7 @@ impl<'a> UI<'a> {
         let (n_row, n_col) = stdscr.get_max_yx();
 
         let pod_col = n_col / 2;
-        let ep_col;
-        if n_col % 2 == 0 {
-            ep_col = n_col / 2;
-        } else {
-            ep_col = n_col / 2 + 1;
-        }
+        let ep_col = n_col - pod_col;
 
         let podcast_menu_win = newwin(n_row, pod_col, 0, 0);
         let mut podcast_menu = Menu {
@@ -142,12 +137,7 @@ impl<'a> UI<'a> {
                 self.n_col = n_col;
 
                 let pod_col = n_col / 2;
-                let ep_col;
-                if n_col % 2 == 0 {
-                    ep_col = n_col / 2;
-                } else {
-                    ep_col = n_col / 2 + 1;
-                }
+                let ep_col = n_col - pod_col;
                 self.podcast_menu.resize(n_row, pod_col);
                 self.episode_menu.resize(n_row, ep_col);
 
