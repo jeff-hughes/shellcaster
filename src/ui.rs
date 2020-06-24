@@ -16,7 +16,7 @@ use super::MainMessage;
 /// `message` includes any corresponding details going along with the 
 /// response (e.g., user has inputted a podcast feed URL).
 #[derive(Debug)]
-pub enum UiMessage {
+pub enum UiMsg {
     AddFeed(String),
     Play(i32, i32),
     Sync(i32),
@@ -52,7 +52,7 @@ pub struct UI<'a> {
 impl<'a> UI<'a> {
     /// Spawns a UI object in a new thread, with message channels to send
     /// and receive messages
-    pub fn spawn(config: Config, items: MutableVec<Podcast>, rx_from_main: mpsc::Receiver<MainMessage>, tx_to_main: mpsc::Sender<UiMessage>) -> thread::JoinHandle<()> {
+    pub fn spawn(config: Config, items: MutableVec<Podcast>, rx_from_main: mpsc::Receiver<MainMessage>, tx_to_main: mpsc::Sender<Message>) -> thread::JoinHandle<()> {
         return thread::spawn(move || {
             let mut ui = UI::new(&config, &items);
             let mut message_iter = rx_from_main.try_iter();
@@ -60,8 +60,8 @@ impl<'a> UI<'a> {
             // any messages from the main thread
             loop {
                 match ui.getch() {
-                    UiMessage::Noop => (),
-                    input => tx_to_main.send(input).unwrap(),
+                    UiMsg::Noop => (),
+                    input => tx_to_main.send(Message::Ui(input)).unwrap(),
                 }
 
                 if let Some(message) = message_iter.next() {
@@ -161,7 +161,7 @@ impl<'a> UI<'a> {
     /// greater degree of abstraction; for example, input to add a new
     /// podcast feed spawns a UI window to capture the feed URL, and only
     /// then passes this data back to the main controller.
-    pub fn getch(&mut self) -> UiMessage {
+    pub fn getch(&mut self) -> UiMsg {
         match self.stdscr.getch() {
             Some(Input::KeyResize) => {
                 pancurses::resize_term(0, 0);
@@ -287,19 +287,19 @@ impl<'a> UI<'a> {
                     Some(UserAction::AddFeed) => {
                         let url = &self.spawn_input_win("Feed URL: ");
                         if url.len() > 0 {
-                            return UiMessage::AddFeed(url.to_string());
+                            return UiMsg::AddFeed(url.to_string());
                         }
                     },
 
                     Some(UserAction::Sync) => {
-                        return UiMessage::Sync(current_pod_index);
+                        return UiMsg::Sync(current_pod_index);
                     },
                     Some(UserAction::SyncAll) => {
-                        return UiMessage::SyncAll;
+                        return UiMsg::SyncAll;
                     },
                     Some(UserAction::Play) => {
                         if ep_len > 0 {
-                            return UiMessage::Play(current_pod_index, current_ep_index);
+                            return UiMsg::Play(current_pod_index, current_ep_index);
                         }
                     },
                     Some(UserAction::MarkPlayed) => {},
@@ -307,13 +307,13 @@ impl<'a> UI<'a> {
 
                     Some(UserAction::Download) => {
                         if ep_len > 0 {
-                            return UiMessage::Download(current_pod_index, current_ep_index);
+                            return UiMsg::Download(current_pod_index, current_ep_index);
                         }
                     },
 
                     Some(UserAction::DownloadAll) => {
                         if pod_len > 0 {
-                            return UiMessage::DownloadAll(current_pod_index);
+                            return UiMsg::DownloadAll(current_pod_index);
                         }
                     },
 
@@ -324,14 +324,14 @@ impl<'a> UI<'a> {
                     Some(UserAction::Search) => {},
 
                     Some(UserAction::Quit) => {
-                        return UiMessage::Quit;
+                        return UiMsg::Quit;
                     },
                     None => (),
                 }  // end of input match
             },
             None => (),
         };  // end of getch() match
-        return UiMessage::Noop;
+        return UiMsg::Noop;
     }
 
     /// Adds a one-line pancurses window to the bottom of the screen to

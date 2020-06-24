@@ -1,4 +1,6 @@
 use std::sync::{Arc, Mutex};
+use std::thread;
+use std::sync::mpsc;
 
 use rss::{Channel, Item};
 use chrono::{DateTime, Utc};
@@ -6,12 +8,41 @@ use rfc822_sanitizer::parse_from_rfc2822_with_fallback;
 use lazy_static::lazy_static;
 use regex::{Regex, Match};
 
-use crate::types::{Podcast, Episode};
+use crate::types::{Podcast, Episode, Message};
 
 lazy_static! {
     /// Regex for parsing an episode "duration", which could take the form
     /// of HH:MM:SS, MM:SS, or SS.
     static ref RE_DURATION: Regex = Regex::new(r"(\d+)(?::(\d+))?(?::(\d+))?").unwrap();
+}
+
+/// Enum for communicating back to the main thread after feed data has
+/// been retrieved.
+#[derive(Debug)]
+pub enum FeedMsg {
+    NewData(Podcast),
+    SyncData(Podcast),
+    Error,
+}
+
+/// Spawns a new thread to check a feed and retrieve podcast data.
+pub fn spawn_feed_checker(tx_to_main: mpsc::Sender<Message>, url: String, pod_id: Option<i32>) -> thread::JoinHandle<()> {
+    return thread::spawn(move || {
+        match get_feed_data(url) {
+            Ok(mut pod) => {
+                match pod_id {
+                    Some(id) => {
+                        pod.id = Some(id);
+                        tx_to_main.send(
+                        Message::Feed(FeedMsg::SyncData(pod))).unwrap();
+                    },
+                    None => tx_to_main.send(
+                        Message::Feed(FeedMsg::NewData(pod))).unwrap(),
+                }
+            },
+            Err(_err) => tx_to_main.send(Message::Feed(FeedMsg::Error)).unwrap(),
+        }
+    });
 }
 
 /// Given a URL, this attempts to pull the data about a podcast and its
@@ -20,6 +51,7 @@ pub fn get_feed_data(url: String) -> Result<Podcast, Box<dyn std::error::Error>>
     let channel = Channel::from_url(&url)?;
     return parse_feed_data(channel, &url);
 }
+
 
 /// Given a Channel with the RSS feed data, this parses the data about a
 /// podcast and its episodes and returns a Podcast. There are existing

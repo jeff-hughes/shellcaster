@@ -10,9 +10,10 @@ mod feeds;
 mod downloads;
 mod play_file;
 
-use crate::ui::{UI, UiMessage};
-use crate::db::Database;
 use crate::types::*;
+use crate::ui::{UI, UiMsg};
+use crate::db::Database;
+use crate::feeds::FeedMsg;
 
 /// Enum used for communicating with other threads.
 #[derive(Debug)]
@@ -71,30 +72,34 @@ fn main() {
     let (tx_to_main, rx_to_main) = mpsc::channel();
     let tx_ui_to_main = mpsc::Sender::clone(&tx_to_main);
     let ui_thread = UI::spawn(config.clone(), Arc::clone(&podcast_list), rx_from_main, tx_ui_to_main);
+        // TODO: Can we do this without cloning the config?
 
     let mut message_iter = rx_to_main.iter();
     loop {
         if let Some(message) = message_iter.next() {
             match message {
-                UiMessage::Quit => break,
+                Message::Ui(UiMsg::Quit) => break,
 
-                UiMessage::AddFeed(url) => {
-                    match feeds::get_feed_data(url) {
-                        Ok(pod) => {
-                            match db_inst.insert_podcast(pod) {
-                                Ok(num_ep) => {
-                                    *podcast_list.lock().unwrap() = db_inst.get_podcasts();
-                                    tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
-                                    tx_to_ui.send(MainMessage::UiSpawnMsgWin(format!("Successfully added {} episodes.", num_ep), 5000)).unwrap();
-                                },
-                                Err(_err) => tx_to_ui.send(MainMessage::UiSpawnMsgWin("Error adding podcast to database.".to_string(), 5000)).unwrap(),
-                            }
+                Message::Ui(UiMsg::AddFeed(url)) => {
+                    let tx_feeds_to_main = mpsc::Sender::clone(&tx_to_main);
+                    let _ = feeds::spawn_feed_checker(tx_feeds_to_main, url, None);
+                },
+
+                Message::Feed(FeedMsg::NewData(pod)) => {
+                    match db_inst.insert_podcast(pod) {
+                        Ok(num_ep) => {
+                            *podcast_list.lock().unwrap() = db_inst.get_podcasts();
+                            tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
+                            tx_to_ui.send(MainMessage::UiSpawnMsgWin(format!("Successfully added {} episodes.", num_ep), 5000)).unwrap();
                         },
-                        Err(_err) => tx_to_ui.send(MainMessage::UiSpawnMsgWin("Error retrieving RSS feed.".to_string(), 5000)).unwrap(),
+                        Err(_err) => tx_to_ui.send(MainMessage::UiSpawnMsgWin("Error adding podcast to database.".to_string(), 5000)).unwrap(),
                     }
                 },
 
-                UiMessage::Sync(pod_index) => {
+                Message::Feed(FeedMsg::Error) => tx_to_ui.send(MainMessage::UiSpawnMsgWin(
+                    "Error retrieving RSS feed.".to_string(), 5000)).unwrap(),
+
+                Message::Ui(UiMsg::Sync(pod_index)) => {
                     let url;
                     let id;
                     {
@@ -104,67 +109,59 @@ fn main() {
                         url = borrowed_podcast.url.clone();
                         id = borrowed_podcast.id;
                     }
-                    match feeds::get_feed_data(url) {
-                        Ok(mut pod) => {
-                            let title = pod.title.clone();
-                            pod.id = id;
-                            match db_inst.update_podcast(pod) {
-                                Ok(_) => {
-                                    *podcast_list.lock().unwrap() = db_inst.get_podcasts();
-                                    tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
-                                    tx_to_ui.send(MainMessage::UiSpawnMsgWin(
-                                        format!("Synchronized {}.", title), 5000)).unwrap();
-                                },
-                                Err(_err) => tx_to_ui.send(MainMessage::UiSpawnMsgWin(
-                                    format!("Error synchronizing {}.", title), 5000)).unwrap(),
-                            }
+                    let tx_feeds_to_main = mpsc::Sender::clone(&tx_to_main);
+                    let _ = feeds::spawn_feed_checker(tx_feeds_to_main, url, id);
+                },
+
+                Message::Feed(FeedMsg::SyncData(pod)) => {
+                    let title = pod.title.clone();
+                    match db_inst.update_podcast(pod) {
+                        Ok(_) => {
+                            *podcast_list.lock().unwrap() = db_inst.get_podcasts();
+                            tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
+                            tx_to_ui.send(MainMessage::UiSpawnMsgWin(
+                                format!("Synchronized {}.", title), 5000)).unwrap();
                         },
                         Err(_err) => tx_to_ui.send(MainMessage::UiSpawnMsgWin(
-                            "Error retrieving RSS feed.".to_string(), 5000)).unwrap(),
+                            format!("Error synchronizing {}.", title), 5000)).unwrap(),
                     }
                 },
 
-                UiMessage::SyncAll => {
-                    let mut success = true;
+                Message::Ui(UiMsg::SyncAll) => {
+                    // We pull out the data we need here first, so we can
+                    // stop borrowing the podcast list as quickly as possible.
+                    // Slightly less efficient (two loops instead of
+                    // one), but then it won't block other tasks that
+                    // need to access the list.
+                    let mut pod_data = Vec::new();
                     {
                         let borrowed_pod_list = podcast_list.lock().unwrap();
                         for podcast in borrowed_pod_list.iter() {
-                            let url = podcast.url.clone();
-                            let id = podcast.id;
-                            match feeds::get_feed_data(url) {
-                                Ok(mut pod) => {
-                                    pod.id = id;
-                                    match db_inst.update_podcast(pod) {
-                                        Ok(_) => (),
-                                        Err(_) => success = false,
-                                    }
-                                },
-                                Err(_) => success = false,
-                            }
+                            pod_data.push((podcast.url.clone(), podcast.id));
                         }
                     }
+                    for data in pod_data.iter() {
+                        let url = data.0.clone();
+                        let id = data.1;
 
-                    *podcast_list.lock().unwrap() = db_inst.get_podcasts();
-                    tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
-                    if success {
-                        tx_to_ui.send(MainMessage::UiSpawnMsgWin(
-                            "Synchronized all feeds.".to_string(), 5000)).unwrap();
-                    } else {
-                        tx_to_ui.send(MainMessage::UiSpawnMsgWin(
-                            "Error occurred while synchronizing feeds.".to_string(), 5000)).unwrap();
+                        let tx_feeds_to_main = mpsc::Sender::clone(&tx_to_main);
+                        let _ = feeds::spawn_feed_checker(tx_feeds_to_main, url, id);
                     }
                 },
 
-                UiMessage::Play(pod_index, ep_index) => {
-                    let borrowed_pod_list = podcast_list.lock().unwrap();
-                    let borrowed_podcast = borrowed_pod_list
-                        .get(pod_index as usize).unwrap();
-                    let borrowed_ep_list = borrowed_podcast
-                        .episodes.lock().unwrap();
-                    // TODO: Try to find a way to do this without having
-                    // to clone the episode...
-                    let episode = borrowed_ep_list
-                        .get(ep_index as usize).unwrap().clone();
+                Message::Ui(UiMsg::Play(pod_index, ep_index)) => {
+                    let episode;
+                    {
+                        let borrowed_pod_list = podcast_list.lock().unwrap();
+                        let borrowed_podcast = borrowed_pod_list
+                            .get(pod_index as usize).unwrap();
+                        let borrowed_ep_list = borrowed_podcast
+                            .episodes.lock().unwrap();
+                        // TODO: Try to find a way to do this without having
+                        // to clone the episode...
+                        episode = borrowed_ep_list
+                            .get(ep_index as usize).unwrap().clone();
+                    }
 
                     match episode.path {
                         Some(path) => {
@@ -188,7 +185,7 @@ fn main() {
                     }
                 },
 
-                UiMessage::Download(pod_index, ep_index) => {
+                Message::Ui(UiMsg::Download(pod_index, ep_index)) => {
                     let mut success = false;
 
                     // limit scope so that we drop the mutable borrow;
@@ -236,7 +233,7 @@ fn main() {
                     }
                 },
 
-                UiMessage::DownloadAll(pod_index) => {
+                Message::Ui(UiMsg::DownloadAll(pod_index)) => {
                     let mut success = false;
 
                     // limit scope so that we drop the mutable borrow;
@@ -291,7 +288,7 @@ fn main() {
                     }
                 },
 
-                UiMessage::Noop => (),
+                Message::Ui(UiMsg::Noop) => (),
             }
         }
     }

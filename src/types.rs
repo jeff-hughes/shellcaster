@@ -3,6 +3,9 @@ use std::sync::{Arc, Mutex};
 use std::ops::{Bound, RangeBounds};
 use chrono::{DateTime, Utc};
 
+use crate::ui::UiMsg;
+use crate::feeds::FeedMsg;
+
 /// Defines interface used for both podcasts and episodes, to be
 /// used and displayed in menus.
 pub trait Menuable {
@@ -54,9 +57,15 @@ impl Menuable for Episode {
     }
 }
 
-
 pub type MutableVec<T> = Arc<Mutex<Vec<T>>>;
 
+/// Overarching Message enum that allows multiple threads to communicate
+/// back to the main thread with a single enum type.
+#[derive(Debug)]
+pub enum Message {
+    Ui(UiMsg),
+    Feed(FeedMsg),
+}
 
 
 // some utilities for dealing with UTF-8 substrings that split properly
