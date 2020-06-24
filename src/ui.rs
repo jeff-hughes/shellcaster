@@ -5,7 +5,7 @@ use std::thread;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use pancurses::{Window, newwin, Input};
+use pancurses::{Window, newwin, Input, Attribute};
 use crate::config::Config;
 use crate::keymap::{Keybindings, UserAction};
 use crate::types::*;
@@ -97,6 +97,10 @@ impl<'a> UI<'a> {
                               // key codes
         stdscr.nodelay(true);  // getch() will not wait for user input
 
+        // set colors
+        pancurses::init_pair(1, pancurses::COLOR_WHITE, pancurses::COLOR_BLACK);
+        pancurses::init_pair(2, pancurses::COLOR_BLACK, pancurses::COLOR_WHITE);
+
         let (n_row, n_col) = stdscr.get_max_yx();
 
         let pod_col = n_col / 2;
@@ -114,7 +118,7 @@ impl<'a> UI<'a> {
 
         stdscr.noutrefresh();
         podcast_menu.init();
-        podcast_menu.window.mvchgat(podcast_menu.selected, 0, -1, pancurses::A_REVERSE, 0);
+        podcast_menu.activate();
         podcast_menu.window.noutrefresh();
 
         let episode_menu_win = newwin(n_row, ep_col, 0, pod_col);
@@ -542,6 +546,31 @@ impl<T: Menuable> Menu<T> {
         self.update_items();
     }
 
+    /// Prints or reprints the list of visible items to the pancurses
+    /// window and refreshes it.
+    fn update_items(&mut self) {
+        self.window.erase();
+        // for visible rows, print strings from list
+        for i in 0..self.n_row {
+            let item_idx = self.top_row + i;
+            if let Some(elem) = self.items.lock().unwrap().get(item_idx as usize) {
+                // look for any unplayed episodes
+                let unplayed = !elem.is_played();
+                self.window.mv(i, 0);
+                if unplayed {
+                    self.window.attron(Attribute::Bold);
+                }
+                self.window.addstr(elem.get_title(self.n_col as usize));
+                if unplayed {
+                    self.window.attroff(Attribute::Bold);
+                }
+            } else {
+                break;
+            }
+        }
+        self.window.refresh();
+    }
+
     /// Scrolls the menu up or down by `lines` lines. Negative values of
     /// `lines` will scroll the menu up.
     /// 
@@ -589,38 +618,43 @@ impl<T: Menuable> Menu<T> {
             }
         }
 
-        self.window.mvchgat(old_selected, 0, -1, pancurses::A_NORMAL, 0);
-        self.window.mvchgat(self.selected, 0, -1, pancurses::A_REVERSE, 0);
+        let old_played = if self.items.lock().unwrap().get(old_selected as usize).unwrap().is_played() {
+            pancurses::A_NORMAL
+        } else {
+            pancurses::A_BOLD
+        };
+        let new_played = if self.items.lock().unwrap().get(self.selected as usize).unwrap().is_played() {
+            pancurses::A_NORMAL
+        } else {
+            pancurses::A_BOLD
+        };
+
+        self.window.mvchgat(old_selected, 0, -1, old_played, 1);
+        self.window.mvchgat(self.selected, 0, -1, new_played, 2);
         self.window.refresh();
     }
 
     /// Controls how the window changes when it is active (i.e., available
     /// for user input to modify state).
     fn activate(&mut self) {
-        self.window.mvchgat(self.selected, 0, -1, pancurses::A_REVERSE, 0);
+        let played = if self.items.lock().unwrap().get(self.selected as usize).unwrap().is_played() {
+            pancurses::A_NORMAL
+        } else {
+            pancurses::A_BOLD
+        };
+        self.window.mvchgat(self.selected, 0, -1, played, 2);
         self.window.refresh();
     }
 
     /// Controls how the window changes when it is inactive (i.e., not
     /// available for user input to modify state).
     fn deactivate(&mut self) {
-        self.window.mvchgat(self.selected, 0, -1, pancurses::A_NORMAL, 0);
-        self.window.refresh();
-    }
-
-    /// Prints or reprints the list of visible items to the pancurses
-    /// window and refreshes it.
-    fn update_items(&mut self) {
-        self.window.erase();
-        // for visible rows, print strings from list
-        for i in 0..self.n_row {
-            let item_idx = self.top_row + i;
-            if let Some(elem) = self.items.lock().unwrap().get(item_idx as usize) {
-                self.window.mvaddstr(i, 0, elem.get_title(self.n_col as usize));
-            } else {
-                break;
-            }
-        }
+        let played = if self.items.lock().unwrap().get(self.selected as usize).unwrap().is_played() {
+            pancurses::A_NORMAL
+        } else {
+            pancurses::A_BOLD
+        };
+        self.window.mvchgat(self.selected, 0, -1, played, 1);
         self.window.refresh();
     }
 

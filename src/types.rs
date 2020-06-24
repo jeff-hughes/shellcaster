@@ -10,6 +10,7 @@ use crate::feeds::FeedMsg;
 /// used and displayed in menus.
 pub trait Menuable {
     fn get_title(&self, length: usize) -> String;
+    fn is_played(&self) -> bool;
 }
 
 /// Struct holding data about an individual podcast feed. This includes a
@@ -24,11 +25,16 @@ pub struct Podcast {
     pub explicit: Option<bool>,
     pub last_checked: DateTime<Utc>,
     pub episodes: MutableVec<Episode>,
+    pub any_unplayed: bool,
 }
 
 impl Menuable for Podcast {
     fn get_title(&self, length: usize) -> String {
         return self.title[..].substring(0, length).to_string();
+    }
+
+    fn is_played(&self) -> bool {
+        return !self.any_unplayed;
     }
 }
 
@@ -54,6 +60,10 @@ impl Menuable for Episode {
             Some(_) => format!("[D] {}", self.title[..].substring(0, length-4)),
             None => self.title[..].substring(0, length).to_string(),
         };
+    }
+
+    fn is_played(&self) -> bool {
+        return self.played;
     }
 }
 

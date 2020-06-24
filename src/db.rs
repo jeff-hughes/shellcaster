@@ -261,6 +261,13 @@ impl Database {
             let podcast_iter = stmt.query_map(params![], |row| {
                 let pod_id = row.get("id")?;
                 let episodes = self.get_episodes(pod_id);
+                let mut any_unplayed = false;
+                for ep in episodes.iter() {
+                    if !ep.played {
+                        any_unplayed = true;
+                        break;
+                    }
+                }
                 Ok(Podcast {
                     id: Some(pod_id),
                     title: row.get("title")?,
@@ -270,6 +277,7 @@ impl Database {
                     explicit: row.get("explicit")?,
                     last_checked: convert_date(row.get("last_checked")).unwrap(),
                     episodes: Arc::new(Mutex::new(episodes)),
+                    any_unplayed: any_unplayed,
                 })
             }).unwrap();
             let mut podcasts = Vec::new();

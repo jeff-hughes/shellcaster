@@ -101,6 +101,7 @@ pub fn parse_feed_data(channel: Channel, url: &str) -> Result<Podcast, Box<dyn s
         explicit: explicit,
         last_checked: last_checked,
         episodes: Arc::new(Mutex::new(episodes)),
+        any_unplayed: true,
     });
 }
 
