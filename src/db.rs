@@ -252,6 +252,16 @@ impl Database {
         }
     }
 
+    /// Updates an episode to mark it as played or unplayed.
+    pub fn set_played_status(&self, episode_id: i32, played: bool) {
+        let conn = self.conn.as_ref().unwrap();
+
+        let _ = conn.execute(
+            "UPDATE episodes SET played = ? WHERE id = ?;",
+            params![played, episode_id]
+        ).unwrap();
+    }
+
     /// Generates list of all podcasts in database.
     /// TODO: This should probably use a JOIN statement instead.
     pub fn get_podcasts(&self) -> Vec<Podcast> {

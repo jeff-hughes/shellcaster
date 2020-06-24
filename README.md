@@ -18,8 +18,8 @@ Right now the program only has bare-bones functionality. Currently you can add n
 | s       | **Synchronize selected feed** |
 | Shift+S | **Synchronize all feeds** |
 | Enter / p | **Play selected episode** |
-| m       | Mark selected episode as played/unplayed |
-| Shift+M | Mark all episodes as played/unplayed |
+| m       | **Mark selected episode as played/unplayed** |
+| Shift+M | **Mark all episodes as played/unplayed** |
 | d       | **Download selected episode** |
 | Shift+D | Download all episodes |
 | x       | Delete downloaded file |

@@ -19,6 +19,8 @@ use super::MainMessage;
 pub enum UiMsg {
     AddFeed(String),
     Play(i32, i32),
+    MarkPlayed(i32, i32, bool),
+    MarkAllPlayed(i32, bool),
     Sync(i32),
     SyncAll,
     Download(i32, i32),
@@ -307,8 +309,65 @@ impl<'a> UI<'a> {
                             return UiMsg::Play(current_pod_index, current_ep_index);
                         }
                     },
-                    Some(UserAction::MarkPlayed) => {},
-                    Some(UserAction::MarkAllPlayed) => {},
+                    Some(UserAction::MarkPlayed) => {
+                        match self.active_menu {
+                            ActiveMenu::PodcastMenu => (),
+                            ActiveMenu::EpisodeMenu => {
+                                let played = self.episode_menu.items
+                                    .lock().unwrap()
+                                    .get(current_ep_index as usize).unwrap()
+                                    .is_played();
+                                
+                                let attr = if played {
+                                    pancurses::A_BOLD
+                                } else {
+                                    pancurses::A_NORMAL
+                                };
+                                self.episode_menu.window.mvchgat(
+                                    self.episode_menu.selected, 0, -1,
+                                    attr, 2);
+                                self.episode_menu.window.refresh();
+                                return UiMsg::MarkPlayed(current_pod_index, current_ep_index, !played);
+                            },
+                        }
+                    },
+                    Some(UserAction::MarkAllPlayed) => {
+                        // if there are any unplayed episodes, MarkAllPlayed
+                        // will convert all to played; if all are played
+                        // already, only then will it convert all to unplayed
+                        let played = self.podcast_menu.items
+                            .lock().unwrap()
+                            .get(current_pod_index as usize).unwrap()
+                            .is_played();
+                        // let attr = if played {
+                        //     pancurses::A_BOLD
+                        // } else {
+                        //     pancurses::A_NORMAL
+                        // };
+
+                        // // change attributes for selected podcast
+                        // self.podcast_menu.window.mvchgat(
+                        //     self.podcast_menu.selected, 0, -1,
+                        //     attr, 2);
+
+                        // // change attributes for all visible episodes
+                        // let abs_bottom = min(self.episode_menu.n_row,
+                        //     (self.episode_menu.items.lock().unwrap().len() - 1) as i32);
+                        // for ep_i in 0..abs_bottom {
+                        //     let color = if ep_i == self.episode_menu.selected {
+                        //         2
+                        //     } else {
+                        //         1
+                        //     };
+                        //     self.episode_menu.window.mvchgat(
+                        //         self.episode_menu.selected, 0, -1,
+                        //         attr, color);
+                        // }
+
+                        // self.podcast_menu.window.refresh();
+                        // self.episode_menu.window.refresh();
+                        return UiMsg::MarkAllPlayed(current_pod_index, !played);
+                    },
 
                     Some(UserAction::Download) => {
                         if ep_len > 0 {

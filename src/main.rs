@@ -185,6 +185,63 @@ fn main() {
                     }
                 },
 
+                Message::Ui(UiMsg::MarkPlayed(pod_index, ep_index, played)) => {
+                    let mut borrowed_pod_list = podcast_list.lock().unwrap();
+                    // TODO: Try to find a way to do this without having
+                    // to clone the podcast...
+                    let mut podcast = borrowed_pod_list
+                        .get(pod_index as usize).unwrap().clone();
+                    let mut any_unplayed = false;
+                    {
+                        let mut borrowed_ep_list = podcast
+                            .episodes.lock().unwrap();
+                        
+                        // TODO: Try to find a way to do this without having
+                        // to clone the episode...
+                        let mut episode = borrowed_ep_list
+                            .get(ep_index as usize).unwrap().clone();
+                        episode.played = played;
+                        
+                        db_inst.set_played_status(episode.id.unwrap(), played);
+                        borrowed_ep_list[ep_index as usize] = episode;
+
+                        // recheck if there are any unplayed episodes for the
+                        // selected podcast
+                        for ep in borrowed_ep_list.iter() {
+                            if !ep.played {
+                                any_unplayed = true;
+                                break;
+                            }
+                        }
+                    }
+                    if any_unplayed != podcast.any_unplayed {
+                        podcast.any_unplayed = any_unplayed;
+                        borrowed_pod_list[pod_index as usize] = podcast;
+                    }
+                },
+
+                Message::Ui(UiMsg::MarkAllPlayed(pod_index, played)) => {
+                    let mut borrowed_pod_list = podcast_list.lock().unwrap();
+                    // TODO: Try to find a way to do this without having
+                    // to clone the podcast...
+                    let mut podcast = borrowed_pod_list
+                        .get(pod_index as usize).unwrap().clone();
+                    {
+                        let mut borrowed_ep_list = podcast
+                            .episodes.lock().unwrap();
+
+                        for ep in borrowed_ep_list.iter() {
+                            db_inst.set_played_status(ep.id.unwrap(), played);
+                        }
+
+                        *borrowed_ep_list = db_inst.get_episodes(podcast.id.unwrap());
+                    }
+
+                    podcast.any_unplayed = !played;
+                    borrowed_pod_list[pod_index as usize] = podcast;
+                    tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
+                },
+
                 Message::Ui(UiMsg::Download(pod_index, ep_index)) => {
                     let mut success = false;
 
