@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use crate::keymap::{Keybindings, UserAction};
 
 /// Holds information about user configuration of program. 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Config {
     pub config_path: PathBuf,
     pub download_path: PathBuf,

@@ -1,14 +1,15 @@
 use std::cmp::min;
-use std::rc::Rc;
-use core::cell::RefCell;
+use std::sync::{Arc, Mutex};
 
 use std::thread;
+use std::sync::mpsc;
 use std::time::Duration;
 
 use pancurses::{Window, newwin, Input};
 use crate::config::Config;
 use crate::keymap::{Keybindings, UserAction};
-use crate::types::{Podcast, Episode, MutableVec, Menuable};
+use crate::types::*;
+use super::MainMessage;
 
 /// Enum used for communicating back to the main controller after user
 /// input has been captured by the UI. `response` can be any String, and
@@ -49,6 +50,37 @@ pub struct UI<'a> {
 }
 
 impl<'a> UI<'a> {
+    /// Spawns a UI object in a new thread, with message channels to send
+    /// and receive messages
+    pub fn spawn(config: Config, items: MutableVec<Podcast>, rx_from_main: mpsc::Receiver<MainMessage>, tx_to_main: mpsc::Sender<UiMessage>) -> thread::JoinHandle<()> {
+        return thread::spawn(move || {
+            let mut ui = UI::new(&config, &items);
+            let mut message_iter = rx_from_main.try_iter();
+            // on each loop, we check for user input, then we process
+            // any messages from the main thread
+            loop {
+                match ui.getch() {
+                    UiMessage::Noop => (),
+                    input => tx_to_main.send(input).unwrap(),
+                }
+
+                if let Some(message) = message_iter.next() {
+                    match message {
+                        MainMessage::UiUpdateMenus => ui.update_menus(),
+                        MainMessage::UiSpawnMsgWin(msg, duration) => ui.spawn_msg_win(msg, duration),
+                        MainMessage::UiTearDown => {
+                            ui.tear_down();
+                            break;
+                        }
+                    }
+                }
+
+                // slight delay to avoid excessive CPU usage
+                thread::sleep(Duration::from_millis(10));
+            }
+        });
+    }
+
     /// Initializes the UI with a list of podcasts and podcast episodes,
     /// creates the pancurses window and draws it to the screen, and
     /// returns a UI object for future manipulation.
@@ -63,6 +95,7 @@ impl<'a> UI<'a> {
         pancurses::curs_set(0);  // turn off cursor
         stdscr.keypad(true);  // returns special characters as single
                               // key codes
+        stdscr.nodelay(true);  // getch() will not wait for user input
 
         let (n_row, n_col) = stdscr.get_max_yx();
 
@@ -72,7 +105,7 @@ impl<'a> UI<'a> {
         let podcast_menu_win = newwin(n_row, pod_col, 0, 0);
         let mut podcast_menu = Menu {
             window: podcast_menu_win,
-            items: Rc::clone(items),
+            items: Arc::clone(items),
             n_row: n_row,
             n_col: pod_col,
             top_row: 0,
@@ -85,9 +118,9 @@ impl<'a> UI<'a> {
         podcast_menu.window.noutrefresh();
 
         let episode_menu_win = newwin(n_row, ep_col, 0, pod_col);
-        let first_pod = match items.borrow().get(0) {
-            Some(pod) => Rc::clone(&pod.episodes),
-            None => Rc::new(RefCell::new(Vec::new())),
+        let first_pod = match items.lock().unwrap().get(0) {
+            Some(pod) => Arc::clone(&pod.episodes),
+            None => Arc::new(Mutex::new(Vec::new())),
         };
         let mut episode_menu = Menu {
             window: episode_menu_win,
@@ -102,7 +135,7 @@ impl<'a> UI<'a> {
 
         // welcome screen if user does not have any podcasts yet
         let mut welcome_win = None;
-        if items.borrow().len() == 0 {
+        if items.lock().unwrap().len() == 0 {
             welcome_win = Some(UI::make_welcome_win(&config, n_row, n_col));
         }
 
@@ -166,8 +199,8 @@ impl<'a> UI<'a> {
             },
 
             Some(input) => {
-                let pod_len = self.podcast_menu.items.borrow().len();
-                let ep_len = self.episode_menu.items.borrow().len();
+                let pod_len = self.podcast_menu.items.lock().unwrap().len();
+                let ep_len = self.episode_menu.items.lock().unwrap().len();
                 let current_pod_index = self.podcast_menu.selected +
                     self.podcast_menu.top_row;
                 let current_ep_index = self.episode_menu.selected +
@@ -390,15 +423,14 @@ impl<'a> UI<'a> {
     /// displaying messages to the user. `duration` indicates how long
     /// (in milliseconds) this message will remain on screen. Useful for
     /// presenting error messages, among other things.
-    pub fn spawn_msg_win(&self, message: &str, duration: u64) {
+    pub fn spawn_msg_win(&self, message: String, duration: u64) {
         let n_col = self.n_col;
         let begy = self.n_row - 1;
-        let msg = message.to_string();
         thread::spawn(move || {
             let msg_win = newwin(1, n_col, begy, 0);
             msg_win.mv(begy, 0);
             msg_win.attrset(pancurses::A_NORMAL);
-            msg_win.addstr(msg);
+            msg_win.addstr(message);
             msg_win.refresh();
 
             // TODO: This probably should be some async function, but this
@@ -524,7 +556,7 @@ impl<T: Menuable> Menu<T> {
         // don't allow scrolling past last item in list (if shorter than
         // self.n_row)
         let abs_bottom = min(self.n_row,
-            (self.items.borrow().len() - 1) as i32);
+            (self.items.lock().unwrap().len() - 1) as i32);
         if self.selected > abs_bottom {
             self.selected = abs_bottom;
         }
@@ -532,7 +564,7 @@ impl<T: Menuable> Menu<T> {
         // scroll list if necessary
         if self.selected > (self.n_row - 1) {
             self.selected = self.n_row - 1;
-            if let Some(elem) = self.items.borrow().get((self.top_row + self.n_row) as usize) {
+            if let Some(elem) = self.items.lock().unwrap().get((self.top_row + self.n_row) as usize) {
                 self.top_row += 1;
                 self.window.mv(0, 0);
                 self.window.deleteln();
@@ -545,7 +577,7 @@ impl<T: Menuable> Menu<T> {
 
         } else if self.selected < 0 {
             self.selected = 0;
-            if let Some(elem) = self.items.borrow().get((self.top_row - 1) as usize) {
+            if let Some(elem) = self.items.lock().unwrap().get((self.top_row - 1) as usize) {
                 self.top_row -= 1;
                 self.window.mv(0, 0);
                 self.window.insertln();
@@ -582,7 +614,7 @@ impl<T: Menuable> Menu<T> {
         // for visible rows, print strings from list
         for i in 0..self.n_row {
             let item_idx = self.top_row + i;
-            if let Some(elem) = self.items.borrow().get(item_idx as usize) {
+            if let Some(elem) = self.items.lock().unwrap().get(item_idx as usize) {
                 self.window.mvaddstr(i, 0, elem.get_title(self.n_col as usize));
             } else {
                 break;
@@ -610,7 +642,7 @@ impl Menu<Podcast> {
     /// currently selected podcast.
     pub fn get_episodes(&self) -> MutableVec<Episode> {
         let index = self.selected + self.top_row;
-        return Rc::clone(&self.items.borrow()
+        return Arc::clone(&self.items.lock().unwrap()
             .get(index as usize).unwrap().episodes);
     }
 }

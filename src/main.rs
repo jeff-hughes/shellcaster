@@ -1,6 +1,5 @@
 use std::path::PathBuf;
-use std::rc::Rc;
-use core::cell::RefCell;
+use std::sync::{mpsc, Arc, Mutex};
 
 mod config;
 mod keymap;
@@ -13,7 +12,15 @@ mod play_file;
 
 use crate::ui::{UI, UiMessage};
 use crate::db::Database;
-use crate::types::{Podcast, MutableVec};
+use crate::types::*;
+
+/// Enum used for communicating with other threads.
+#[derive(Debug)]
+pub enum MainMessage {
+    UiUpdateMenus,
+    UiSpawnMsgWin(String, u64),
+    UiTearDown,
+}
 
 /// Main controller for shellcaster program.
 /// 
@@ -56,210 +63,165 @@ fn main() {
     // this is necessary because we want main.rs to hold the "ground truth"
     // list of podcasts, and it must be mutable, but UI needs to check
     // this list and update the screen when necessary
-    let podcast_list: MutableVec<Podcast> = Rc::new(
-        RefCell::new(db_inst.get_podcasts()));
-    let mut ui = UI::new(&config, &podcast_list);
+    let podcast_list: MutableVec<Podcast> = Arc::new(
+        Mutex::new(db_inst.get_podcasts()));
 
+    // create transmitters and receivers for passing messages between threads
+    let (tx_to_ui, rx_from_main) = mpsc::channel();
+    let (tx_to_main, rx_to_main) = mpsc::channel();
+    let tx_ui_to_main = mpsc::Sender::clone(&tx_to_main);
+    let ui_thread = UI::spawn(config.clone(), Arc::clone(&podcast_list), rx_from_main, tx_ui_to_main);
+
+    let mut message_iter = rx_to_main.iter();
     loop {
-        let mess = ui.getch();
-        match mess {
-            UiMessage::Quit => break,
+        if let Some(message) = message_iter.next() {
+            match message {
+                UiMessage::Quit => break,
 
-            UiMessage::AddFeed(url) => {
-                match feeds::get_feed_data(url) {
-                    Ok(pod) => {
-                        match db_inst.insert_podcast(pod) {
-                            Ok(num_ep) => {
-                                *podcast_list.borrow_mut() = db_inst.get_podcasts();
-                                ui.update_menus();
-                                ui.spawn_msg_win(
-                                &format!("Successfully added {} episodes.", num_ep), 5000);
-                            },
-                            Err(_err) => ui.spawn_msg_win("Error adding podcast to database.", 5000),
-                        }
-                    },
-                    Err(_err) => ui.spawn_msg_win("Error retrieving RSS feed.", 5000),
-                }
-            },
-
-            UiMessage::Sync(pod_index) => {
-                let url;
-                let id;
-                {
-                    let borrowed_pod_list = podcast_list.borrow();
-                    let borrowed_podcast = borrowed_pod_list
-                        .get(pod_index as usize).unwrap();
-                    url = borrowed_podcast.url.clone();
-                    id = borrowed_podcast.id;
-                }
-                match feeds::get_feed_data(url) {
-                    Ok(mut pod) => {
-                        let title = pod.title.clone();
-                        pod.id = id;
-                        match db_inst.update_podcast(pod) {
-                            Ok(_) => {
-                                *podcast_list.borrow_mut() = db_inst.get_podcasts();
-                                ui.update_menus();
-                                ui.spawn_msg_win(
-                                &format!("Synchronized {}.", title), 5000);
-                            },
-                            Err(_err) => ui.spawn_msg_win(
-                                &format!("Error synchronizing {}.", title),
-                                5000),
-                        }
-                    },
-                    Err(_err) => ui.spawn_msg_win("Error retrieving RSS feed.", 5000),
-                }
-            },
-
-            UiMessage::SyncAll => {
-                let mut success = true;
-                {
-                    let borrowed_pod_list = podcast_list.borrow();
-                    for podcast in borrowed_pod_list.iter() {
-                        let url = podcast.url.clone();
-                        let id = podcast.id;
-                        match feeds::get_feed_data(url) {
-                            Ok(mut pod) => {
-                                pod.id = id;
-                                match db_inst.update_podcast(pod) {
-                                    Ok(_) => (),
-                                    Err(_) => success = false,
-                                }
-                            },
-                            Err(_) => success = false,
-                        }
-                    }
-                }
-
-                *podcast_list.borrow_mut() = db_inst.get_podcasts();
-                ui.update_menus();
-                if success {
-                    ui.spawn_msg_win("Synchronized all feeds.", 5000);
-                } else {
-                    ui.spawn_msg_win("Error occurred while synchronizing feeds.", 5000);
-                }
-            },
-
-            UiMessage::Play(pod_index, ep_index) => {
-                let borrowed_pod_list = podcast_list.borrow();
-                let borrowed_podcast = borrowed_pod_list
-                    .get(pod_index as usize).unwrap();
-                let borrowed_ep_list = borrowed_podcast
-                    .episodes.borrow();
-                // TODO: Try to find a way to do this without having
-                // to clone the episode...
-                let episode = borrowed_ep_list
-                    .get(ep_index as usize).unwrap().clone();
-
-                match episode.path {
-                    Some(path) => {
-                        match path.to_str() {
-                            Some(p) => {
-                                if let Err(_) = play_file::execute(&config.play_command, &p) {
-                                    ui.spawn_msg_win("Error: Could not play file. Check configuration.", 5000);
-                                }
-                            },
-                            None => ui.spawn_msg_win("Error: Filepath is not valid Unicode.", 5000),
-                        }
-                    },
-                    None => {
-                        if let Err(_) = play_file::execute(&config.play_command, &episode.url) {
-                            ui.spawn_msg_win("Error: Could not stream URL.", 5000);
-                        }
-                    }
-                }
-            },
-
-            UiMessage::Download(pod_index, ep_index) => {
-                let mut success = false;
-
-                // limit scope so that we drop the mutable borrow;
-                // otherwise, will panic once we try to update the UI
-                {
-                    let borrowed_pod_list = podcast_list.borrow();
-                    let borrowed_podcast = borrowed_pod_list
-                        .get(pod_index as usize).unwrap();
-                    let mut borrowed_ep_list = borrowed_podcast
-                        .episodes.borrow_mut();
-                    // TODO: Try to find a way to do this without having
-                    // to clone the episode...
-                    let mut episode = borrowed_ep_list
-                        .get(ep_index as usize).unwrap().clone();
-
-                    // add directory for podcast, create if it does not exist
-                    let mut download_path = config.download_path.clone();
-                    download_path.push(borrowed_podcast.title.clone());
-                    if let Err(_) = std::fs::create_dir_all(&download_path) {
-                        ui.spawn_msg_win(
-                            &format!("Could not create dir: {}", borrowed_podcast.title.clone())[..],
-                            5000);
-                    }
-
-                    let file_paths = download_manager
-                        .download_list(&vec![&episode], &download_path);
-
-                    match &file_paths[0] {
-                        Ok(ff) => {
-                            match ff {
-                                Some(path) => {
-                                    let _ = db_inst.insert_file(episode.id.unwrap(), &path);
-                                    episode.path = Some(path.clone());
-                                    borrowed_ep_list[ep_index as usize] = episode;
-                                    success = true;
+                UiMessage::AddFeed(url) => {
+                    match feeds::get_feed_data(url) {
+                        Ok(pod) => {
+                            match db_inst.insert_podcast(pod) {
+                                Ok(num_ep) => {
+                                    *podcast_list.lock().unwrap() = db_inst.get_podcasts();
+                                    tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
+                                    tx_to_ui.send(MainMessage::UiSpawnMsgWin(format!("Successfully added {} episodes.", num_ep), 5000)).unwrap();
                                 },
-                                None => (),
+                                Err(_err) => tx_to_ui.send(MainMessage::UiSpawnMsgWin("Error adding podcast to database.".to_string(), 5000)).unwrap(),
                             }
                         },
-                        Err(_) => (),
+                        Err(_err) => tx_to_ui.send(MainMessage::UiSpawnMsgWin("Error retrieving RSS feed.".to_string(), 5000)).unwrap(),
                     }
-                }
+                },
 
-                if success {
-                    ui.update_menus();
-                }
-            },
+                UiMessage::Sync(pod_index) => {
+                    let url;
+                    let id;
+                    {
+                        let borrowed_pod_list = podcast_list.lock().unwrap();
+                        let borrowed_podcast = borrowed_pod_list
+                            .get(pod_index as usize).unwrap();
+                        url = borrowed_podcast.url.clone();
+                        id = borrowed_podcast.id;
+                    }
+                    match feeds::get_feed_data(url) {
+                        Ok(mut pod) => {
+                            let title = pod.title.clone();
+                            pod.id = id;
+                            match db_inst.update_podcast(pod) {
+                                Ok(_) => {
+                                    *podcast_list.lock().unwrap() = db_inst.get_podcasts();
+                                    tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
+                                    tx_to_ui.send(MainMessage::UiSpawnMsgWin(
+                                        format!("Synchronized {}.", title), 5000)).unwrap();
+                                },
+                                Err(_err) => tx_to_ui.send(MainMessage::UiSpawnMsgWin(
+                                    format!("Error synchronizing {}.", title), 5000)).unwrap(),
+                            }
+                        },
+                        Err(_err) => tx_to_ui.send(MainMessage::UiSpawnMsgWin(
+                            "Error retrieving RSS feed.".to_string(), 5000)).unwrap(),
+                    }
+                },
 
-            UiMessage::DownloadAll(pod_index) => {
-                let mut success = false;
+                UiMessage::SyncAll => {
+                    let mut success = true;
+                    {
+                        let borrowed_pod_list = podcast_list.lock().unwrap();
+                        for podcast in borrowed_pod_list.iter() {
+                            let url = podcast.url.clone();
+                            let id = podcast.id;
+                            match feeds::get_feed_data(url) {
+                                Ok(mut pod) => {
+                                    pod.id = id;
+                                    match db_inst.update_podcast(pod) {
+                                        Ok(_) => (),
+                                        Err(_) => success = false,
+                                    }
+                                },
+                                Err(_) => success = false,
+                            }
+                        }
+                    }
 
-                // limit scope so that we drop the mutable borrow;
-                // otherwise, will panic once we try to update the UI
-                {
-                    let borrowed_pod_list = podcast_list.borrow();
+                    *podcast_list.lock().unwrap() = db_inst.get_podcasts();
+                    tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
+                    if success {
+                        tx_to_ui.send(MainMessage::UiSpawnMsgWin(
+                            "Synchronized all feeds.".to_string(), 5000)).unwrap();
+                    } else {
+                        tx_to_ui.send(MainMessage::UiSpawnMsgWin(
+                            "Error occurred while synchronizing feeds.".to_string(), 5000)).unwrap();
+                    }
+                },
+
+                UiMessage::Play(pod_index, ep_index) => {
+                    let borrowed_pod_list = podcast_list.lock().unwrap();
                     let borrowed_podcast = borrowed_pod_list
                         .get(pod_index as usize).unwrap();
-                    let mut borrowed_ep_list = borrowed_podcast
-                        .episodes.borrow_mut();
-
+                    let borrowed_ep_list = borrowed_podcast
+                        .episodes.lock().unwrap();
                     // TODO: Try to find a way to do this without having
-                    // to clone the episodes...
-                    let mut episodes = Vec::new();
-                    let mut episode_refs = Vec::new();
-                    for e in borrowed_ep_list.iter() {
-                        episodes.push(e.clone());
-                        episode_refs.push(e);
+                    // to clone the episode...
+                    let episode = borrowed_ep_list
+                        .get(ep_index as usize).unwrap().clone();
+
+                    match episode.path {
+                        Some(path) => {
+                            match path.to_str() {
+                                Some(p) => {
+                                    if let Err(_) = play_file::execute(&config.play_command, &p) {
+                                        tx_to_ui.send(MainMessage::UiSpawnMsgWin(
+                                            "Error: Could not play file. Check configuration.".to_string(), 5000)).unwrap();
+                                    }
+                                },
+                                None => tx_to_ui.send(MainMessage::UiSpawnMsgWin(
+                                    "Error: Filepath is not valid Unicode.".to_string(), 5000)).unwrap(),
+                            }
+                        },
+                        None => {
+                            if let Err(_) = play_file::execute(&config.play_command, &episode.url) {
+                                tx_to_ui.send(MainMessage::UiSpawnMsgWin(
+                                    "Error: Could not stream URL.".to_string(), 5000)).unwrap();
+                            }
+                        }
                     }
+                },
 
-                    // add directory for podcast, create if it does not exist
-                    let mut download_path = config.download_path.clone();
-                    download_path.push(borrowed_podcast.title.clone());
-                    if let Err(_) = std::fs::create_dir_all(&download_path) {
-                        ui.spawn_msg_win(
-                            &format!("Could not create dir: {}", borrowed_podcast.title.clone())[..],
-                            5000);
-                    }
+                UiMessage::Download(pod_index, ep_index) => {
+                    let mut success = false;
 
-                    let file_paths = download_manager
-                        .download_list(&episode_refs, &download_path);
+                    // limit scope so that we drop the mutable borrow;
+                    // otherwise, will panic once we try to update the UI
+                    {
+                        let borrowed_pod_list = podcast_list.lock().unwrap();
+                        let borrowed_podcast = borrowed_pod_list
+                            .get(pod_index as usize).unwrap();
+                        let mut borrowed_ep_list = borrowed_podcast
+                            .episodes.lock().unwrap();
+                        // TODO: Try to find a way to do this without having
+                        // to clone the episode...
+                        let mut episode = borrowed_ep_list
+                            .get(ep_index as usize).unwrap().clone();
 
-                    for (i, f) in file_paths.iter().enumerate() {
-                        match f {
+                        // add directory for podcast, create if it does not exist
+                        let mut download_path = config.download_path.clone();
+                        download_path.push(borrowed_podcast.title.clone());
+                        if let Err(_) = std::fs::create_dir_all(&download_path) {
+                            tx_to_ui.send(MainMessage::UiSpawnMsgWin(
+                                format!("Could not create dir: {}", borrowed_podcast.title.clone()), 5000)).unwrap();
+                        }
+
+                        let file_paths = download_manager
+                            .download_list(&vec![&episode], &download_path);
+
+                        match &file_paths[0] {
                             Ok(ff) => {
                                 match ff {
                                     Some(path) => {
-                                        episodes[i].path = Some(path.clone());
-                                        borrowed_ep_list[i] = episodes[i].clone();
+                                        let _ = db_inst.insert_file(episode.id.unwrap(), &path);
+                                        episode.path = Some(path.clone());
+                                        borrowed_ep_list[ep_index as usize] = episode;
                                         success = true;
                                     },
                                     None => (),
@@ -268,17 +230,72 @@ fn main() {
                             Err(_) => (),
                         }
                     }
-                }
 
-                // update if even one file downloaded successfully
-                if success {
-                    ui.update_menus();
-                }
-            },
+                    if success {
+                        tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
+                    }
+                },
 
-            UiMessage::Noop => (),
+                UiMessage::DownloadAll(pod_index) => {
+                    let mut success = false;
+
+                    // limit scope so that we drop the mutable borrow;
+                    // otherwise, will panic once we try to update the UI
+                    {
+                        let borrowed_pod_list = podcast_list.lock().unwrap();
+                        let borrowed_podcast = borrowed_pod_list
+                            .get(pod_index as usize).unwrap();
+                        let mut borrowed_ep_list = borrowed_podcast
+                            .episodes.lock().unwrap();
+
+                        // TODO: Try to find a way to do this without having
+                        // to clone the episodes...
+                        let mut episodes = Vec::new();
+                        let mut episode_refs = Vec::new();
+                        for e in borrowed_ep_list.iter() {
+                            episodes.push(e.clone());
+                            episode_refs.push(e);
+                        }
+
+                        // add directory for podcast, create if it does not exist
+                        let mut download_path = config.download_path.clone();
+                        download_path.push(borrowed_podcast.title.clone());
+                        if let Err(_) = std::fs::create_dir_all(&download_path) {
+                            tx_to_ui.send(MainMessage::UiSpawnMsgWin(
+                                format!("Could not create dir: {}", borrowed_podcast.title.clone()), 5000)).unwrap();
+                        }
+
+                        let file_paths = download_manager
+                            .download_list(&episode_refs, &download_path);
+
+                        for (i, f) in file_paths.iter().enumerate() {
+                            match f {
+                                Ok(ff) => {
+                                    match ff {
+                                        Some(path) => {
+                                            episodes[i].path = Some(path.clone());
+                                            borrowed_ep_list[i] = episodes[i].clone();
+                                            success = true;
+                                        },
+                                        None => (),
+                                    }
+                                },
+                                Err(_) => (),
+                            }
+                        }
+                    }
+
+                    // update if even one file downloaded successfully
+                    if success {
+                        tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
+                    }
+                },
+
+                UiMessage::Noop => (),
+            }
         }
     }
 
-    ui.tear_down();
+    tx_to_ui.send(MainMessage::UiTearDown).unwrap();
+    ui_thread.join().unwrap();  // wait for UI thread to finish teardown
 }

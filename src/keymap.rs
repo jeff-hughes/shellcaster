@@ -32,7 +32,7 @@ pub enum UserAction {
 /// Wrapper around a hash map that keeps track of all keybindings. Multiple
 /// keys may perform the same action, but each key may only perform one
 /// action.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Keybindings {
     map: HashMap<String, UserAction>,
 }

@@ -1,5 +1,4 @@
-use std::rc::Rc;
-use core::cell::RefCell;
+use std::sync::{Arc, Mutex};
 
 use rss::{Channel, Item};
 use chrono::{DateTime, Utc};
@@ -69,7 +68,7 @@ pub fn parse_feed_data(channel: Channel, url: &str) -> Result<Podcast, Box<dyn s
         author: author,
         explicit: explicit,
         last_checked: last_checked,
-        episodes: Rc::new(RefCell::new(episodes)),
+        episodes: Arc::new(Mutex::new(episodes)),
     });
 }
 
@@ -238,7 +237,7 @@ mod tests {
         let path = "./tests/test_no_episodes.xml";
         let channel = Channel::read_from(open_file(path)).unwrap();
         let data = parse_feed_data(channel, "dummy_url").unwrap();
-        assert_eq!(data.episodes.borrow().len(), 0);
+        assert_eq!(data.episodes.lock().unwrap().len(), 0);
     }
 
     #[test]

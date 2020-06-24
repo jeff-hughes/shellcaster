@@ -1,7 +1,6 @@
 use std::path::PathBuf;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 use std::ops::{Bound, RangeBounds};
-use core::cell::RefCell;
 use chrono::{DateTime, Utc};
 
 /// Defines interface used for both podcasts and episodes, to be
@@ -56,8 +55,7 @@ impl Menuable for Episode {
 }
 
 
-pub type MutableVec<T> = Rc<RefCell<Vec<T>>>;
-
+pub type MutableVec<T> = Arc<Mutex<Vec<T>>>;
 
 
 

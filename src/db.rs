@@ -1,5 +1,4 @@
-use std::rc::Rc;
-use core::cell::RefCell;
+use std::sync::{Arc, Mutex};
 use std::path::PathBuf;
 use std::collections::HashMap;
 
@@ -116,9 +115,9 @@ impl Database {
         let pod_id = stmt
             .query_row::<i32,_,_>(params![podcast.url], |row| row.get(0))
             .unwrap();
-        let num_episodes = podcast.episodes.borrow().len();
+        let num_episodes = podcast.episodes.lock().unwrap().len();
 
-        for ep in podcast.episodes.borrow().iter().rev() {
+        for ep in podcast.episodes.lock().unwrap().iter().rev() {
             let _ = &self.insert_episode(&pod_id, &ep)?;
         }
 
@@ -191,7 +190,7 @@ impl Database {
             ]
         )?;
 
-        let num_episodes = podcast.episodes.borrow().len();
+        let num_episodes = podcast.episodes.lock().unwrap().len();
         self.update_episodes(&podcast.id.unwrap(), podcast.episodes);
 
         return Ok(num_episodes);
@@ -222,7 +221,7 @@ impl Database {
             ep_map.insert((epuw.1, epuw.2), epuw.0);
         }
 
-        for ep in episodes.borrow().iter().rev() {
+        for ep in episodes.lock().unwrap().iter().rev() {
             match ep_map.get(&(ep.url.clone(), ep.pubdate.unwrap().timestamp())) {
                 // update existing episode
                 Some(id) => {
@@ -270,7 +269,7 @@ impl Database {
                     author: row.get("author")?,
                     explicit: row.get("explicit")?,
                     last_checked: convert_date(row.get("last_checked")).unwrap(),
-                    episodes: Rc::new(RefCell::new(episodes)),
+                    episodes: Arc::new(Mutex::new(episodes)),
                 })
             }).unwrap();
             let mut podcasts = Vec::new();
