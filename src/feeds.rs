@@ -86,7 +86,7 @@ pub fn parse_feed_data(channel: Channel, url: &str) -> Result<Podcast, Box<dyn s
 
     let mut episodes = Vec::new();
     let items = channel.into_items();
-    if items.len() > 0 {
+    if !items.is_empty() {
         for item in &items {
             episodes.push(parse_episode_data(item));
         }

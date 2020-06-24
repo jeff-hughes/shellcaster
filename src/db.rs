@@ -118,14 +118,14 @@ impl Database {
         let num_episodes = podcast.episodes.lock().unwrap().len();
 
         for ep in podcast.episodes.lock().unwrap().iter().rev() {
-            let _ = &self.insert_episode(&pod_id, &ep)?;
+            let _ = &self.insert_episode(pod_id, &ep)?;
         }
 
         return Ok(num_episodes);
     }
 
     /// Inserts a podcast episode into the database.
-    pub fn insert_episode(&self, podcast_id: &i32, episode: &Episode) ->
+    pub fn insert_episode(&self, podcast_id: i32, episode: &Episode) ->
         Result<(), Box<dyn std::error::Error>> {
 
         let conn = self.conn.as_ref().unwrap();
@@ -191,7 +191,7 @@ impl Database {
         )?;
 
         let num_episodes = podcast.episodes.lock().unwrap().len();
-        self.update_episodes(&podcast.id.unwrap(), podcast.episodes);
+        self.update_episodes(podcast.id.unwrap(), podcast.episodes);
 
         return Ok(num_episodes);
     }
@@ -204,7 +204,7 @@ impl Database {
     /// episode that has changed either of these fields will show up as
     /// a "new" episode. The old version will still remain in the
     /// database.
-    fn update_episodes(&self, podcast_id: &i32, episodes: MutableVec<Episode>) {
+    fn update_episodes(&self, podcast_id: i32, episodes: MutableVec<Episode>) {
         let conn = self.conn.as_ref().unwrap();
 
         let mut stmt = conn.prepare(
@@ -246,7 +246,7 @@ impl Database {
 
                 // insert new episode
                 None => {
-                    let _ = &self.insert_episode(&podcast_id, &ep).unwrap();
+                    let _ = &self.insert_episode(podcast_id, &ep).unwrap();
                 }
             }
         }

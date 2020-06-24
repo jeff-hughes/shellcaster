@@ -103,6 +103,7 @@ pub fn parse_config_file(path: &PathBuf) -> Config {
 /// Takes the deserialized TOML configuration, and creates a Config struct
 /// that specifies user settings where indicated, and defaults for any
 /// settings that were not specified by the user.
+#[allow(clippy::type_complexity)]
 fn config_with_defaults(config_toml: &ConfigFromToml) -> Config {
     // specify all default keybindings for actions
     let action_map: Vec<(&Option<Vec<String>>, UserAction, Vec<String>)> = vec![

@@ -134,10 +134,11 @@ impl<'a> UI<'a> {
         episode_menu.window.noutrefresh();
 
         // welcome screen if user does not have any podcasts yet
-        let mut welcome_win = None;
-        if items.lock().unwrap().len() == 0 {
-            welcome_win = Some(UI::make_welcome_win(&config, n_row, n_col));
-        }
+        let welcome_win = if items.lock().unwrap().len() == 0 {
+            Some(UI::make_welcome_win(&config, n_row, n_col))
+        } else {
+            None
+        };
 
         pancurses::doupdate();
 
@@ -213,7 +214,7 @@ impl<'a> UI<'a> {
                     ww.delwin();
                 }
 
-                match self.keymap.get_from_input(&input) {
+                match self.keymap.get_from_input(input) {
                     Some(UserAction::Down) => {
                         match self.active_menu {
                             ActiveMenu::PodcastMenu => {
@@ -286,7 +287,7 @@ impl<'a> UI<'a> {
 
                     Some(UserAction::AddFeed) => {
                         let url = &self.spawn_input_win("Feed URL: ");
-                        if url.len() > 0 {
+                        if !url.is_empty() {
                             return UiMsg::AddFeed(url.to_string());
                         }
                     },

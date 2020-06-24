@@ -167,7 +167,7 @@ fn main() {
                         Some(path) => {
                             match path.to_str() {
                                 Some(p) => {
-                                    if let Err(_) = play_file::execute(&config.play_command, &p) {
+                                    if play_file::execute(&config.play_command, &p).is_err() {
                                         tx_to_ui.send(MainMessage::UiSpawnMsgWin(
                                             "Error: Could not play file. Check configuration.".to_string(), 5000)).unwrap();
                                     }
@@ -177,7 +177,7 @@ fn main() {
                             }
                         },
                         None => {
-                            if let Err(_) = play_file::execute(&config.play_command, &episode.url) {
+                            if play_file::execute(&config.play_command, &episode.url).is_err() {
                                 tx_to_ui.send(MainMessage::UiSpawnMsgWin(
                                     "Error: Could not stream URL.".to_string(), 5000)).unwrap();
                             }
@@ -204,13 +204,13 @@ fn main() {
                         // add directory for podcast, create if it does not exist
                         let mut download_path = config.download_path.clone();
                         download_path.push(borrowed_podcast.title.clone());
-                        if let Err(_) = std::fs::create_dir_all(&download_path) {
+                        if std::fs::create_dir_all(&download_path).is_err() {
                             tx_to_ui.send(MainMessage::UiSpawnMsgWin(
                                 format!("Could not create dir: {}", borrowed_podcast.title.clone()), 5000)).unwrap();
                         }
 
                         let file_paths = download_manager
-                            .download_list(&vec![&episode], &download_path);
+                            .download_list(&[&episode], &download_path);
 
                         match &file_paths[0] {
                             Ok(ff) => {
@@ -257,7 +257,7 @@ fn main() {
                         // add directory for podcast, create if it does not exist
                         let mut download_path = config.download_path.clone();
                         download_path.push(borrowed_podcast.title.clone());
-                        if let Err(_) = std::fs::create_dir_all(&download_path) {
+                        if std::fs::create_dir_all(&download_path).is_err() {
                             tx_to_ui.send(MainMessage::UiSpawnMsgWin(
                                 format!("Could not create dir: {}", borrowed_podcast.title.clone()), 5000)).unwrap();
                         }

@@ -47,7 +47,7 @@ impl Keybindings {
 
     /// Takes an Input object from pancurses and returns the associated
     /// user action, if one exists.
-    pub fn get_from_input(&self, input: &Input) -> Option<&UserAction> {
+    pub fn get_from_input(&self, input: Input) -> Option<&UserAction> {
         match input_to_str(input) {
             Some(code) => {
                 self.map.get(&code)
@@ -65,8 +65,8 @@ impl Keybindings {
     /// Inserts a set of new keybindings into the hash map, each one
     /// corresponding to the same UserAction. Will overwrite the value
     /// of keys that already exist.
-    pub fn insert_from_vec(&mut self, vec: &Vec<String>, action: UserAction) {
-        for key in vec.into_iter() {
+    pub fn insert_from_vec(&mut self, vec: &[String], action: UserAction) {
+        for key in vec.iter() {
             self.insert(key.to_string(), action);
         }
     }
@@ -89,7 +89,7 @@ impl Keybindings {
 /// This function is a bit ridiculous, given that 95% of keyboards probably
 /// don't even have half these special keys, but at any rate...they're
 /// mapped, if anyone wants them.
-pub fn input_to_str(input: &Input) -> Option<String> {
+pub fn input_to_str(input: Input) -> Option<String> {
     let mut tmp = [0; 4];
     let code = match input {
         Input::KeyCodeYes => "CodeYes",
@@ -201,13 +201,13 @@ pub fn input_to_str(input: &Input) -> Option<String> {
         Input::KeyC1 => "C1",
         Input::KeyC3 => "C3",
         Input::Character(c) => {
-            if c == &'\u{7f}' {
+            if c == '\u{7f}' {
                 "Backspace"
-            } else if c == &'\u{1b}' {
+            } else if c == '\u{1b}' {
                 "Escape"
-            } else if c == &'\n' {
+            } else if c == '\n' {
                 "Enter"
-            } else if c == &'\t' {
+            } else if c == '\t' {
                 "Tab"
             } else {
                 c.encode_utf8(&mut tmp)

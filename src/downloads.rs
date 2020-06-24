@@ -18,12 +18,12 @@ impl DownloadManager {
         };
     }
 
-    fn get_client<'a>(&'a self) -> &'a Client {
+    fn get_client(&self) -> &Client {
         return &self.client;
     }
 
     #[tokio::main]
-    pub async fn download_list<'a>(&self, episodes: &Vec<&Episode>, dest: &'a PathBuf) ->
+    pub async fn download_list<'a>(&self, episodes: &[&Episode], dest: &'a PathBuf) ->
     Vec<Result<Option<PathBuf>, Box<dyn std::error::Error>>> {
 
         let mut eps_vec = Vec::new();
