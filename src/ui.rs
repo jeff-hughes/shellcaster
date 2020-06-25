@@ -12,9 +12,9 @@ use crate::types::*;
 use super::MainMessage;
 
 /// Enum used for communicating back to the main controller after user
-/// input has been captured by the UI. `response` can be any String, and
-/// `message` includes any corresponding details going along with the 
-/// response (e.g., user has inputted a podcast feed URL).
+/// input has been captured by the UI. i32 values always represent the
+/// selected podcast, and (if applicable), the selected episode, in that
+/// order.
 #[derive(Debug)]
 pub enum UiMsg {
     AddFeed(String),
