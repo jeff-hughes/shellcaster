@@ -1,6 +1,6 @@
 [package]
 name = "shellcaster"
-version = "0.6.0"
+version = "0.6.1"
 authors = ["Jeff Hughes <jeff.hughes@gmail.com>"]
 edition = "2018"
 
@@ -10,7 +10,7 @@ edition = "2018"
 pancurses = "0.16.1"
 rusqlite = "0.21.0"
 rss = { version = "1.9.0", features = ["from_url"] }
-reqwest = "0.10.4"
+reqwest = { version = "0.10.4", features = ["blocking"] }
 futures = "0.3.4"
 tokio = { version = "0.2", features = ["macros"] }
 toml = "0.5.6"

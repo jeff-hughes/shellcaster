@@ -21,7 +21,7 @@ Right now the program only has bare-bones functionality. Currently you can add n
 | m       | **Mark selected episode as played/unplayed** |
 | Shift+M | **Mark all episodes as played/unplayed** |
 | d       | **Download selected episode** |
-| Shift+D | Download all episodes |
+| Shift+D | **Download all episodes** |
 | x       | Delete downloaded file |
 | Shift+X | Delete all downloaded files |
 | r       | Remove selected feed/episode from list |

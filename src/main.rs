@@ -14,6 +14,7 @@ use crate::types::*;
 use crate::ui::{UI, UiMsg};
 use crate::db::Database;
 use crate::feeds::FeedMsg;
+use crate::downloads::DownloadMsg;
 
 /// Enum used for communicating with other threads.
 #[derive(Debug)]
@@ -56,9 +57,14 @@ fn main() {
         }
     }
     let config = config::parse_config_file(&config_path);
+
+    // create transmitters and receivers for passing messages between threads
+    let (tx_to_ui, rx_from_main) = mpsc::channel();
+    let (tx_to_main, rx_to_main) = mpsc::channel();
     
     let db_inst = Database::connect(&config.config_path);
-    let download_manager = downloads::DownloadManager::new();
+    let tx_dl_to_main = tx_to_main.clone();
+    let mut download_manager = downloads::DownloadManager::new(tx_dl_to_main);
 
     // create vector of podcasts, where references are checked at runtime;
     // this is necessary because we want main.rs to hold the "ground truth"
@@ -67,9 +73,6 @@ fn main() {
     let podcast_list: MutableVec<Podcast> = Arc::new(
         Mutex::new(db_inst.get_podcasts()));
 
-    // create transmitters and receivers for passing messages between threads
-    let (tx_to_ui, rx_from_main) = mpsc::channel();
-    let (tx_to_main, rx_to_main) = mpsc::channel();
     let tx_ui_to_main = mpsc::Sender::clone(&tx_to_main);
     let ui_thread = UI::spawn(config.clone(), Arc::clone(&podcast_list), rx_from_main, tx_ui_to_main);
         // TODO: Can we do this without cloning the config?
@@ -243,106 +246,91 @@ fn main() {
                 },
 
                 Message::Ui(UiMsg::Download(pod_index, ep_index)) => {
-                    let mut success = false;
+                    let borrowed_pod_list = podcast_list.lock().unwrap();
+                    let borrowed_podcast = borrowed_pod_list
+                        .get(pod_index as usize).unwrap();
+                    let borrowed_ep_list = borrowed_podcast
+                        .episodes.lock().unwrap();
+                    // TODO: Try to find a way to do this without having
+                    // to clone the episode...
+                    let episode = borrowed_ep_list
+                        .get(ep_index as usize).unwrap().clone();
 
-                    // limit scope so that we drop the mutable borrow;
-                    // otherwise, will panic once we try to update the UI
+                    // add directory for podcast, create if it does not exist
+                    let mut download_path = config.download_path.clone();
+                    download_path.push(borrowed_podcast.title.clone());
+                    if std::fs::create_dir_all(&download_path).is_err() {
+                        tx_to_ui.send(MainMessage::UiSpawnMsgWin(
+                            format!("Could not create dir: {}", borrowed_podcast.title.clone()), 5000)).unwrap();
+                    }
+
+                    download_manager.download_list(
+                        &[&episode], &download_path);
+                },
+
+                Message::Dl(DownloadMsg::Complete(ep_data)) => {
+                    let _ = db_inst.insert_file(ep_data.id, &ep_data.file_path);
                     {
                         let borrowed_pod_list = podcast_list.lock().unwrap();
-                        let borrowed_podcast = borrowed_pod_list
-                            .get(pod_index as usize).unwrap();
+                        let borrowed_podcast = borrowed_pod_list.iter()
+                            .find(|pod| pod.id == Some(ep_data.pod_id))
+                            .unwrap();
                         let mut borrowed_ep_list = borrowed_podcast
                             .episodes.lock().unwrap();
-                        // TODO: Try to find a way to do this without having
-                        // to clone the episode...
-                        let mut episode = borrowed_ep_list
-                            .get(ep_index as usize).unwrap().clone();
-
-                        // add directory for podcast, create if it does not exist
-                        let mut download_path = config.download_path.clone();
-                        download_path.push(borrowed_podcast.title.clone());
-                        if std::fs::create_dir_all(&download_path).is_err() {
-                            tx_to_ui.send(MainMessage::UiSpawnMsgWin(
-                                format!("Could not create dir: {}", borrowed_podcast.title.clone()), 5000)).unwrap();
-                        }
-
-                        let file_paths = download_manager
-                            .download_list(&[&episode], &download_path);
-
-                        match &file_paths[0] {
-                            Ok(ff) => {
-                                match ff {
-                                    Some(path) => {
-                                        let _ = db_inst.insert_file(episode.id.unwrap(), &path);
-                                        episode.path = Some(path.clone());
-                                        borrowed_ep_list[ep_index as usize] = episode;
-                                        success = true;
-                                    },
-                                    None => (),
-                                }
-                            },
-                            Err(_) => (),
-                        }
+                        let ep_idx = borrowed_ep_list.iter()
+                            .position(|ep| ep.id == Some(ep_data.id))
+                            .unwrap();
+                        let mut episode = borrowed_ep_list[ep_idx].clone();
+                        episode.path = Some(ep_data.file_path.clone());
+                        borrowed_ep_list[ep_idx] = episode;
                     }
 
-                    if success {
-                        tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
-                    }
+                    tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
+                },
+
+                Message::Dl(DownloadMsg::ResponseError(_)) => {
+                    tx_to_ui.send(MainMessage::UiSpawnMsgWin(
+                        "Error sending download request.".to_string(), 5000)).unwrap();
+                },
+                Message::Dl(DownloadMsg::ResponseDataError(_)) => {
+                    tx_to_ui.send(MainMessage::UiSpawnMsgWin(
+                        "Error downloading episode.".to_string(), 5000)).unwrap(); 
+                },
+                Message::Dl(DownloadMsg::FileCreateError(_)) => {
+                    tx_to_ui.send(MainMessage::UiSpawnMsgWin(
+                        "Error creating file.".to_string(), 5000)).unwrap(); 
+                },
+                Message::Dl(DownloadMsg::FileWriteError(_)) => {
+                    tx_to_ui.send(MainMessage::UiSpawnMsgWin(
+                        "Error writing file to disk.".to_string(), 5000)).unwrap(); 
                 },
 
                 Message::Ui(UiMsg::DownloadAll(pod_index)) => {
-                    let mut success = false;
+                    let borrowed_pod_list = podcast_list.lock().unwrap();
+                    let borrowed_podcast = borrowed_pod_list
+                        .get(pod_index as usize).unwrap();
+                    let borrowed_ep_list = borrowed_podcast
+                        .episodes.lock().unwrap();
 
-                    // limit scope so that we drop the mutable borrow;
-                    // otherwise, will panic once we try to update the UI
-                    {
-                        let borrowed_pod_list = podcast_list.lock().unwrap();
-                        let borrowed_podcast = borrowed_pod_list
-                            .get(pod_index as usize).unwrap();
-                        let mut borrowed_ep_list = borrowed_podcast
-                            .episodes.lock().unwrap();
-
-                        // TODO: Try to find a way to do this without having
-                        // to clone the episodes...
-                        let mut episodes = Vec::new();
-                        let mut episode_refs = Vec::new();
-                        for e in borrowed_ep_list.iter() {
-                            episodes.push(e.clone());
-                            episode_refs.push(e);
-                        }
-
-                        // add directory for podcast, create if it does not exist
-                        let mut download_path = config.download_path.clone();
-                        download_path.push(borrowed_podcast.title.clone());
-                        if std::fs::create_dir_all(&download_path).is_err() {
-                            tx_to_ui.send(MainMessage::UiSpawnMsgWin(
-                                format!("Could not create dir: {}", borrowed_podcast.title.clone()), 5000)).unwrap();
-                        }
-
-                        let file_paths = download_manager
-                            .download_list(&episode_refs, &download_path);
-
-                        for (i, f) in file_paths.iter().enumerate() {
-                            match f {
-                                Ok(ff) => {
-                                    match ff {
-                                        Some(path) => {
-                                            episodes[i].path = Some(path.clone());
-                                            borrowed_ep_list[i] = episodes[i].clone();
-                                            success = true;
-                                        },
-                                        None => (),
-                                    }
-                                },
-                                Err(_) => (),
-                            }
-                        }
+                    // TODO: Try to find a way to do this without having
+                    // to clone the episodes...
+                    let mut episodes = Vec::new();
+                    let mut episode_refs = Vec::new();
+                    for e in borrowed_ep_list.iter() {
+                        episodes.push(e.clone());
+                        episode_refs.push(e);
                     }
 
-                    // update if even one file downloaded successfully
-                    if success {
-                        tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
+                    // add directory for podcast, create if it does not exist
+                    let mut download_path = config.download_path.clone();
+                    download_path.push(borrowed_podcast.title.clone());
+                    if std::fs::create_dir_all(&download_path).is_err() {
+                        tx_to_ui.send(MainMessage::UiSpawnMsgWin(
+                            format!("Could not create dir: {}", borrowed_podcast.title.clone()), 5000)).unwrap();
                     }
+
+                    download_manager.download_list(
+                        &episode_refs, &download_path);
                 },
 
                 Message::Ui(UiMsg::Noop) => (),

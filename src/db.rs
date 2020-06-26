@@ -316,6 +316,7 @@ impl Database {
                 };
                 Ok(Episode {
                     id: Some(row.get("id")?),
+                    pod_id: Some(row.get("podcast_id")?),
                     title: row.get("title")?,
                     url: row.get("url")?,
                     description: row.get("description")?,

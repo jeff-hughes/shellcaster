@@ -148,6 +148,7 @@ fn parse_episode_data(item: &Item) -> Episode {
 
     return Episode {
         id: None,
+        pod_id: None,
         title: title,
         url: url,
         description: description,

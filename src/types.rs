@@ -5,6 +5,7 @@ use chrono::{DateTime, Utc};
 
 use crate::ui::UiMsg;
 use crate::feeds::FeedMsg;
+use crate::downloads::DownloadMsg;
 
 /// Defines interface used for both podcasts and episodes, to be
 /// used and displayed in menus.
@@ -45,6 +46,7 @@ impl Menuable for Podcast {
 #[derive(Debug, Clone)]
 pub struct Episode {
     pub id: Option<i32>,
+    pub pod_id: Option<i32>,
     pub title: String,
     pub url: String,
     pub description: String,
@@ -75,6 +77,7 @@ pub type MutableVec<T> = Arc<Mutex<Vec<T>>>;
 pub enum Message {
     Ui(UiMsg),
     Feed(FeedMsg),
+    Dl(DownloadMsg),
 }
 
 
