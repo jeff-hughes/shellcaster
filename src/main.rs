@@ -63,8 +63,11 @@ fn main() {
     let (tx_to_main, rx_to_main) = mpsc::channel();
     
     let db_inst = Database::connect(&config.config_path);
+
     let tx_dl_to_main = tx_to_main.clone();
-    let mut download_manager = downloads::DownloadManager::new(tx_dl_to_main);
+    let mut download_manager = downloads::DownloadManager::new(
+        config.simultaneous_downloads,
+        tx_dl_to_main);
 
     // create vector of podcasts, where references are checked at runtime;
     // this is necessary because we want main.rs to hold the "ground truth"

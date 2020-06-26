@@ -18,6 +18,16 @@
 
 #download_path = "~/.local/share/shellcaster/"
 
+
+# Maximum number of files to download simultaneously. Setting this too
+# high could result in network requests being denied. A good general
+# guide would be to set this to the number of processor cores on your
+# computer.
+# Default: 3
+
+#simultaneous_downloads = 3;
+
+
 # Command to use to play episodes. Use "%s" to indicate where file/URL
 # will be entered to the command.
 # Default: vlc %s

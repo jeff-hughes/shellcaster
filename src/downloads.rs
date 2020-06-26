@@ -8,9 +8,6 @@ use reqwest::blocking::Client;
 
 use crate::types::{Episode, Message};
 
-// TODO: here for now; will be set in config later
-const N_THREADS: usize = 3;
-
 /// Enum used for communicating back to the main controller upon
 /// successful or unsuccessful downloading of a file. i32 value
 /// represents the episode ID, and PathBuf the location of the new file.
@@ -39,15 +36,17 @@ pub struct DownloadManager {
     request_client: Client,
     tx_to_main: Sender<Message>,
     threadpool: Option<ThreadPool>,
+    n_threads: usize,
 }
 
 impl DownloadManager {
     /// Creates a new DownloadManager.
-    pub fn new(tx_to_main: Sender<Message>) -> DownloadManager {
+    pub fn new(n_threads: usize, tx_to_main: Sender<Message>) -> DownloadManager {
         return DownloadManager {
             request_client: Client::new(),
             tx_to_main: tx_to_main,
             threadpool: None,
+            n_threads: n_threads,
         };
     }
 
@@ -65,7 +64,7 @@ impl DownloadManager {
         // download thread and threadpool only exist when download
         // queue is not empty
         if self.threadpool.is_none() {
-            self.threadpool = Some(ThreadPool::new(N_THREADS));
+            self.threadpool = Some(ThreadPool::new(self.n_threads));
         }
 
         // parse episode details and push to queue
