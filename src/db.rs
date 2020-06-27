@@ -112,7 +112,7 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT id FROM podcasts WHERE url = ?").unwrap();
         let pod_id = stmt
-            .query_row::<i32,_,_>(params![podcast.url], |row| row.get(0))
+            .query_row::<i64,_,_>(params![podcast.url], |row| row.get(0))
             .unwrap();
         let num_episodes = podcast.episodes.borrow().len();
 
@@ -124,7 +124,7 @@ impl Database {
     }
 
     /// Inserts a podcast episode into the database.
-    pub fn insert_episode(&self, podcast_id: i32, episode: &Episode) ->
+    pub fn insert_episode(&self, podcast_id: i64, episode: &Episode) ->
         Result<(), Box<dyn std::error::Error>> {
 
         let conn = self.conn.as_ref().unwrap();
@@ -153,7 +153,7 @@ impl Database {
     }
 
     /// Inserts a filepath to a downloaded episode.
-    pub fn insert_file(&self, episode_id: i32, path: &PathBuf) -> 
+    pub fn insert_file(&self, episode_id: i64, path: &PathBuf) -> 
         Result<(), Box<dyn std::error::Error>> {
 
         let conn = self.conn.as_ref().unwrap();
@@ -203,7 +203,7 @@ impl Database {
     /// episode that has changed either of these fields will show up as
     /// a "new" episode. The old version will still remain in the
     /// database.
-    fn update_episodes(&self, podcast_id: i32, episodes: LockVec<Episode>) {
+    fn update_episodes(&self, podcast_id: i64, episodes: LockVec<Episode>) {
         let conn = self.conn.as_ref().unwrap();
 
         let mut stmt = conn.prepare(
@@ -214,7 +214,7 @@ impl Database {
         }).unwrap();
 
         // create hashmap of all episodes, indexed by URL and pub date
-        let mut ep_map: HashMap<(String, i64), i32> = HashMap::new();
+        let mut ep_map: HashMap<(String, i64), i64> = HashMap::new();
         for ep in episode_iter {
             let epuw = ep.unwrap();
             ep_map.insert((epuw.1, epuw.2), epuw.0);
@@ -252,7 +252,7 @@ impl Database {
     }
 
     /// Updates an episode to mark it as played or unplayed.
-    pub fn set_played_status(&self, episode_id: i32, played: bool) {
+    pub fn set_played_status(&self, episode_id: i64, played: bool) {
         let conn = self.conn.as_ref().unwrap();
 
         let _ = conn.execute(
@@ -300,7 +300,7 @@ impl Database {
     }
 
     /// Generates list of episodes for a given podcast.
-    pub fn get_episodes(&self, pod_id: i32) -> Vec<Episode> {
+    pub fn get_episodes(&self, pod_id: i64) -> Vec<Episode> {
         if let Some(conn) = &self.conn {
             let mut stmt = conn.prepare(
                 "SELECT * FROM episodes

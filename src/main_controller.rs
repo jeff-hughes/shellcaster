@@ -81,7 +81,7 @@ impl MainController {
     }
 
     /// Synchronize RSS feed data for one or more podcasts.
-    pub fn sync(&self, pod_index: Option<i32>) {
+    pub fn sync(&self, pod_index: Option<usize>) {
         // We pull out the data we need here first, so we can
         // stop borrowing the podcast list as quickly as possible.
         // Slightly less efficient (two loops instead of
@@ -94,7 +94,7 @@ impl MainController {
             match pod_index {
                 Some(idx) => {
                     // just grab one podcast
-                    let podcast = &borrowed_pod_list[idx as usize];
+                    let podcast = &borrowed_pod_list[idx];
                     pod_data.push((podcast.url.clone(), podcast.id));
                 },
                 None => {
@@ -145,7 +145,7 @@ impl MainController {
 
     /// Attempts to execute the play command on the given podcast
     /// episode.
-    pub fn play_file(&self, pod_index: i32, ep_index: i32) {
+    pub fn play_file(&self, pod_index: usize, ep_index: usize) {
         let episode = self.podcasts.clone_episode(
             pod_index, ep_index).unwrap();
 
@@ -176,7 +176,7 @@ impl MainController {
     /// Given a podcast and episode, it marks the given episode as
     /// played/unplayed, sending this info to the database and updating
     /// in main_ctrl.podcasts
-    pub fn mark_played(&self, pod_index: i32, ep_index: i32, played: bool) {
+    pub fn mark_played(&self, pod_index: usize, ep_index: usize, played: bool) {
         let mut podcast = self.podcasts.clone_podcast(pod_index).unwrap();
         let mut any_unplayed = false;
 
@@ -209,7 +209,7 @@ impl MainController {
     /// Given a podcast, it marks all episodes for that podcast as
     /// played/unplayed, sending this info to the database and updating
     /// in main_ctrl.podcasts
-    pub fn mark_all_played(&self, pod_index: i32, played: bool) {
+    pub fn mark_all_played(&self, pod_index: usize, played: bool) {
         let mut podcast = self.podcasts.clone_podcast(pod_index).unwrap();
         {
             let mut borrowed_ep_list = podcast
@@ -230,7 +230,7 @@ impl MainController {
     // TODO: Right now this can't be used because the main loop is
     // borrowing the MainController object, and the last line of this
     // function mutates MainController, so the borrow checker complains.
-    // pub fn download(&mut self, pod_index: i32, ep_index: Option<i32>) {
+    // pub fn download(&mut self, pod_index: usize, ep_index: Option<usize>) {
     //     // TODO: Try to do this without cloning the podcast...
     //     let podcast = self.podcasts
     //         .clone_podcast(pod_index).unwrap();
@@ -243,7 +243,7 @@ impl MainController {
     //     // if we are selecting one specific episode, just grab that one;
     //     // otherwise, loop through them all
     //     match ep_index {
-    //         Some(ep_idx) => episodes.push(&borrowed_ep_list[ep_idx as usize]),
+    //         Some(ep_idx) => episodes.push(&borrowed_ep_list[ep_idx]),
     //         None => {
     //             for e in borrowed_ep_list.iter() {
     //                 episodes.push(e);

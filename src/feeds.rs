@@ -25,7 +25,7 @@ pub enum FeedMsg {
 }
 
 /// Spawns a new thread to check a feed and retrieve podcast data.
-pub fn spawn_feed_checker(tx_to_main: mpsc::Sender<Message>, url: String, pod_id: Option<i32>) -> thread::JoinHandle<()> {
+pub fn spawn_feed_checker(tx_to_main: mpsc::Sender<Message>, url: String, pod_id: Option<i64>) -> thread::JoinHandle<()> {
     return thread::spawn(move || {
         match get_feed_data(url) {
             Ok(mut pod) => {
@@ -139,7 +139,10 @@ fn parse_episode_data(item: &Item) -> Episode {
 
     let mut duration = None;
     if let Some(itunes) = item.itunes_ext() {
-        duration = duration_to_int(itunes.duration());
+        duration = match duration_to_int(itunes.duration()) {
+            Some(dur) => Some(dur as i64),
+            None => None,
+        };
     }
 
     let path = None;

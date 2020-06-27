@@ -94,7 +94,7 @@ fn main() {
                 let pod_title;
                 {
                     let borrowed_podcast_list = main_ctrl.podcasts.borrow();
-                    pod_title = borrowed_podcast_list[pod_index as usize].title.clone();
+                    pod_title = borrowed_podcast_list[pod_index].title.clone();
                 }
                 let episode = main_ctrl.podcasts
                     .clone_episode(pod_index, ep_index).unwrap();

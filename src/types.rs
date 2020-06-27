@@ -18,7 +18,7 @@ pub trait Menuable {
 /// (possibly empty) vector of episodes.
 #[derive(Debug, Clone)]
 pub struct Podcast {
-    pub id: Option<i32>,
+    pub id: Option<i64>,
     pub title: String,
     pub url: String,
     pub description: Option<String>,
@@ -45,13 +45,13 @@ impl Menuable for Podcast {
 /// whether the podcast has been marked as played or unplayed.
 #[derive(Debug, Clone)]
 pub struct Episode {
-    pub id: Option<i32>,
-    pub pod_id: Option<i32>,
+    pub id: Option<i64>,
+    pub pod_id: Option<i64>,
     pub title: String,
     pub url: String,
     pub description: String,
     pub pubdate: Option<DateTime<Utc>>,
-    pub duration: Option<i32>,
+    pub duration: Option<i64>,
     pub path: Option<PathBuf>,
     pub played: bool,
 }
@@ -96,10 +96,10 @@ impl<T: Clone> LockVec<T> {
 
     /// Given an index in the vector, this takes a new T and replaces
     /// the old T at that position in the vector.
-    pub fn replace(&self, index: i32, t: T) -> Result<(), &'static str> {
+    pub fn replace(&self, index: usize, t: T) -> Result<(), &'static str> {
         let mut borrowed = self.borrow();
-        if index > 0 && (index as usize) < borrowed.len() {
-            borrowed[index as usize] = t;
+        if index > 0 && index < borrowed.len() {
+            borrowed[index] = t;
             return Ok(());
         } else {
             return Err("Invalid index");
@@ -118,9 +118,9 @@ impl<T: Clone> Clone for LockVec<T> {
 
 impl LockVec<Podcast> {
     /// This clones the podcast at the given index.
-    pub fn clone_podcast(&self, index: i32) -> Option<Podcast> {
+    pub fn clone_podcast(&self, index: usize) -> Option<Podcast> {
         let pod_list = self.borrow();
-        return match pod_list.get(index as usize) {
+        return match pod_list.get(index) {
             Some(pod) => Some(pod.clone()),
             None => None,
         };
@@ -130,9 +130,9 @@ impl LockVec<Podcast> {
     /// the podcast at the given index (`pod_index`). Note that if you
     /// are already borrowing the episode list for a podcast, you can
     /// also use `clone_episode()` directly on that list.
-    pub fn clone_episode(&self, pod_index: i32, ep_index: i32) -> Option<Episode> {
+    pub fn clone_episode(&self, pod_index: usize, ep_index: usize) -> Option<Episode> {
         let pod_list = self.borrow();
-        if let Some(pod) = pod_list.get(pod_index as usize) {
+        if let Some(pod) = pod_list.get(pod_index) {
             return pod.episodes.clone_episode(ep_index);
         }
         return None;
@@ -140,13 +140,9 @@ impl LockVec<Podcast> {
 
     /// Given a podcast ID (from the database), this provides the vector
     /// index where that podcast is located.
-    pub fn id_to_index(&self, id: i32) -> Option<i32> {
+    pub fn id_to_index(&self, id: i64) -> Option<usize> {
         let borrowed = self.borrow();
-        let item = borrowed.iter().position(|val| val.id == Some(id));
-        return match item {
-            Some(index) => Some(index as i32),
-            None => None
-        };
+        return borrowed.iter().position(|val| val.id == Some(id));
     }
 }
 
@@ -154,9 +150,9 @@ impl LockVec<Episode> {
     /// This clones the episode at the given index (`ep_index`). Note
     /// that `clone_episode()` is also implemented for LockVec<Podcast>,
     /// and can be used at that level as well if given a podcast index.
-    pub fn clone_episode(&self, index: i32) -> Option<Episode> {
+    pub fn clone_episode(&self, index: usize) -> Option<Episode> {
         let ep_list = self.borrow();
-        return match ep_list.get(index as usize) {
+        return match ep_list.get(index) {
             Some(ep) => Some(ep.clone()),
             None => None,
         };
@@ -164,13 +160,9 @@ impl LockVec<Episode> {
 
     /// Given an episode ID (from the database), this provides the vector
     /// index where that episode is located.
-    pub fn id_to_index(&self, id: i32) -> Option<i32> {
+    pub fn id_to_index(&self, id: i64) -> Option<usize> {
         let borrowed = self.borrow();
-        let item = borrowed.iter().position(|val| val.id == Some(id));
-        return match item {
-            Some(index) => Some(index as i32),
-            None => None
-        };
+        return borrowed.iter().position(|val| val.id == Some(id));
     }
 }
 

@@ -11,19 +11,19 @@ use crate::types::*;
 use super::MainMessage;
 
 /// Enum used for communicating back to the main controller after user
-/// input has been captured by the UI. i32 values always represent the
+/// input has been captured by the UI. usize values always represent the
 /// selected podcast, and (if applicable), the selected episode, in that
 /// order.
 #[derive(Debug)]
 pub enum UiMsg {
     AddFeed(String),
-    Play(i32, i32),
-    MarkPlayed(i32, i32, bool),
-    MarkAllPlayed(i32, bool),
-    Sync(i32),
+    Play(usize, usize),
+    MarkPlayed(usize, usize, bool),
+    MarkAllPlayed(usize, bool),
+    Sync(usize),
     SyncAll,
-    Download(i32, i32),
-    DownloadAll(i32),
+    Download(usize, usize),
+    DownloadAll(usize),
     Quit,
     Noop,
 }
@@ -207,10 +207,10 @@ impl<'a> UI<'a> {
             Some(input) => {
                 let pod_len = self.podcast_menu.items.borrow().len();
                 let ep_len = self.episode_menu.items.borrow().len();
-                let current_pod_index = self.podcast_menu.selected +
-                    self.podcast_menu.top_row;
-                let current_ep_index = self.episode_menu.selected +
-                    self.episode_menu.top_row;
+                let current_pod_index = (self.podcast_menu.selected +
+                    self.podcast_menu.top_row) as usize;
+                let current_ep_index = (self.episode_menu.selected +
+                    self.episode_menu.top_row) as usize;
 
                 // get rid of the "welcome" window once the podcast list
                 // is no longer empty
@@ -314,7 +314,7 @@ impl<'a> UI<'a> {
                             ActiveMenu::EpisodeMenu => {
                                 let played = self.episode_menu.items
                                     .borrow()
-                                    .get(current_ep_index as usize).unwrap()
+                                    .get(current_ep_index).unwrap()
                                     .is_played();
                                 
                                 let attr = if played {
@@ -336,7 +336,7 @@ impl<'a> UI<'a> {
                         // already, only then will it convert all to unplayed
                         let played = self.podcast_menu.items
                             .borrow()
-                            .get(current_pod_index as usize).unwrap()
+                            .get(current_pod_index).unwrap()
                             .is_played();
                         // let attr = if played {
                         //     pancurses::A_BOLD
@@ -584,9 +584,6 @@ impl<'a> UI<'a> {
 /// * `selected` indicates which item on screen is currently highlighted.
 ///   It is calculated relative to the screen itself, i.e., a value between
 ///   0 and (n_row - 1)
-/// * `old_selected` indicates which item on screen *was* highlighted,
-///   which is used when the user is scrolling through the list (TODO:
-///   this will probably be changed at some point)
 #[derive(Debug)]
 pub struct Menu<T>
     where T: Clone + Menuable {
@@ -611,8 +608,8 @@ impl<T: Clone + Menuable> Menu<T> {
         self.window.erase();
         // for visible rows, print strings from list
         for i in 0..self.n_row {
-            let item_idx = self.top_row + i;
-            if let Some(elem) = self.items.borrow().get(item_idx as usize) {
+            let item_idx = (self.top_row + i) as usize;
+            if let Some(elem) = self.items.borrow().get(item_idx) {
                 // look for any unplayed episodes
                 let unplayed = !elem.is_played();
                 self.window.mv(i, 0);

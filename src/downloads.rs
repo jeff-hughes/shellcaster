@@ -23,8 +23,8 @@ pub enum DownloadMsg {
 /// Enum used to communicate relevant data to the threadpool.
 #[derive(Debug, Clone)]
 pub struct EpData {
-    pub id: i32,
-    pub pod_id: i32,
+    pub id: i64,
+    pub pod_id: i64,
     pub url: String,
     pub file_path: PathBuf,
 }
