@@ -1,5 +1,4 @@
 use std::cmp::min;
-use std::sync::{Arc, Mutex};
 
 use std::thread;
 use std::sync::mpsc;
@@ -54,7 +53,7 @@ pub struct UI<'a> {
 impl<'a> UI<'a> {
     /// Spawns a UI object in a new thread, with message channels to send
     /// and receive messages
-    pub fn spawn(config: Config, items: MutableVec<Podcast>, rx_from_main: mpsc::Receiver<MainMessage>, tx_to_main: mpsc::Sender<Message>) -> thread::JoinHandle<()> {
+    pub fn spawn(config: Config, items: LockVec<Podcast>, rx_from_main: mpsc::Receiver<MainMessage>, tx_to_main: mpsc::Sender<Message>) -> thread::JoinHandle<()> {
         return thread::spawn(move || {
             let mut ui = UI::new(&config, &items);
             let mut message_iter = rx_from_main.try_iter();
@@ -86,7 +85,7 @@ impl<'a> UI<'a> {
     /// Initializes the UI with a list of podcasts and podcast episodes,
     /// creates the pancurses window and draws it to the screen, and
     /// returns a UI object for future manipulation.
-    pub fn new(config: &'a Config, items: &MutableVec<Podcast>) -> UI<'a> {
+    pub fn new(config: &'a Config, items: &LockVec<Podcast>) -> UI<'a> {
         let stdscr = pancurses::initscr();
 
         // set some options
@@ -111,7 +110,7 @@ impl<'a> UI<'a> {
         let podcast_menu_win = newwin(n_row, pod_col, 0, 0);
         let mut podcast_menu = Menu {
             window: podcast_menu_win,
-            items: Arc::clone(items),
+            items: items.clone(),
             n_row: n_row,
             n_col: pod_col,
             top_row: 0,
@@ -124,9 +123,9 @@ impl<'a> UI<'a> {
         podcast_menu.window.noutrefresh();
 
         let episode_menu_win = newwin(n_row, ep_col, 0, pod_col);
-        let first_pod = match items.lock().unwrap().get(0) {
-            Some(pod) => Arc::clone(&pod.episodes),
-            None => Arc::new(Mutex::new(Vec::new())),
+        let first_pod: LockVec<Episode> = match items.borrow().get(0) {
+            Some(pod) => pod.episodes.clone(),
+            None => LockVec::new(Vec::new()),
         };
         let mut episode_menu = Menu {
             window: episode_menu_win,
@@ -140,7 +139,7 @@ impl<'a> UI<'a> {
         episode_menu.window.noutrefresh();
 
         // welcome screen if user does not have any podcasts yet
-        let welcome_win = if items.lock().unwrap().len() == 0 {
+        let welcome_win = if items.borrow().len() == 0 {
             Some(UI::make_welcome_win(&config, n_row, n_col))
         } else {
             None
@@ -206,8 +205,8 @@ impl<'a> UI<'a> {
             },
 
             Some(input) => {
-                let pod_len = self.podcast_menu.items.lock().unwrap().len();
-                let ep_len = self.episode_menu.items.lock().unwrap().len();
+                let pod_len = self.podcast_menu.items.borrow().len();
+                let ep_len = self.episode_menu.items.borrow().len();
                 let current_pod_index = self.podcast_menu.selected +
                     self.podcast_menu.top_row;
                 let current_ep_index = self.episode_menu.selected +
@@ -314,7 +313,7 @@ impl<'a> UI<'a> {
                             ActiveMenu::PodcastMenu => (),
                             ActiveMenu::EpisodeMenu => {
                                 let played = self.episode_menu.items
-                                    .lock().unwrap()
+                                    .borrow()
                                     .get(current_ep_index as usize).unwrap()
                                     .is_played();
                                 
@@ -336,7 +335,7 @@ impl<'a> UI<'a> {
                         // will convert all to played; if all are played
                         // already, only then will it convert all to unplayed
                         let played = self.podcast_menu.items
-                            .lock().unwrap()
+                            .borrow()
                             .get(current_pod_index as usize).unwrap()
                             .is_played();
                         // let attr = if played {
@@ -589,16 +588,17 @@ impl<'a> UI<'a> {
 ///   which is used when the user is scrolling through the list (TODO:
 ///   this will probably be changed at some point)
 #[derive(Debug)]
-pub struct Menu<T> {
+pub struct Menu<T>
+    where T: Clone + Menuable {
     window: Window,
-    items: MutableVec<T>,
+    items: LockVec<T>,
     n_row: i32,
     n_col: i32,
     top_row: i32,  // top row of text shown in window
     selected: i32,  // which line of text is highlighted
 }
 
-impl<T: Menuable> Menu<T> {
+impl<T: Clone + Menuable> Menu<T> {
     /// Prints the list of visible items to the pancurses window and
     /// refreshes it.
     pub fn init(&mut self) {
@@ -612,7 +612,7 @@ impl<T: Menuable> Menu<T> {
         // for visible rows, print strings from list
         for i in 0..self.n_row {
             let item_idx = self.top_row + i;
-            if let Some(elem) = self.items.lock().unwrap().get(item_idx as usize) {
+            if let Some(elem) = self.items.borrow().get(item_idx as usize) {
                 // look for any unplayed episodes
                 let unplayed = !elem.is_played();
                 self.window.mv(i, 0);
@@ -645,7 +645,7 @@ impl<T: Menuable> Menu<T> {
         // don't allow scrolling past last item in list (if shorter than
         // self.n_row)
         let abs_bottom = min(self.n_row,
-            (self.items.lock().unwrap().len() - 1) as i32);
+            (self.items.borrow().len() - 1) as i32);
         if self.selected > abs_bottom {
             self.selected = abs_bottom;
         }
@@ -653,7 +653,7 @@ impl<T: Menuable> Menu<T> {
         // scroll list if necessary
         if self.selected > (self.n_row - 1) {
             self.selected = self.n_row - 1;
-            if let Some(elem) = self.items.lock().unwrap().get((self.top_row + self.n_row) as usize) {
+            if let Some(elem) = self.items.borrow().get((self.top_row + self.n_row) as usize) {
                 self.top_row += 1;
                 self.window.mv(0, 0);
                 self.window.deleteln();
@@ -666,7 +666,7 @@ impl<T: Menuable> Menu<T> {
 
         } else if self.selected < 0 {
             self.selected = 0;
-            if let Some(elem) = self.items.lock().unwrap().get((self.top_row - 1) as usize) {
+            if let Some(elem) = self.items.borrow().get((self.top_row - 1) as usize) {
                 self.top_row -= 1;
                 self.window.mv(0, 0);
                 self.window.insertln();
@@ -677,12 +677,12 @@ impl<T: Menuable> Menu<T> {
             }
         }
 
-        let old_played = if self.items.lock().unwrap().get(old_selected as usize).unwrap().is_played() {
+        let old_played = if self.items.borrow().get(old_selected as usize).unwrap().is_played() {
             pancurses::A_NORMAL
         } else {
             pancurses::A_BOLD
         };
-        let new_played = if self.items.lock().unwrap().get(self.selected as usize).unwrap().is_played() {
+        let new_played = if self.items.borrow().get(self.selected as usize).unwrap().is_played() {
             pancurses::A_NORMAL
         } else {
             pancurses::A_BOLD
@@ -696,7 +696,7 @@ impl<T: Menuable> Menu<T> {
     /// Controls how the window changes when it is active (i.e., available
     /// for user input to modify state).
     fn activate(&mut self) {
-        let played = if self.items.lock().unwrap().get(self.selected as usize).unwrap().is_played() {
+        let played = if self.items.borrow().get(self.selected as usize).unwrap().is_played() {
             pancurses::A_NORMAL
         } else {
             pancurses::A_BOLD
@@ -708,7 +708,7 @@ impl<T: Menuable> Menu<T> {
     /// Controls how the window changes when it is inactive (i.e., not
     /// available for user input to modify state).
     fn deactivate(&mut self) {
-        let played = if self.items.lock().unwrap().get(self.selected as usize).unwrap().is_played() {
+        let played = if self.items.borrow().get(self.selected as usize).unwrap().is_played() {
             pancurses::A_NORMAL
         } else {
             pancurses::A_BOLD
@@ -734,9 +734,9 @@ impl<T: Menuable> Menu<T> {
 impl Menu<Podcast> {
     /// Returns a cloned reference to the list of episodes from the
     /// currently selected podcast.
-    pub fn get_episodes(&self) -> MutableVec<Episode> {
+    pub fn get_episodes(&self) -> LockVec<Episode> {
         let index = self.selected + self.top_row;
-        return Arc::clone(&self.items.lock().unwrap()
-            .get(index as usize).unwrap().episodes);
+        return self.items.borrow()
+            .get(index as usize).unwrap().episodes.clone();
     }
 }

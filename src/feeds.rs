@@ -1,4 +1,3 @@
-use std::sync::{Arc, Mutex};
 use std::thread;
 use std::sync::mpsc;
 
@@ -8,7 +7,7 @@ use rfc822_sanitizer::parse_from_rfc2822_with_fallback;
 use lazy_static::lazy_static;
 use regex::{Regex, Match};
 
-use crate::types::{Podcast, Episode, Message};
+use crate::types::{Podcast, Episode, Message, LockVec};
 
 lazy_static! {
     /// Regex for parsing an episode "duration", which could take the form
@@ -100,7 +99,7 @@ pub fn parse_feed_data(channel: Channel, url: &str) -> Result<Podcast, Box<dyn s
         author: author,
         explicit: explicit,
         last_checked: last_checked,
-        episodes: Arc::new(Mutex::new(episodes)),
+        episodes: LockVec::new(episodes),
         any_unplayed: true,
     });
 }
@@ -271,7 +270,7 @@ mod tests {
         let path = "./tests/test_no_episodes.xml";
         let channel = Channel::read_from(open_file(path)).unwrap();
         let data = parse_feed_data(channel, "dummy_url").unwrap();
-        assert_eq!(data.episodes.lock().unwrap().len(), 0);
+        assert_eq!(data.episodes.borrow().len(), 0);
     }
 
     #[test]

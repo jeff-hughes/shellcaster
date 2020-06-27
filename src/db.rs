@@ -1,11 +1,10 @@
-use std::sync::{Arc, Mutex};
 use std::path::PathBuf;
 use std::collections::HashMap;
 
 use rusqlite::{Connection, params};
 use chrono::{NaiveDateTime, DateTime, Utc};
 
-use crate::types::{Podcast, Episode, MutableVec};
+use crate::types::{Podcast, Episode, LockVec};
 
 /// Struct holding a sqlite database connection, with methods to interact
 /// with this connection.
@@ -115,9 +114,9 @@ impl Database {
         let pod_id = stmt
             .query_row::<i32,_,_>(params![podcast.url], |row| row.get(0))
             .unwrap();
-        let num_episodes = podcast.episodes.lock().unwrap().len();
+        let num_episodes = podcast.episodes.borrow().len();
 
-        for ep in podcast.episodes.lock().unwrap().iter().rev() {
+        for ep in podcast.episodes.borrow().iter().rev() {
             let _ = &self.insert_episode(pod_id, &ep)?;
         }
 
@@ -190,7 +189,7 @@ impl Database {
             ]
         )?;
 
-        let num_episodes = podcast.episodes.lock().unwrap().len();
+        let num_episodes = podcast.episodes.borrow().len();
         self.update_episodes(podcast.id.unwrap(), podcast.episodes);
 
         return Ok(num_episodes);
@@ -204,7 +203,7 @@ impl Database {
     /// episode that has changed either of these fields will show up as
     /// a "new" episode. The old version will still remain in the
     /// database.
-    fn update_episodes(&self, podcast_id: i32, episodes: MutableVec<Episode>) {
+    fn update_episodes(&self, podcast_id: i32, episodes: LockVec<Episode>) {
         let conn = self.conn.as_ref().unwrap();
 
         let mut stmt = conn.prepare(
@@ -221,7 +220,7 @@ impl Database {
             ep_map.insert((epuw.1, epuw.2), epuw.0);
         }
 
-        for ep in episodes.lock().unwrap().iter().rev() {
+        for ep in episodes.borrow().iter().rev() {
             match ep_map.get(&(ep.url.clone(), ep.pubdate.unwrap().timestamp())) {
                 // update existing episode
                 Some(id) => {
@@ -286,7 +285,7 @@ impl Database {
                     author: row.get("author")?,
                     explicit: row.get("explicit")?,
                     last_checked: convert_date(row.get("last_checked")).unwrap(),
-                    episodes: Arc::new(Mutex::new(episodes)),
+                    episodes: LockVec::new(episodes),
                     any_unplayed: any_unplayed,
                 })
             }).unwrap();

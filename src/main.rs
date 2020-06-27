@@ -1,6 +1,6 @@
 use std::process;
 use std::path::PathBuf;
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::mpsc;
 
 mod config;
 mod keymap;
@@ -17,6 +17,10 @@ use crate::ui::{UI, UiMsg};
 use crate::db::Database;
 use crate::feeds::FeedMsg;
 use crate::downloads::DownloadMsg;
+
+// Specifies how long, in milliseconds, to display messages at the
+// bottom of the screen in the UI.
+const MESSAGE_TIME: u64 = 5000;
 
 /// Enum used for communicating with other threads.
 #[derive(Debug)]
@@ -71,7 +75,7 @@ fn main() {
             Message::Feed(FeedMsg::Error) => main_ctrl.msg_to_ui("Error retrieving RSS feed.".to_string()),
 
             Message::Ui(UiMsg::Sync(pod_index)) => {
-                let pod = main_ctrl.clone_podcast(pod_index).unwrap();
+                let pod = main_ctrl.podcasts.clone_podcast(pod_index).unwrap();
                 let tx_feeds_to_main = mpsc::Sender::clone(&main_ctrl.tx_to_main);
                 let _ = feeds::spawn_feed_checker(
                     tx_feeds_to_main,
@@ -89,14 +93,14 @@ fn main() {
                 // need to access the list.
                 let mut pod_data = Vec::new();
                 {
-                    let borrowed_pod_list = main_ctrl.podcast_list
-                        .lock().unwrap();
+                    let borrowed_pod_list = main_ctrl.podcasts
+                        .borrow();
                     for podcast in borrowed_pod_list.iter() {
                         pod_data.push((podcast.url.clone(), podcast.id));
                     }
                 }
-                for data in pod_data.iter() {
-                    let url = data.0.clone();
+                for data in pod_data.into_iter() {
+                    let url = data.0;
                     let id = data.1;
 
                     let tx_feeds_to_main = mpsc::Sender::clone(&main_ctrl.tx_to_main);
@@ -107,23 +111,22 @@ fn main() {
             Message::Ui(UiMsg::Play(pod_index, ep_index)) => main_ctrl.play_file(pod_index, ep_index),
 
             Message::Ui(UiMsg::MarkPlayed(pod_index, ep_index, played)) => {
-                let mut podcast = main_ctrl.clone_podcast(pod_index).unwrap();
+                let mut podcast = main_ctrl.podcasts.clone_podcast(pod_index).unwrap();
                 let mut any_unplayed = false;
-                {
-                    let mut borrowed_ep_list = podcast
-                        .episodes.lock().unwrap();
-                    
-                    // TODO: Try to find a way to do this without having
-                    // to clone the episode...
-                    let mut episode = borrowed_ep_list
-                        .get(ep_index as usize).unwrap().clone();
-                    episode.played = played;
-                    
-                    main_ctrl.db.set_played_status(episode.id.unwrap(), played);
-                    borrowed_ep_list[ep_index as usize] = episode;
 
+                // TODO: Try to find a way to do this without having
+                // to clone the episode...
+                let mut episode = podcast.episodes.clone_episode(ep_index).unwrap();
+                episode.played = played;
+                
+                main_ctrl.db.set_played_status(episode.id.unwrap(), played);
+                podcast.episodes.replace(ep_index, episode).unwrap();
+
+                {
                     // recheck if there are any unplayed episodes for the
                     // selected podcast
+                    let borrowed_ep_list = podcast
+                        .episodes.borrow();
                     for ep in borrowed_ep_list.iter() {
                         if !ep.played {
                             any_unplayed = true;
@@ -133,15 +136,15 @@ fn main() {
                 }
                 if any_unplayed != podcast.any_unplayed {
                     podcast.any_unplayed = any_unplayed;
-                    main_ctrl.replace_podcast(pod_index, podcast);
+                    main_ctrl.podcasts.replace(pod_index, podcast).unwrap();
                 }
             },
 
             Message::Ui(UiMsg::MarkAllPlayed(pod_index, played)) => {
-                let mut podcast = main_ctrl.clone_podcast(pod_index).unwrap();
+                let mut podcast = main_ctrl.podcasts.clone_podcast(pod_index).unwrap();
                 {
                     let mut borrowed_ep_list = podcast
-                        .episodes.lock().unwrap();
+                        .episodes.borrow();
 
                     for ep in borrowed_ep_list.iter() {
                         main_ctrl.db.set_played_status(ep.id.unwrap(), played);
@@ -151,22 +154,25 @@ fn main() {
                 }
 
                 podcast.any_unplayed = !played;
-                main_ctrl.replace_podcast(pod_index, podcast);
+                main_ctrl.podcasts.replace(pod_index, podcast).unwrap();
                 main_ctrl.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
             },
 
             Message::Ui(UiMsg::Download(pod_index, ep_index)) => {
-                let podcast = main_ctrl.clone_podcast(pod_index)
-                    .unwrap();
-                let episode = main_ctrl.clone_episode(pod_index, ep_index)
-                    .unwrap();
+                let pod_title;
+                {
+                    let borrowed_podcast_list = main_ctrl.podcasts.borrow();
+                    pod_title = borrowed_podcast_list[pod_index as usize].title.clone();
+                }
+                let episode = main_ctrl.podcasts
+                    .clone_episode(pod_index, ep_index).unwrap();
 
                 // add directory for podcast, create if it does not exist
                 let mut download_path = main_ctrl.config.download_path.clone();
-                download_path.push(podcast.title.clone());
+                download_path.push(pod_title.clone());
                 if std::fs::create_dir_all(&download_path).is_err() {
                     main_ctrl.msg_to_ui(
-                        format!("Could not create dir: {}", podcast.title.clone()));
+                        format!("Could not create dir: {}", pod_title.clone()));
                 }
 
                 main_ctrl.download_manager.download_list(
@@ -176,18 +182,17 @@ fn main() {
             Message::Dl(DownloadMsg::Complete(ep_data)) => {
                 let _ = main_ctrl.db.insert_file(ep_data.id, &ep_data.file_path);
                 {
-                    let borrowed_pod_list = main_ctrl.podcast_list.lock().unwrap();
-                    let borrowed_podcast = borrowed_pod_list.iter()
-                        .find(|pod| pod.id == Some(ep_data.pod_id))
-                        .unwrap();
-                    let mut borrowed_ep_list = borrowed_podcast
-                        .episodes.lock().unwrap();
-                    let ep_idx = borrowed_ep_list.iter()
-                        .position(|ep| ep.id == Some(ep_data.id))
-                        .unwrap();
-                    let mut episode = borrowed_ep_list[ep_idx].clone();
+                    let pod_index = main_ctrl.podcasts
+                        .id_to_index(ep_data.pod_id).unwrap();
+                    // TODO: Try to do this without cloning the podcast...
+                    let podcast = main_ctrl.podcasts
+                        .clone_podcast(pod_index).unwrap();
+
+                    let ep_index = podcast.episodes
+                        .id_to_index(ep_data.id).unwrap();
+                    let mut episode = podcast.episodes.clone_episode(ep_index).unwrap();
                     episode.path = Some(ep_data.file_path.clone());
-                    borrowed_ep_list[ep_idx] = episode;
+                    podcast.episodes.replace(ep_index, episode).unwrap();
                 }
 
                 main_ctrl.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
@@ -207,14 +212,13 @@ fn main() {
             },
 
             Message::Ui(UiMsg::DownloadAll(pod_index)) => {
-                let borrowed_pod_list = main_ctrl.podcast_list.lock().unwrap();
-                let borrowed_podcast = borrowed_pod_list
-                    .get(pod_index as usize).unwrap();
-                let borrowed_ep_list = borrowed_podcast
-                    .episodes.lock().unwrap();
+                // TODO: Try to do this without cloning the podcast...
+                let podcast = main_ctrl.podcasts
+                    .clone_podcast(pod_index).unwrap();
+                let pod_title = podcast.title.clone();
+                let borrowed_ep_list = podcast
+                    .episodes.borrow();
 
-                // TODO: Try to find a way to do this without having
-                // to clone the episodes...
                 let mut episodes = Vec::new();
                 for e in borrowed_ep_list.iter() {
                     episodes.push(e);
@@ -222,10 +226,10 @@ fn main() {
 
                 // add directory for podcast, create if it does not exist
                 let mut download_path = main_ctrl.config.download_path.clone();
-                download_path.push(borrowed_podcast.title.clone());
+                download_path.push(pod_title.clone());
                 if std::fs::create_dir_all(&download_path).is_err() {
                     main_ctrl.msg_to_ui(
-                        format!("Could not create dir: {}", borrowed_podcast.title.clone()));
+                        format!("Could not create dir: {}", pod_title));
                 }
 
                 main_ctrl.download_manager.download_list(
@@ -273,7 +277,7 @@ struct MainController {
     config: Config,
     db: Database,
     download_manager: downloads::DownloadManager,
-    podcast_list: MutableVec<Podcast>,
+    podcasts: LockVec<Podcast>,
     ui_thread: std::thread::JoinHandle<()>,
     tx_to_ui: mpsc::Sender<MainMessage>,
     tx_to_main: mpsc::Sender<Message>,
@@ -303,19 +307,18 @@ impl MainController {
         // "ground truth" list of podcasts, and it must be mutable, but
         // UI needs to check this list and update the screen when
         // necessary
-        let podcast_list: MutableVec<Podcast> = Arc::new(
-            Mutex::new(db_inst.get_podcasts()));
+        let podcast_list = LockVec::new(db_inst.get_podcasts());
     
         // set up UI in new thread
         let tx_ui_to_main = mpsc::Sender::clone(&tx_to_main);
-        let ui_thread = UI::spawn(config.clone(), Arc::clone(&podcast_list), rx_from_main, tx_ui_to_main);
+        let ui_thread = UI::spawn(config.clone(), podcast_list.clone(), rx_from_main, tx_ui_to_main);
             // TODO: Can we do this without cloning the config?
 
         return MainController {
             config: config,
             db: db_inst,
             download_manager: download_manager,
-            podcast_list: podcast_list,
+            podcasts: podcast_list,
             ui_thread: ui_thread,
             tx_to_ui: tx_to_ui,
             tx_to_main: tx_to_main,
@@ -323,50 +326,11 @@ impl MainController {
         };
     }
 
-    /// Clones the selected podcast.
-    fn clone_podcast(&self, pod_index: i32) -> Option<Podcast> {
-        let borrowed_pod_list = self.podcast_list.lock().unwrap();
-        return match borrowed_pod_list.get(pod_index as usize) {
-            Some(pod) => Some(pod.clone()),
-            None => None,
-        };
-    }
-
-    /// Clones the selected episode within the selected podcast.
-    fn clone_episode(&self, pod_index: i32, ep_index: i32) -> Option<Episode> {
-        let borrowed_pod_list = self.podcast_list
-            .lock().unwrap();
-        if let Some(pod) = borrowed_pod_list.get(pod_index as usize) {
-            let borrowed_ep_list = pod.episodes
-                .lock().unwrap();
-            if let Some(ep) = borrowed_ep_list.get(ep_index as usize) {
-                return Some(ep.clone());
-            }
-        }
-        return None
-    }
-
-    /// Replaces the podcast at the given index with a new podcast.
-    fn replace_podcast(&self, pod_index: i32, podcast: Podcast) {
-        let mut borrowed_pod_list = self.podcast_list.lock().unwrap();
-        borrowed_pod_list[pod_index as usize] = podcast;
-    }
-
-    /// Replaces the episode at the given index with a new episode.
-    // fn replace_episode(&self, pod_index: i32, ep_index: i32, episode: Episode) {
-    //     let podcast = self.clone_podcast(pod_index).unwrap();
-    //     {
-    //         let mut borrowed_ep_list = podcast.episodes.lock().unwrap();
-    //         borrowed_ep_list[ep_index as usize] = episode;
-    //     }
-    //     self.replace_podcast(pod_index, podcast);
-    // }
-
     /// Sends the specified message to the UI, which will display at
     /// the bottom of the screen.
     fn msg_to_ui(&self, message: String) {
         self.tx_to_ui.send(MainMessage::UiSpawnMsgWin(
-            message, 5000)).unwrap();
+            message, MESSAGE_TIME)).unwrap();
     }
 
     /// Handles the application logic for adding a new podcast, or
@@ -385,7 +349,7 @@ impl MainController {
         }
         match db_result {
             Ok(num_ep) => {
-                *self.podcast_list.lock().unwrap() = self.db.get_podcasts();
+                *self.podcasts.borrow() = self.db.get_podcasts();
                 self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
 
                 if update {
@@ -398,8 +362,10 @@ impl MainController {
         }
     }
 
+    /// Attempts to execute the play command on the given podcast
+    /// episode.
     fn play_file(&self, pod_index: i32, ep_index: i32) {
-        let episode = self.clone_episode(
+        let episode = self.podcasts.clone_episode(
             pod_index, ep_index).unwrap();
 
         match episode.path {
