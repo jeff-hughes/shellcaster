@@ -16,7 +16,7 @@ use crate::config::Config;
 use crate::ui::{UI, UiMsg};
 use crate::db::Database;
 use crate::feeds::FeedMsg;
-use crate::downloads::DownloadMsg;
+use crate::downloads::{DownloadMsg, EpData};
 
 // Specifies how long, in milliseconds, to display messages at the
 // bottom of the screen in the UI.
@@ -59,7 +59,7 @@ fn main() {
 
     // MAIN LOOP --------------------------------------------------------
 
-    // wait for messages from the UI and process
+    // wait for messages from the UI and other threads, and then process
     let mut message_iter = main_ctrl.rx_to_main.iter();
     while let Some(message) = message_iter.next() {
         match message {
@@ -70,94 +70,33 @@ fn main() {
                 let _ = feeds::spawn_feed_checker(tx_feeds_to_main, url, None);
             },
 
-            Message::Feed(FeedMsg::NewData(pod)) => main_ctrl.add_or_sync_data(pod, false),
+            Message::Feed(FeedMsg::NewData(pod)) =>
+                main_ctrl.add_or_sync_data(pod, false),
 
-            Message::Feed(FeedMsg::Error) => main_ctrl.msg_to_ui("Error retrieving RSS feed.".to_string()),
+            Message::Feed(FeedMsg::Error) =>
+                main_ctrl.msg_to_ui("Error retrieving RSS feed.".to_string()),
 
-            Message::Ui(UiMsg::Sync(pod_index)) => {
-                let pod = main_ctrl.podcasts.clone_podcast(pod_index).unwrap();
-                let tx_feeds_to_main = mpsc::Sender::clone(&main_ctrl.tx_to_main);
-                let _ = feeds::spawn_feed_checker(
-                    tx_feeds_to_main,
-                    pod.url,
-                    pod.id);
-            },
+            Message::Ui(UiMsg::Sync(pod_index)) =>
+                main_ctrl.sync(Some(pod_index)),
 
-            Message::Feed(FeedMsg::SyncData(pod)) => main_ctrl.add_or_sync_data(pod, true),
+            Message::Feed(FeedMsg::SyncData(pod)) =>
+                main_ctrl.add_or_sync_data(pod, true),
 
-            Message::Ui(UiMsg::SyncAll) => {
-                // We pull out the data we need here first, so we can
-                // stop borrowing the podcast list as quickly as possible.
-                // Slightly less efficient (two loops instead of
-                // one), but then it won't block other tasks that
-                // need to access the list.
-                let mut pod_data = Vec::new();
-                {
-                    let borrowed_pod_list = main_ctrl.podcasts
-                        .borrow();
-                    for podcast in borrowed_pod_list.iter() {
-                        pod_data.push((podcast.url.clone(), podcast.id));
-                    }
-                }
-                for data in pod_data.into_iter() {
-                    let url = data.0;
-                    let id = data.1;
+            Message::Ui(UiMsg::SyncAll) =>
+                main_ctrl.sync(None),
 
-                    let tx_feeds_to_main = mpsc::Sender::clone(&main_ctrl.tx_to_main);
-                    let _ = feeds::spawn_feed_checker(tx_feeds_to_main, url, id);
-                }
-            },
+            Message::Ui(UiMsg::Play(pod_index, ep_index)) =>
+                main_ctrl.play_file(pod_index, ep_index),
 
-            Message::Ui(UiMsg::Play(pod_index, ep_index)) => main_ctrl.play_file(pod_index, ep_index),
+            Message::Ui(UiMsg::MarkPlayed(pod_index, ep_index, played)) =>
+                main_ctrl.mark_played(pod_index, ep_index, played),
 
-            Message::Ui(UiMsg::MarkPlayed(pod_index, ep_index, played)) => {
-                let mut podcast = main_ctrl.podcasts.clone_podcast(pod_index).unwrap();
-                let mut any_unplayed = false;
+            Message::Ui(UiMsg::MarkAllPlayed(pod_index, played)) =>
+                main_ctrl.mark_all_played(pod_index, played),
 
-                // TODO: Try to find a way to do this without having
-                // to clone the episode...
-                let mut episode = podcast.episodes.clone_episode(ep_index).unwrap();
-                episode.played = played;
-                
-                main_ctrl.db.set_played_status(episode.id.unwrap(), played);
-                podcast.episodes.replace(ep_index, episode).unwrap();
-
-                {
-                    // recheck if there are any unplayed episodes for the
-                    // selected podcast
-                    let borrowed_ep_list = podcast
-                        .episodes.borrow();
-                    for ep in borrowed_ep_list.iter() {
-                        if !ep.played {
-                            any_unplayed = true;
-                            break;
-                        }
-                    }
-                }
-                if any_unplayed != podcast.any_unplayed {
-                    podcast.any_unplayed = any_unplayed;
-                    main_ctrl.podcasts.replace(pod_index, podcast).unwrap();
-                }
-            },
-
-            Message::Ui(UiMsg::MarkAllPlayed(pod_index, played)) => {
-                let mut podcast = main_ctrl.podcasts.clone_podcast(pod_index).unwrap();
-                {
-                    let mut borrowed_ep_list = podcast
-                        .episodes.borrow();
-
-                    for ep in borrowed_ep_list.iter() {
-                        main_ctrl.db.set_played_status(ep.id.unwrap(), played);
-                    }
-
-                    *borrowed_ep_list = main_ctrl.db.get_episodes(podcast.id.unwrap());
-                }
-
-                podcast.any_unplayed = !played;
-                main_ctrl.podcasts.replace(pod_index, podcast).unwrap();
-                main_ctrl.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
-            },
-
+            // TODO: Stuck with this here for now because
+            // `main_ctrl.download_manager.download_list()` requires
+            // mutable borrow
             Message::Ui(UiMsg::Download(pod_index, ep_index)) => {
                 let pod_title;
                 {
@@ -168,49 +107,29 @@ fn main() {
                     .clone_episode(pod_index, ep_index).unwrap();
 
                 // add directory for podcast, create if it does not exist
-                let mut download_path = main_ctrl.config.download_path.clone();
-                download_path.push(pod_title.clone());
-                if std::fs::create_dir_all(&download_path).is_err() {
-                    main_ctrl.msg_to_ui(
-                        format!("Could not create dir: {}", pod_title.clone()));
+                match main_ctrl.create_podcast_dir(pod_title.clone()) {
+                    Ok(path) => main_ctrl.download_manager.download_list(
+                        &[&episode], &path),
+                    Err(_) => main_ctrl.msg_to_ui(
+                        format!("Could not create dir: {}", pod_title)),
                 }
-
-                main_ctrl.download_manager.download_list(
-                    &[&episode], &download_path);
             },
 
-            Message::Dl(DownloadMsg::Complete(ep_data)) => {
-                let _ = main_ctrl.db.insert_file(ep_data.id, &ep_data.file_path);
-                {
-                    let pod_index = main_ctrl.podcasts
-                        .id_to_index(ep_data.pod_id).unwrap();
-                    // TODO: Try to do this without cloning the podcast...
-                    let podcast = main_ctrl.podcasts
-                        .clone_podcast(pod_index).unwrap();
+            // downloading can produce any one of these responses
+            Message::Dl(DownloadMsg::Complete(ep_data)) =>
+                main_ctrl.download_complete(ep_data),
+            Message::Dl(DownloadMsg::ResponseError(_)) =>
+                main_ctrl.msg_to_ui("Error sending download request.".to_string()),
+            Message::Dl(DownloadMsg::ResponseDataError(_)) =>
+                main_ctrl.msg_to_ui("Error downloading episode.".to_string()),
+            Message::Dl(DownloadMsg::FileCreateError(_)) =>
+                main_ctrl.msg_to_ui("Error creating file.".to_string()),
+            Message::Dl(DownloadMsg::FileWriteError(_)) =>
+                main_ctrl.msg_to_ui("Error writing file to disk.".to_string()),
 
-                    let ep_index = podcast.episodes
-                        .id_to_index(ep_data.id).unwrap();
-                    let mut episode = podcast.episodes.clone_episode(ep_index).unwrap();
-                    episode.path = Some(ep_data.file_path.clone());
-                    podcast.episodes.replace(ep_index, episode).unwrap();
-                }
-
-                main_ctrl.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
-            },
-
-            Message::Dl(DownloadMsg::ResponseError(_)) => {
-                main_ctrl.msg_to_ui("Error sending download request.".to_string());
-            },
-            Message::Dl(DownloadMsg::ResponseDataError(_)) => {
-                main_ctrl.msg_to_ui("Error downloading episode.".to_string()); 
-            },
-            Message::Dl(DownloadMsg::FileCreateError(_)) => {
-                main_ctrl.msg_to_ui("Error creating file.".to_string()); 
-            },
-            Message::Dl(DownloadMsg::FileWriteError(_)) => {
-                main_ctrl.msg_to_ui("Error writing file to disk.".to_string()); 
-            },
-
+            // TODO: Stuck with this here for now because
+            // `main_ctrl.download_manager.download_list()` requires
+            // mutable borrow
             Message::Ui(UiMsg::DownloadAll(pod_index)) => {
                 // TODO: Try to do this without cloning the podcast...
                 let podcast = main_ctrl.podcasts
@@ -225,21 +144,19 @@ fn main() {
                 }
 
                 // add directory for podcast, create if it does not exist
-                let mut download_path = main_ctrl.config.download_path.clone();
-                download_path.push(pod_title.clone());
-                if std::fs::create_dir_all(&download_path).is_err() {
-                    main_ctrl.msg_to_ui(
-                        format!("Could not create dir: {}", pod_title));
+                match main_ctrl.create_podcast_dir(pod_title.clone()) {
+                    Ok(path) => main_ctrl.download_manager.download_list(
+                        &episodes, &path),
+                    Err(_) => main_ctrl.msg_to_ui(
+                        format!("Could not create dir: {}", pod_title)),
                 }
-
-                main_ctrl.download_manager.download_list(
-                    &episodes, &download_path);
             },
 
             Message::Ui(UiMsg::Noop) => (),
         }
     }
 
+    // CLEANUP ----------------------------------------------------------
     main_ctrl.tx_to_ui.send(MainMessage::UiTearDown).unwrap();
     main_ctrl.ui_thread.join().unwrap();  // wait for UI thread to finish teardown
 }
@@ -333,6 +250,40 @@ impl MainController {
             message, MESSAGE_TIME)).unwrap();
     }
 
+    /// Synchronize RSS feed data for one or more podcasts.
+    fn sync(&self, pod_index: Option<i32>) {
+        // We pull out the data we need here first, so we can
+        // stop borrowing the podcast list as quickly as possible.
+        // Slightly less efficient (two loops instead of
+        // one), but then it won't block other tasks that
+        // need to access the list.
+        let mut pod_data = Vec::new();
+        {
+            let borrowed_pod_list = self.podcasts
+                .borrow();
+            match pod_index {
+                Some(idx) => {
+                    // just grab one podcast
+                    let podcast = &borrowed_pod_list[idx as usize];
+                    pod_data.push((podcast.url.clone(), podcast.id));
+                },
+                None => {
+                    // get all of 'em!
+                    for podcast in borrowed_pod_list.iter() {
+                        pod_data.push((podcast.url.clone(), podcast.id));
+                    }
+                },
+            }
+        }
+        for data in pod_data.into_iter() {
+            let url = data.0;
+            let id = data.1;
+
+            let tx_feeds_to_main = mpsc::Sender::clone(&self.tx_to_main);
+            let _ = feeds::spawn_feed_checker(tx_feeds_to_main, url, id);
+        }
+    }
+
     /// Handles the application logic for adding a new podcast, or
     /// synchronizing data from the RSS feed of an existing podcast.
     fn add_or_sync_data(&self, pod: Podcast, update: bool) {
@@ -389,6 +340,124 @@ impl MainController {
                         "Error: Could not stream URL.".to_string());
                 }
             }
+        }
+    }
+
+    /// Given a podcast and episode, it marks the given episode as
+    /// played/unplayed, sending this info to the database and updating
+    /// in main_ctrl.podcasts
+    fn mark_played(&self, pod_index: i32, ep_index: i32, played: bool) {
+        let mut podcast = self.podcasts.clone_podcast(pod_index).unwrap();
+        let mut any_unplayed = false;
+
+        // TODO: Try to find a way to do this without having
+        // to clone the episode...
+        let mut episode = podcast.episodes.clone_episode(ep_index).unwrap();
+        episode.played = played;
+        
+        self.db.set_played_status(episode.id.unwrap(), played);
+        podcast.episodes.replace(ep_index, episode).unwrap();
+
+        {
+            // recheck if there are any unplayed episodes for the
+            // selected podcast
+            let borrowed_ep_list = podcast
+                .episodes.borrow();
+            for ep in borrowed_ep_list.iter() {
+                if !ep.played {
+                    any_unplayed = true;
+                    break;
+                }
+            }
+        }
+        if any_unplayed != podcast.any_unplayed {
+            podcast.any_unplayed = any_unplayed;
+            self.podcasts.replace(pod_index, podcast).unwrap();
+        }
+    }
+
+    /// Given a podcast, it marks all episodes for that podcast as
+    /// played/unplayed, sending this info to the database and updating
+    /// in main_ctrl.podcasts
+    fn mark_all_played(&self, pod_index: i32, played: bool) {
+        let mut podcast = self.podcasts.clone_podcast(pod_index).unwrap();
+        {
+            let mut borrowed_ep_list = podcast
+                .episodes.borrow();
+
+            for ep in borrowed_ep_list.iter() {
+                self.db.set_played_status(ep.id.unwrap(), played);
+            }
+
+            *borrowed_ep_list = self.db.get_episodes(podcast.id.unwrap());
+        }
+
+        podcast.any_unplayed = !played;
+        self.podcasts.replace(pod_index, podcast).unwrap();
+        self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
+    }
+
+    // TODO: Right now this can't be used because the main loop is
+    // borrowing the MainController object, and the last line of this
+    // function mutates MainController, so the borrow checker complains.
+    // fn download(&mut self, pod_index: i32, ep_index: Option<i32>) {
+    //     // TODO: Try to do this without cloning the podcast...
+    //     let podcast = self.podcasts
+    //         .clone_podcast(pod_index).unwrap();
+    //     let pod_title = podcast.title.clone();
+    //     let borrowed_ep_list = podcast
+    //         .episodes.borrow();
+
+    //     let mut episodes = Vec::new();
+
+    //     // if we are selecting one specific episode, just grab that one;
+    //     // otherwise, loop through them all
+    //     match ep_index {
+    //         Some(ep_idx) => episodes.push(&borrowed_ep_list[ep_idx as usize]),
+    //         None => {
+    //             for e in borrowed_ep_list.iter() {
+    //                 episodes.push(e);
+    //             }
+    //         }
+    //     }
+
+    //     // add directory for podcast, create if it does not exist
+    //     match main_ctrl.create_podcast_dir(pod_title.clone()) {
+    //         Ok(path) => main_ctrl.download_manager.download_list(
+    //             &episodes, &path),
+    //         Err(_) => main_ctrl.msg_to_ui(
+    //             format!("Could not create dir: {}", pod_title)),
+    //     })
+    // }
+
+    /// Handles logic for what to do when a download successfully completes.
+    fn download_complete(&self, ep_data: EpData) {
+        let _ = self.db.insert_file(ep_data.id, &ep_data.file_path);
+        {
+            let pod_index = self.podcasts
+                .id_to_index(ep_data.pod_id).unwrap();
+            // TODO: Try to do this without cloning the podcast...
+            let podcast = self.podcasts
+                .clone_podcast(pod_index).unwrap();
+
+            let ep_index = podcast.episodes
+                .id_to_index(ep_data.id).unwrap();
+            let mut episode = podcast.episodes.clone_episode(ep_index).unwrap();
+            episode.path = Some(ep_data.file_path.clone());
+            podcast.episodes.replace(ep_index, episode).unwrap();
+        }
+
+        self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
+    }
+
+    /// Given a podcast title, creates a download directory for that
+    /// podcast if it does not already exist.
+    fn create_podcast_dir(&self, pod_title: String) -> Result<PathBuf, std::io::Error> {
+        let mut download_path = self.config.download_path.clone();
+        download_path.push(pod_title);
+        return match std::fs::create_dir_all(&download_path) {
+            Ok(_) => Ok(download_path),
+            Err(err) => Err(err),
         }
     }
 }
