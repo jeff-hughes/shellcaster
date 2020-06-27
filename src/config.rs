@@ -53,54 +53,56 @@ struct KeybindingsFromToml {
 }
 
 
-/// Given a file path, this reads a TOML config file and returns a Config
-/// struct with keybindings, etc. Inserts defaults if config file does
-/// not exist, or if specific values are not set.
-pub fn parse_config_file(path: &PathBuf) -> Config {
-    let mut config_string = String::new();
-    let config_toml: ConfigFromToml;
+impl Config {
+    /// Given a file path, this reads a TOML config file and returns a
+    /// Config struct with keybindings, etc. Inserts defaults if config
+    /// file does not exist, or if specific values are not set.
+    pub fn new(path: &PathBuf) -> Config {
+        let mut config_string = String::new();
+        let config_toml: ConfigFromToml;
 
-    match File::open(path) {
-        Ok(mut file) => {
-            file.read_to_string(&mut config_string)
-                .expect("Error reading config.toml. Please ensure file is readable.");
-            config_toml = toml::from_str(&config_string)
-                .expect("Error parsing config.toml. Please check file syntax.");
-        },
-        Err(_) => {
-            // if we can't find the file, set everything to empty
-            // so we it will use the defaults for everything
-            let keybindings = KeybindingsFromToml {
-                left: None,
-                right: None,
-                up: None,
-                down: None,
-                add_feed: None,
-                sync: None,
-                sync_all: None,
-                play: None,
-                mark_played: None,
-                mark_all_played: None,
-                download: None,
-                download_all: None,
-                delete: None,
-                delete_all: None,
-                remove: None,
-                remove_all: None,
-                search: None,
-                quit: None,
-            };
-            config_toml = ConfigFromToml {
-                config_path: None,
-                download_path: None,
-                simultaneous_downloads: None,
-                play_command: None,
-                keybindings: keybindings,
-            };
+        match File::open(path) {
+            Ok(mut file) => {
+                file.read_to_string(&mut config_string)
+                    .expect("Error reading config.toml. Please ensure file is readable.");
+                config_toml = toml::from_str(&config_string)
+                    .expect("Error parsing config.toml. Please check file syntax.");
+            },
+            Err(_) => {
+                // if we can't find the file, set everything to empty
+                // so we it will use the defaults for everything
+                let keybindings = KeybindingsFromToml {
+                    left: None,
+                    right: None,
+                    up: None,
+                    down: None,
+                    add_feed: None,
+                    sync: None,
+                    sync_all: None,
+                    play: None,
+                    mark_played: None,
+                    mark_all_played: None,
+                    download: None,
+                    download_all: None,
+                    delete: None,
+                    delete_all: None,
+                    remove: None,
+                    remove_all: None,
+                    search: None,
+                    quit: None,
+                };
+                config_toml = ConfigFromToml {
+                    config_path: None,
+                    download_path: None,
+                    simultaneous_downloads: None,
+                    play_command: None,
+                    keybindings: keybindings,
+                };
+            }
         }
-    }
 
-    return config_with_defaults(&config_toml);
+        return config_with_defaults(&config_toml);
+    }
 }
 
 /// Takes the deserialized TOML configuration, and creates a Config struct
