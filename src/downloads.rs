@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex, mpsc, mpsc::Sender};
 use std::thread;
 
 use reqwest::blocking::Client;
+use sanitize_filename::{sanitize_with_options, Options};
 
 use crate::types::{Episode, Message};
 
@@ -69,8 +70,14 @@ impl DownloadManager {
 
         // parse episode details and push to queue
         for ep in episodes.iter() {
+            let file_name = sanitize_with_options(&ep.title, Options {
+                truncate: true,
+                windows: true,  // for simplicity, we'll just use Windows-friendly paths for everyone
+                replacement: ""
+            });
+
             let mut file_path = dest.clone();
-            file_path.push(format!("{}.mp3", ep.title));
+            file_path.push(format!("{}.mp3", file_name));
 
             let ep_data = EpData {
                 id: ep.id.unwrap(),
