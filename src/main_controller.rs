@@ -14,7 +14,7 @@ use crate::MESSAGE_TIME;
 #[derive(Debug)]
 pub enum MainMessage {
     UiUpdateMenus,
-    UiSpawnMsgWin(String, u64),
+    UiSpawnMsgWin(String, u64, bool),
     UiTearDown,
 }
 
@@ -75,9 +75,9 @@ impl MainController {
 
     /// Sends the specified message to the UI, which will display at
     /// the bottom of the screen.
-    pub fn msg_to_ui(&self, message: String) {
+    pub fn msg_to_ui(&self, message: String, error: bool) {
         self.tx_to_ui.send(MainMessage::UiSpawnMsgWin(
-            message, MESSAGE_TIME)).unwrap();
+            message, MESSAGE_TIME, error)).unwrap();
     }
 
     /// Synchronize RSS feed data for one or more podcasts.
@@ -134,12 +134,12 @@ impl MainController {
                 self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
 
                 if update {
-                    self.msg_to_ui(format!("Synchronized {}.", title));
+                    self.msg_to_ui(format!("Synchronized {}.", title), false);
                 } else {
-                    self.msg_to_ui(format!("Successfully added {} episodes.", num_ep));
+                    self.msg_to_ui(format!("Successfully added {} episodes.", num_ep), false);
                 }
             },
-            Err(_err) => self.msg_to_ui(failure),
+            Err(_err) => self.msg_to_ui(failure, true),
         }
     }
 
@@ -156,18 +156,18 @@ impl MainController {
                     Some(p) => {
                         if play_file::execute(&self.config.play_command, &p).is_err() {
                             self.msg_to_ui(
-                                "Error: Could not play file. Check configuration.".to_string());
+                                "Error: Could not play file. Check configuration.".to_string(), true);
                         }
                     },
                     None => self.msg_to_ui(
-                        "Error: Filepath is not valid Unicode.".to_string()),
+                        "Error: Filepath is not valid Unicode.".to_string(), true),
                 }
             },
             // otherwise, try to stream the URL
             None => {
                 if play_file::execute(&self.config.play_command, &episode.url).is_err() {
                     self.msg_to_ui(
-                        "Error: Could not stream URL.".to_string());
+                        "Error: Could not stream URL.".to_string(),true);
                 }
             }
         }

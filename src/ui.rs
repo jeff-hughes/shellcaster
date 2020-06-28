@@ -1,4 +1,5 @@
 use std::cmp::min;
+use std::collections::HashMap;
 
 use std::thread;
 use std::sync::mpsc;
@@ -35,6 +36,7 @@ enum ActiveMenu {
     EpisodeMenu,
 }
 
+
 /// Struct containing all interface elements of the TUI. Functionally, it
 /// encapsulates the pancurses windows, and holds data about the size of
 /// the screen.
@@ -44,6 +46,7 @@ pub struct UI<'a> {
     n_row: i32,
     n_col: i32,
     keymap: &'a Keybindings,
+    colors: Colors,
     podcast_menu: Menu<Podcast>,
     episode_menu: Menu<Episode>,
     active_menu: ActiveMenu,
@@ -68,7 +71,7 @@ impl<'a> UI<'a> {
                 if let Some(message) = message_iter.next() {
                     match message {
                         MainMessage::UiUpdateMenus => ui.update_menus(),
-                        MainMessage::UiSpawnMsgWin(msg, duration) => ui.spawn_msg_win(msg, duration),
+                        MainMessage::UiSpawnMsgWin(msg, duration, error) => ui.spawn_msg_win(msg, duration, error),
                         MainMessage::UiTearDown => {
                             ui.tear_down();
                             break;
@@ -99,20 +102,22 @@ impl<'a> UI<'a> {
         stdscr.nodelay(true);  // getch() will not wait for user input
 
         // set colors
-        pancurses::init_pair(1, pancurses::COLOR_WHITE, pancurses::COLOR_BLACK);
-        pancurses::init_pair(2, pancurses::COLOR_BLACK, pancurses::COLOR_WHITE);
+        let colors = set_colors();
 
         let (n_row, n_col) = stdscr.get_max_yx();
 
         let pod_col = n_col / 2;
-        let ep_col = n_col - pod_col;
+        let ep_col = n_col - pod_col + 1;
 
-        let podcast_menu_win = newwin(n_row, pod_col, 0, 0);
+        let podcast_menu_win = newwin(n_row - 1, pod_col, 0, 0);
         let mut podcast_menu = Menu {
             window: podcast_menu_win,
+            screen_pos: 0,
+            colors: colors.clone(),
+            title: "Podcasts".to_string(),
             items: items.clone(),
-            n_row: n_row,
-            n_col: pod_col,
+            n_row: n_row - 3,  // 2 for border and 1 for messages at bottom
+            n_col: pod_col - 4,  // 2 for border, 2 for margins
             top_row: 0,
             selected: 0,
         };
@@ -122,16 +127,19 @@ impl<'a> UI<'a> {
         podcast_menu.activate();
         podcast_menu.window.noutrefresh();
 
-        let episode_menu_win = newwin(n_row, ep_col, 0, pod_col);
+        let episode_menu_win = newwin(n_row - 1, ep_col, 0, pod_col - 1);
         let first_pod: LockVec<Episode> = match items.borrow().get(0) {
             Some(pod) => pod.episodes.clone(),
             None => LockVec::new(Vec::new()),
         };
         let mut episode_menu = Menu {
             window: episode_menu_win,
+            screen_pos: 1,
+            colors: colors.clone(),
+            title: "Episodes".to_string(),
             items: first_pod,
-            n_row: n_row,
-            n_col: ep_col,
+            n_row: n_row - 3,  // 2 for border and 1 for messages at bottom
+            n_col: ep_col - 4,  // 2 for border, 2 for margins
             top_row: 0,
             selected: 0,
         };
@@ -152,6 +160,7 @@ impl<'a> UI<'a> {
             n_row,
             n_col,
             keymap: &config.keybindings,
+            colors: colors,
             podcast_menu: podcast_menu,
             episode_menu: episode_menu,
             active_menu: ActiveMenu::PodcastMenu,
@@ -282,7 +291,7 @@ impl<'a> UI<'a> {
                             match self.active_menu {
                                 ActiveMenu::PodcastMenu => {
                                     self.active_menu = ActiveMenu::EpisodeMenu;
-                                    // self.podcast_menu.deactivate();
+                                    self.podcast_menu.deactivate();
                                     self.episode_menu.activate();
                                 },
                                 ActiveMenu::EpisodeMenu => (),
@@ -486,14 +495,20 @@ impl<'a> UI<'a> {
     /// displaying messages to the user. `duration` indicates how long
     /// (in milliseconds) this message will remain on screen. Useful for
     /// presenting error messages, among other things.
-    pub fn spawn_msg_win(&self, message: String, duration: u64) {
+    pub fn spawn_msg_win(&self, message: String, duration: u64, error: bool) {
         let n_col = self.n_col;
         let begy = self.n_row - 1;
+        let err_color = self.colors.get(ColorType::Error);
         thread::spawn(move || {
             let msg_win = newwin(1, n_col, begy, 0);
             msg_win.mv(begy, 0);
             msg_win.attrset(pancurses::A_NORMAL);
             msg_win.addstr(message);
+
+            if error {
+                msg_win.mvchgat(0, 0, -1, pancurses::A_BOLD,
+                    err_color);
+            }
             msg_win.refresh();
 
             // TODO: This probably should be some async function, but this
@@ -575,7 +590,9 @@ impl<'a> UI<'a> {
 /// contained by the UI, and hold the list of podcasts or podcast
 /// episodes. They also hold the pancurses window used to display the menu
 /// to the user.
-/// 
+///
+/// * `screen_pos` stores the position of the window on the screen, from
+///   left to right 
 /// * `n_row` and `n_col` store the size of the `window`
 /// * `top_row` indicates the top line of text that is shown on screen
 ///   (since the list of items can be longer than the available size of
@@ -588,6 +605,9 @@ impl<'a> UI<'a> {
 pub struct Menu<T>
     where T: Clone + Menuable {
     window: Window,
+    screen_pos: usize,
+    colors: Colors,
+    title: String,
     items: LockVec<T>,
     n_row: i32,
     n_col: i32,
@@ -599,20 +619,48 @@ impl<T: Clone + Menuable> Menu<T> {
     /// Prints the list of visible items to the pancurses window and
     /// refreshes it.
     pub fn init(&mut self) {
+        self.draw_border();
         self.update_items();
+    }
+
+    fn draw_border(&self) {
+        let top_left;
+        let bot_left;
+        match self.screen_pos {
+            0 => {
+                top_left = pancurses::ACS_ULCORNER();
+                bot_left = pancurses::ACS_LLCORNER();
+            }
+            _ => {
+                top_left = pancurses::ACS_TTEE();
+                bot_left = pancurses::ACS_BTEE();
+            }
+        }
+        self.window.border(
+            pancurses::ACS_VLINE(),
+            pancurses::ACS_VLINE(),
+            pancurses::ACS_HLINE(),
+            pancurses::ACS_HLINE(),
+            top_left,
+            pancurses::ACS_URCORNER(),
+            bot_left,
+            pancurses::ACS_LRCORNER());
+
+        self.window.mvaddstr(0, 2, self.title.clone());
     }
 
     /// Prints or reprints the list of visible items to the pancurses
     /// window and refreshes it.
     fn update_items(&mut self) {
         self.window.erase();
+        self.draw_border();
         // for visible rows, print strings from list
         for i in 0..self.n_row {
             let item_idx = (self.top_row + i) as usize;
             if let Some(elem) = self.items.borrow().get(item_idx) {
                 // look for any unplayed episodes
                 let unplayed = !elem.is_played();
-                self.window.mv(i, 0);
+                self.window.mv(self.abs_y(i), self.abs_x(0));
                 if unplayed {
                     self.window.attron(Attribute::Bold);
                 }
@@ -647,46 +695,58 @@ impl<T: Clone + Menuable> Menu<T> {
             self.selected = abs_bottom;
         }
 
-        // scroll list if necessary
+        // scroll list if necessary:
+        // scroll down
         if self.selected > (self.n_row - 1) {
             self.selected = self.n_row - 1;
             if let Some(elem) = self.items.borrow().get((self.top_row + self.n_row) as usize) {
                 self.top_row += 1;
-                self.window.mv(0, 0);
+                self.window.mv(self.abs_y(0), self.abs_x(0));
                 self.window.deleteln();
                 old_selected -= 1;
 
-                self.window.mv(self.n_row-1, 0);
-                self.window.clrtoeol();
-                self.window.addstr(elem.get_title(self.n_col as usize));
+                self.window.mv(self.abs_y(self.n_row-1), self.abs_x(-1));
+                self.window.clrtobot();
+                self.window.mvaddstr(self.abs_y(self.n_row-1), self.abs_x(0), elem.get_title(self.n_col as usize));
+
+                self.draw_border();
             }
 
+        // scroll up
         } else if self.selected < 0 {
             self.selected = 0;
             if let Some(elem) = self.items.borrow().get((self.top_row - 1) as usize) {
                 self.top_row -= 1;
-                self.window.mv(0, 0);
+                self.window.mv(self.abs_y(0), 0);
                 self.window.insertln();
                 old_selected += 1;
 
-                self.window.mv(0, 0);
+                self.window.mv(self.abs_y(0), self.abs_x(0));
                 self.window.addstr(elem.get_title(self.n_col as usize));
+
+                self.draw_border();
             }
         }
 
-        let old_played = if self.items.borrow().get(old_selected as usize).unwrap().is_played() {
+        let old_played = if self.items.borrow().get((self.top_row + old_selected) as usize).unwrap().is_played() {
             pancurses::A_NORMAL
         } else {
             pancurses::A_BOLD
         };
-        let new_played = if self.items.borrow().get(self.selected as usize).unwrap().is_played() {
+        let new_played = if self.items.borrow().get((self.top_row + self.selected) as usize).unwrap().is_played() {
             pancurses::A_NORMAL
         } else {
             pancurses::A_BOLD
         };
 
-        self.window.mvchgat(old_selected, 0, -1, old_played, 1);
-        self.window.mvchgat(self.selected, 0, -1, new_played, 2);
+        self.window.mvchgat(self.abs_y(old_selected), self.abs_x(-1),
+            self.n_col+2,
+            old_played,
+            self.colors.get(ColorType::Normal));
+        self.window.mvchgat(self.abs_y(self.selected), self.abs_x(-1),
+            self.n_col+2,
+            new_played,
+            self.colors.get(ColorType::HighlightedActive));
         self.window.refresh();
     }
 
@@ -698,19 +758,10 @@ impl<T: Clone + Menuable> Menu<T> {
         } else {
             pancurses::A_BOLD
         };
-        self.window.mvchgat(self.selected, 0, -1, played, 2);
-        self.window.refresh();
-    }
-
-    /// Controls how the window changes when it is inactive (i.e., not
-    /// available for user input to modify state).
-    fn deactivate(&mut self) {
-        let played = if self.items.borrow().get(self.selected as usize).unwrap().is_played() {
-            pancurses::A_NORMAL
-        } else {
-            pancurses::A_BOLD
-        };
-        self.window.mvchgat(self.selected, 0, -1, played, 1);
+        self.window.mvchgat(self.abs_y(self.selected), self.abs_x(-1),
+            self.n_col + 2,
+            played,
+            self.colors.get(ColorType::HighlightedActive));
         self.window.refresh();
     }
 
@@ -726,7 +777,16 @@ impl<T: Clone + Menuable> Menu<T> {
             self.selected = self.n_row - 1;
         }
     }
+
+    fn abs_y(&self, y: i32) -> i32 {
+        return y + 1;
+    }
+
+    fn abs_x(&self, x: i32) -> i32 {
+        return x + 2;
+    }
 }
+
 
 impl Menu<Podcast> {
     /// Returns a cloned reference to the list of episodes from the
@@ -736,4 +796,97 @@ impl Menu<Podcast> {
         return self.items.borrow()
             .get(index as usize).unwrap().episodes.clone();
     }
+
+    /// Controls how the window changes when it is inactive (i.e., not
+    /// available for user input to modify state).
+    fn deactivate(&mut self) {
+        let played = if self.items.borrow().get(self.selected as usize).unwrap().is_played() {
+            pancurses::A_NORMAL
+        } else {
+            pancurses::A_BOLD
+        };
+        self.window.mvchgat(self.abs_y(self.selected), self.abs_x(-1),
+            self.n_col + 2,
+            played,
+            self.colors.get(ColorType::Highlighted));
+        self.window.refresh();
+    }
+}
+
+impl Menu<Episode> {
+    /// Controls how the window changes when it is inactive (i.e., not
+    /// available for user input to modify state).
+    fn deactivate(&mut self) {
+        let played = if self.items.borrow().get(self.selected as usize).unwrap().is_played() {
+            pancurses::A_NORMAL
+        } else {
+            pancurses::A_BOLD
+        };
+        self.window.mvchgat(self.abs_y(self.selected), self.abs_x(-1),
+            self.n_col + 2,
+            played,
+            self.colors.get(ColorType::Normal));
+        self.window.refresh();
+    }
+}
+
+// Everything to do with colors ----------------------------------------
+
+#[derive(Eq, PartialEq, Hash, Copy, Clone, Debug)]
+enum ColorType {
+    Normal,
+    Highlighted,
+    HighlightedActive,
+    Error,
+}
+
+#[derive(Debug, Clone)]
+struct Colors {
+    map: HashMap<ColorType, i16>,
+}
+
+impl Colors {
+    fn new() -> Colors {
+        return Colors {
+            map: HashMap::new(),
+        }
+    }
+
+    fn insert(&mut self, color: ColorType, num: i16) {
+        self.map.insert(color, num);
+    }
+
+    fn get(&self, color: ColorType) -> i16 {
+        return *self.map.get(&color).unwrap();
+    }
+}
+
+
+fn set_colors() -> Colors {
+    // set up a hashmap for easier reference
+    let mut colors = Colors::new();
+    colors.insert(ColorType::Normal, 0);
+    colors.insert(ColorType::Highlighted, 1);
+    colors.insert(ColorType::HighlightedActive, 2);
+    colors.insert(ColorType::Error, 3);
+
+    // specify some colors by RGB value
+    pancurses::init_color(pancurses::COLOR_WHITE, 680, 680, 680);
+    pancurses::init_color(pancurses::COLOR_YELLOW, 820, 643, 0);
+
+    // instantiate curses color pairs
+    pancurses::init_pair(colors.get(ColorType::Normal),
+        pancurses::COLOR_WHITE,
+        pancurses::COLOR_BLACK);
+    pancurses::init_pair(colors.get(ColorType::Highlighted),
+        pancurses::COLOR_BLACK,
+        pancurses::COLOR_WHITE);
+    pancurses::init_pair(colors.get(ColorType::HighlightedActive),
+        pancurses::COLOR_BLACK,
+        pancurses::COLOR_YELLOW);
+    pancurses::init_pair(colors.get(ColorType::Error),
+        pancurses::COLOR_RED,
+        pancurses::COLOR_BLACK);
+
+    return colors;
 }

@@ -67,7 +67,7 @@ fn main() {
                 main_ctrl.add_or_sync_data(pod, false),
 
             Message::Feed(FeedMsg::Error) =>
-                main_ctrl.msg_to_ui("Error retrieving RSS feed.".to_string()),
+                main_ctrl.msg_to_ui("Error retrieving RSS feed.".to_string(), true),
 
             Message::Ui(UiMsg::Sync(pod_index)) =>
                 main_ctrl.sync(Some(pod_index)),
@@ -104,7 +104,7 @@ fn main() {
                     Ok(path) => main_ctrl.download_manager.download_list(
                         &[&episode], &path),
                     Err(_) => main_ctrl.msg_to_ui(
-                        format!("Could not create dir: {}", pod_title)),
+                        format!("Could not create dir: {}", pod_title), true),
                 }
             },
 
@@ -112,13 +112,13 @@ fn main() {
             Message::Dl(DownloadMsg::Complete(ep_data)) =>
                 main_ctrl.download_complete(ep_data),
             Message::Dl(DownloadMsg::ResponseError(_)) =>
-                main_ctrl.msg_to_ui("Error sending download request.".to_string()),
+                main_ctrl.msg_to_ui("Error sending download request.".to_string(), true),
             Message::Dl(DownloadMsg::ResponseDataError(_)) =>
-                main_ctrl.msg_to_ui("Error downloading episode.".to_string()),
+                main_ctrl.msg_to_ui("Error downloading episode.".to_string(), true),
             Message::Dl(DownloadMsg::FileCreateError(_)) =>
-                main_ctrl.msg_to_ui("Error creating file.".to_string()),
+                main_ctrl.msg_to_ui("Error creating file.".to_string(), true),
             Message::Dl(DownloadMsg::FileWriteError(_)) =>
-                main_ctrl.msg_to_ui("Error writing file to disk.".to_string()),
+                main_ctrl.msg_to_ui("Error writing file to disk.".to_string(), true),
 
             // TODO: Stuck with this here for now because
             // `main_ctrl.download_manager.download_list()` requires
@@ -141,7 +141,7 @@ fn main() {
                     Ok(path) => main_ctrl.download_manager.download_list(
                         &episodes, &path),
                     Err(_) => main_ctrl.msg_to_ui(
-                        format!("Could not create dir: {}", pod_title)),
+                        format!("Could not create dir: {}", pod_title), true),
                 }
             },
 
