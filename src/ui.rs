@@ -117,7 +117,7 @@ impl<'a> UI<'a> {
             title: "Podcasts".to_string(),
             items: items.clone(),
             n_row: n_row - 3,  // 2 for border and 1 for messages at bottom
-            n_col: pod_col - 4,  // 2 for border, 2 for margins
+            n_col: pod_col - 5,  // 2 for border, 2 for margins
             top_row: 0,
             selected: 0,
         };
@@ -139,7 +139,9 @@ impl<'a> UI<'a> {
             title: "Episodes".to_string(),
             items: first_pod,
             n_row: n_row - 3,  // 2 for border and 1 for messages at bottom
-            n_col: ep_col - 4,  // 2 for border, 2 for margins
+            n_col: ep_col - 5,  // 2 for border, 2 for margins, and...
+                                // 1 more for luck? I have no idea why
+                                // this needs an extra 1, but it works
             top_row: 0,
             selected: 0,
         };
@@ -186,8 +188,8 @@ impl<'a> UI<'a> {
 
                 let pod_col = n_col / 2;
                 let ep_col = n_col - pod_col;
-                self.podcast_menu.resize(n_row, pod_col);
-                self.episode_menu.resize(n_row, ep_col);
+                self.podcast_menu.resize(n_row-3, pod_col-5);
+                self.episode_menu.resize(n_row-3, ep_col-5);
 
                 // apparently pancurses does not implement `wresize()`
                 // from ncurses, so instead we create an entirely new
@@ -195,10 +197,10 @@ impl<'a> UI<'a> {
                 // but c'est la vie
                 let pod_oldwin = std::mem::replace(
                     &mut self.podcast_menu.window,
-                    newwin(n_row, pod_col, 0, 0));
+                    newwin(n_row-1, pod_col, 0, 0));
                 let ep_oldwin = std::mem::replace(
                     &mut self.episode_menu.window,
-                    newwin(n_row, ep_col, 0, pod_col));
+                    newwin(n_row-1, ep_col, 0, pod_col-1));
                 pod_oldwin.delwin();
                 ep_oldwin.delwin();
                 self.stdscr.refresh();
@@ -741,11 +743,11 @@ impl<T: Clone + Menuable> Menu<T> {
         };
 
         self.window.mvchgat(self.abs_y(old_selected), self.abs_x(-1),
-            self.n_col+2,
+            self.n_col+3,
             old_played,
             self.colors.get(ColorType::Normal));
         self.window.mvchgat(self.abs_y(self.selected), self.abs_x(-1),
-            self.n_col+2,
+            self.n_col+3,
             new_played,
             self.colors.get(ColorType::HighlightedActive));
         self.window.refresh();
@@ -760,7 +762,7 @@ impl<T: Clone + Menuable> Menu<T> {
             pancurses::A_BOLD
         };
         self.window.mvchgat(self.abs_y(self.selected), self.abs_x(-1),
-            self.n_col + 2,
+            self.n_col + 3,
             played,
             self.colors.get(ColorType::HighlightedActive));
         self.window.refresh();
@@ -811,7 +813,7 @@ impl Menu<Podcast> {
             pancurses::A_BOLD
         };
         self.window.mvchgat(self.abs_y(self.selected), self.abs_x(-1),
-            self.n_col + 2,
+            self.n_col + 3,
             played,
             self.colors.get(ColorType::Highlighted));
         self.window.refresh();
@@ -828,7 +830,7 @@ impl Menu<Episode> {
             pancurses::A_BOLD
         };
         self.window.mvchgat(self.abs_y(self.selected), self.abs_x(-1),
-            self.n_col + 2,
+            self.n_col + 3,
             played,
             self.colors.get(ColorType::Normal));
         self.window.refresh();

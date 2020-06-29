@@ -44,10 +44,11 @@ impl Menuable for Podcast {
                     .fold(0, |acc, ep| acc + (ep.is_played() as i32)));
                 total = format!("{}", borrow.len());
             }
-            let added_len = unplayed.len() + total.len() + 4;
-            out = out.substring(0, length-added_len);
+            let meta_str = format!("({}/{})", unplayed, total);
+            out = out.substring(0, length-meta_str.chars().count());
 
-            return format!("{}{:>width$}{}/{})", out, "(", unplayed, total, width=length-out.chars().count()-added_len+2);
+            return format!("{} {:>width$}", out, meta_str, 
+                width=length-out.chars().count());
                 // this pads spaces between title and totals
         } else {
             return out.to_string();
@@ -102,22 +103,23 @@ impl Menuable for Episode {
         };
         if length > super::EPISODE_PUBDATE_LENGTH {
             let dur = self.format_duration();
-            let mut added_len = dur.len() + 3;
+            let meta_dur = format!("[{}]", dur);
 
             if let Some(pubdate) = self.pubdate {
                 // print pubdate and duration
                 let pd = pubdate.format("%F")
                     .to_string();
-                added_len = added_len + pd.len() + 3;
-                return format!("{}{:>width$}{}) [{}]", out.substring(0, length-added_len), "(", pd, dur, width=length-out.chars().count()-added_len+2);
+                let meta_str = format!("({}) {}", pd, meta_dur);
+                let added_len = meta_str.chars().count();
+                return format!("{} {:>width$}", out.substring(0, length-added_len), meta_str, width=length-out.chars().count());
             } else {
                 // just print duration
-                return format!("{}{:>width$}{}]", out.substring(0, length-added_len), "[", dur, width=length-out.chars().count()-added_len+2);
+                return format!("{} {:>width$}", out.substring(0, length-meta_dur.chars().count()), meta_dur, width=length-out.chars().count());
             }
         } else if length > super::EPISODE_DURATION_LENGTH {
             let dur = self.format_duration();
-            let added_len = dur.len() + 3;
-            return format!("{}{:>width$}{}]", out.substring(0, length-added_len), "[", dur, width=length-out.chars().count()-added_len+2);
+            let meta_dur = format!("[{}]", dur);
+            return format!("{} {:>width$}", out.substring(0, length-meta_dur.chars().count()), meta_dur, width=length-out.chars().count());
         } else {
             return out;
         }

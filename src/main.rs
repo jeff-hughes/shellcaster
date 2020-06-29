@@ -25,15 +25,15 @@ const MESSAGE_TIME: u64 = 5000;
 
 // How many columns we need, minimum, before we display the
 // (unplayed/total) after the podcast title
-const PODCAST_UNPLAYED_TOTALS_LENGTH: usize = 30;
+const PODCAST_UNPLAYED_TOTALS_LENGTH: usize = 25;
 
 // How many columns we need, minimum, before we display the duration of
 // the episode
-const EPISODE_DURATION_LENGTH: usize = 30;
+const EPISODE_DURATION_LENGTH: usize = 45;
 
 // How many columns we need, minimum, before we display the pubdate
 // of the episode
-const EPISODE_PUBDATE_LENGTH: usize = 40;
+const EPISODE_PUBDATE_LENGTH: usize = 60;
 
 
 /// Main controller for shellcaster program.
