@@ -623,6 +623,7 @@ impl<T: Clone + Menuable> Menu<T> {
         self.update_items();
     }
 
+    /// Draws a border around the window.
     fn draw_border(&self) {
         let top_left;
         let bot_left;
@@ -778,10 +779,14 @@ impl<T: Clone + Menuable> Menu<T> {
         }
     }
 
+    /// Calculates the y-value relative to the window rather than to the
+    /// menu (i.e., taking into account borders and margins).
     fn abs_y(&self, y: i32) -> i32 {
         return y + 1;
     }
 
+    /// Calculates the x-value relative to the window rather than to the
+    /// menu (i.e., taking into account borders and margins).
     fn abs_x(&self, x: i32) -> i32 {
         return x + 2;
     }
@@ -832,6 +837,8 @@ impl Menu<Episode> {
 
 // Everything to do with colors ----------------------------------------
 
+/// Enum identifying relevant text states that will be associated with
+/// distinct colors.
 #[derive(Eq, PartialEq, Hash, Copy, Clone, Debug)]
 enum ColorType {
     Normal,
@@ -840,6 +847,7 @@ enum ColorType {
     Error,
 }
 
+/// Keeps a hashmap associating ColorTypes with ncurses color pairs.
 #[derive(Debug, Clone)]
 struct Colors {
     map: HashMap<ColorType, i16>,
@@ -862,6 +870,8 @@ impl Colors {
 }
 
 
+/// Sets up hashmap for ColorTypes in app, initiates color palette, and
+/// sets up ncurses color pairs.
 fn set_colors() -> Colors {
     // set up a hashmap for easier reference
     let mut colors = Colors::new();
