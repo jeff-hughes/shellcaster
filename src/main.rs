@@ -2,6 +2,8 @@ use std::process;
 use std::path::PathBuf;
 use std::sync::mpsc;
 
+use sanitize_filename::{sanitize_with_options, Options};
+
 mod main_controller;
 mod config;
 mod keymap;
@@ -114,7 +116,12 @@ fn main() {
                     .clone_episode(pod_index, ep_index).unwrap();
 
                 // add directory for podcast, create if it does not exist
-                match main_ctrl.create_podcast_dir(pod_title.clone()) {
+                let dir_name = sanitize_with_options(&pod_title, Options {
+                    truncate: true,
+                    windows: true,  // for simplicity, we'll just use Windows-friendly paths for everyone
+                    replacement: ""
+                });
+                match main_ctrl.create_podcast_dir(dir_name) {
                     Ok(path) => main_ctrl.download_manager.download_list(
                         &[&episode], &path),
                     Err(_) => main_ctrl.msg_to_ui(
@@ -151,7 +158,12 @@ fn main() {
                 }
 
                 // add directory for podcast, create if it does not exist
-                match main_ctrl.create_podcast_dir(pod_title.clone()) {
+                let dir_name = sanitize_with_options(&pod_title, Options {
+                    truncate: true,
+                    windows: true,  // for simplicity, we'll just use Windows-friendly paths for everyone
+                    replacement: ""
+                });
+                match main_ctrl.create_podcast_dir(dir_name) {
                     Ok(path) => main_ctrl.download_manager.download_list(
                         &episodes, &path),
                     Err(_) => main_ctrl.msg_to_ui(
