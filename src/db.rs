@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use rusqlite::{Connection, params};
 use chrono::{NaiveDateTime, DateTime, Utc};
 
-use crate::types::{Podcast, Episode, LockVec};
+use crate::types::*;
 
 /// Struct holding a sqlite database connection, with methods to interact
 /// with this connection.
@@ -270,13 +270,8 @@ impl Database {
             let podcast_iter = stmt.query_map(params![], |row| {
                 let pod_id = row.get("id")?;
                 let episodes = self.get_episodes(pod_id);
-                let mut any_unplayed = false;
-                for ep in episodes.iter() {
-                    if !ep.played {
-                        any_unplayed = true;
-                        break;
-                    }
-                }
+                let num_unplayed = episodes.iter()
+                    .fold(0, |acc, x| acc + (!x.is_played() as usize));
                 Ok(Podcast {
                     id: Some(pod_id),
                     title: row.get("title")?,
@@ -286,7 +281,7 @@ impl Database {
                     explicit: row.get("explicit")?,
                     last_checked: convert_date(row.get("last_checked")).unwrap(),
                     episodes: LockVec::new(episodes),
-                    any_unplayed: any_unplayed,
+                    num_unplayed: num_unplayed,
                 })
             }).unwrap();
             let mut podcasts = Vec::new();

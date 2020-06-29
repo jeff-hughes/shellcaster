@@ -26,7 +26,7 @@ pub struct Podcast {
     pub explicit: Option<bool>,
     pub last_checked: DateTime<Utc>,
     pub episodes: LockVec<Episode>,
-    pub any_unplayed: bool,
+    pub num_unplayed: usize,
 }
 
 impl Menuable for Podcast {
@@ -36,15 +36,8 @@ impl Menuable for Podcast {
         // if the size available is big enough, we add the unplayed data
         // to the end
         if length > super::PODCAST_UNPLAYED_TOTALS_LENGTH {
-            let unplayed: String;
-            let total: String;
-            {
-                let borrow = self.episodes.borrow();
-                unplayed = format!("{}", borrow.iter()
-                    .fold(0, |acc, ep| acc + (!ep.is_played() as i32)));
-                total = format!("{}", borrow.len());
-            }
-            let meta_str = format!("({}/{})", unplayed, total);
+            let meta_str = format!("({}/{})",
+                self.num_unplayed, self.episodes.len());
             out = out.substring(0, length-meta_str.chars().count());
 
             return format!("{} {:>width$}", out, meta_str, 
@@ -56,7 +49,7 @@ impl Menuable for Podcast {
     }
 
     fn is_played(&self) -> bool {
-        return !self.any_unplayed;
+        return self.num_unplayed == 0;
     }
 }
 
@@ -167,6 +160,9 @@ impl<T: Clone> LockVec<T> {
         }
     }
 
+    pub fn len(&self) -> usize {
+        return self.borrow().len();
+    }
 }
 
 impl<T: Clone> Clone for LockVec<T> {

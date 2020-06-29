@@ -100,7 +100,8 @@ pub fn parse_feed_data(channel: Channel, url: &str) -> Result<Podcast, Box<dyn s
         explicit: explicit,
         last_checked: last_checked,
         episodes: LockVec::new(episodes),
-        any_unplayed: true,
+        num_unplayed: 0,  // this will be set properly once it's inserted
+                          // into the database and then read back
     });
 }
 

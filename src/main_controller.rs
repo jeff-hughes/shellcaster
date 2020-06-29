@@ -178,32 +178,22 @@ impl MainController {
     /// in main_ctrl.podcasts
     pub fn mark_played(&self, pod_index: usize, ep_index: usize, played: bool) {
         let mut podcast = self.podcasts.clone_podcast(pod_index).unwrap();
-        let mut any_unplayed = false;
 
         // TODO: Try to find a way to do this without having
         // to clone the episode...
         let mut episode = podcast.episodes.clone_episode(ep_index).unwrap();
         episode.played = played;
         
+        // eprintln!("{}", ep_index);
         self.db.set_played_status(episode.id.unwrap(), played);
         podcast.episodes.replace(ep_index, episode).unwrap();
 
-        {
-            // recheck if there are any unplayed episodes for the
-            // selected podcast
-            let borrowed_ep_list = podcast
-                .episodes.borrow();
-            for ep in borrowed_ep_list.iter() {
-                if !ep.played {
-                    any_unplayed = true;
-                    break;
-                }
-            }
+        if played {
+            podcast.num_unplayed -= 1;
+        } else {
+            podcast.num_unplayed += 1;
         }
-        if any_unplayed != podcast.any_unplayed {
-            podcast.any_unplayed = any_unplayed;
-            self.podcasts.replace(pod_index, podcast).unwrap();
-        }
+        self.podcasts.replace(pod_index, podcast).unwrap();
         self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
     }
 
@@ -212,9 +202,11 @@ impl MainController {
     /// in main_ctrl.podcasts
     pub fn mark_all_played(&self, pod_index: usize, played: bool) {
         let mut podcast = self.podcasts.clone_podcast(pod_index).unwrap();
+        let n_eps;
         {
             let mut borrowed_ep_list = podcast
                 .episodes.borrow();
+            n_eps = borrowed_ep_list.len();
 
             for ep in borrowed_ep_list.iter() {
                 self.db.set_played_status(ep.id.unwrap(), played);
@@ -223,7 +215,11 @@ impl MainController {
             *borrowed_ep_list = self.db.get_episodes(podcast.id.unwrap());
         }
 
-        podcast.any_unplayed = !played;
+        if played {
+            podcast.num_unplayed = 0;
+        } else {
+            podcast.num_unplayed = n_eps;
+        }
         self.podcasts.replace(pod_index, podcast).unwrap();
         self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
     }
