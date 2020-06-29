@@ -1517,7 +1517,7 @@ dependencies = [
 
 [[package]]
 name = "shellcaster"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "chrono 0.4.11 (registry+https://github.com/rust-lang/crates.io-index)",
  "dirs-next 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",

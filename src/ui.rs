@@ -150,7 +150,7 @@ impl<'a> UI<'a> {
 
         // welcome screen if user does not have any podcasts yet
         let welcome_win = if items.borrow().len() == 0 {
-            Some(UI::make_welcome_win(&config, n_row, n_col))
+            Some(UI::make_welcome_win(&config.keybindings, n_row, n_col))
         } else {
             None
         };
@@ -205,7 +205,7 @@ impl<'a> UI<'a> {
                 ep_oldwin.delwin();
                 self.stdscr.refresh();
                 self.update_menus();
-
+                
                 match self.active_menu {
                     ActiveMenu::PodcastMenu => self.podcast_menu.activate(),
                     ActiveMenu::EpisodeMenu => {
@@ -213,6 +213,16 @@ impl<'a> UI<'a> {
                         self.episode_menu.activate();
                     },
                 }
+
+                // resize welcome window, if it exists
+                if self.welcome_win.is_some() {
+                    let oldwwin = std::mem::replace(
+                        &mut self.welcome_win,
+                        Some(UI::make_welcome_win(&self.keymap, n_row, n_col)));
+                    
+                    oldwwin.unwrap().delwin();
+                }
+                self.stdscr.refresh();
             },
 
             Some(input) => {
@@ -225,7 +235,7 @@ impl<'a> UI<'a> {
 
                 // get rid of the "welcome" window once the podcast list
                 // is no longer empty
-                if pod_len > 0 && self.welcome_win.is_some() {
+                if self.welcome_win.is_some() && pod_len > 0 {
                     let ww = self.welcome_win.take().unwrap();
                     ww.delwin();
                 }
@@ -309,10 +319,14 @@ impl<'a> UI<'a> {
                     },
 
                     Some(UserAction::Sync) => {
-                        return UiMsg::Sync(current_pod_index);
+                        if pod_len > 0 {
+                            return UiMsg::Sync(current_pod_index);
+                        }
                     },
                     Some(UserAction::SyncAll) => {
-                        return UiMsg::SyncAll;
+                        if pod_len > 0 {
+                            return UiMsg::SyncAll;
+                        }
                     },
                     Some(UserAction::Play) => {
                         if ep_len > 0 {
@@ -323,21 +337,23 @@ impl<'a> UI<'a> {
                         match self.active_menu {
                             ActiveMenu::PodcastMenu => (),
                             ActiveMenu::EpisodeMenu => {
-                                let played = self.episode_menu.items
-                                    .borrow()
-                                    .get(current_ep_index).unwrap()
-                                    .is_played();
-                                
-                                let attr = if played {
-                                    pancurses::A_BOLD
-                                } else {
-                                    pancurses::A_NORMAL
-                                };
-                                self.episode_menu.window.mvchgat(
-                                    self.episode_menu.selected, 0, -1,
-                                    attr, 2);
-                                self.episode_menu.window.refresh();
-                                return UiMsg::MarkPlayed(current_pod_index, current_ep_index, !played);
+                                if ep_len > 0 {
+                                    let played = self.episode_menu.items
+                                        .borrow()
+                                        .get(current_ep_index).unwrap()
+                                        .is_played();
+                                    
+                                    let attr = if played {
+                                        pancurses::A_BOLD
+                                    } else {
+                                        pancurses::A_NORMAL
+                                    };
+                                    self.episode_menu.window.mvchgat(
+                                        self.episode_menu.selected, 0, -1,
+                                        attr, 2);
+                                    self.episode_menu.window.refresh();
+                                    return UiMsg::MarkPlayed(current_pod_index, current_ep_index, !played);
+                                }
                             },
                         }
                     },
@@ -345,38 +361,40 @@ impl<'a> UI<'a> {
                         // if there are any unplayed episodes, MarkAllPlayed
                         // will convert all to played; if all are played
                         // already, only then will it convert all to unplayed
-                        let played = self.podcast_menu.items
-                            .borrow()
-                            .get(current_pod_index).unwrap()
-                            .is_played();
-                        // let attr = if played {
-                        //     pancurses::A_BOLD
-                        // } else {
-                        //     pancurses::A_NORMAL
-                        // };
+                        if pod_len > 0 {
+                            let played = self.podcast_menu.items
+                                .borrow()
+                                .get(current_pod_index).unwrap()
+                                .is_played();
+                            // let attr = if played {
+                            //     pancurses::A_BOLD
+                            // } else {
+                            //     pancurses::A_NORMAL
+                            // };
 
-                        // // change attributes for selected podcast
-                        // self.podcast_menu.window.mvchgat(
-                        //     self.podcast_menu.selected, 0, -1,
-                        //     attr, 2);
+                            // // change attributes for selected podcast
+                            // self.podcast_menu.window.mvchgat(
+                            //     self.podcast_menu.selected, 0, -1,
+                            //     attr, 2);
 
-                        // // change attributes for all visible episodes
-                        // let abs_bottom = min(self.episode_menu.n_row,
-                        //     (self.episode_menu.items.lock().unwrap().len() - 1) as i32);
-                        // for ep_i in 0..abs_bottom {
-                        //     let color = if ep_i == self.episode_menu.selected {
-                        //         2
-                        //     } else {
-                        //         1
-                        //     };
-                        //     self.episode_menu.window.mvchgat(
-                        //         self.episode_menu.selected, 0, -1,
-                        //         attr, color);
-                        // }
+                            // // change attributes for all visible episodes
+                            // let abs_bottom = min(self.episode_menu.n_row,
+                            //     (self.episode_menu.items.lock().unwrap().len() - 1) as i32);
+                            // for ep_i in 0..abs_bottom {
+                            //     let color = if ep_i == self.episode_menu.selected {
+                            //         2
+                            //     } else {
+                            //         1
+                            //     };
+                            //     self.episode_menu.window.mvchgat(
+                            //         self.episode_menu.selected, 0, -1,
+                            //         attr, color);
+                            // }
 
-                        // self.podcast_menu.window.refresh();
-                        // self.episode_menu.window.refresh();
-                        return UiMsg::MarkAllPlayed(current_pod_index, !played);
+                            // self.podcast_menu.window.refresh();
+                            // self.episode_menu.window.refresh();
+                            return UiMsg::MarkAllPlayed(current_pod_index, !played);
+                        }
                     },
 
                     Some(UserAction::Download) => {
@@ -540,11 +558,11 @@ impl<'a> UI<'a> {
     /// Creates a pancurses window with a welcome message for when users
     /// start the program for the first time. Responsibility for managing
     /// the window is given back to the main UI object.
-    pub fn make_welcome_win(config: &Config,
+    pub fn make_welcome_win(keymap: &Keybindings,
         n_row: i32, n_col:i32) -> Window {
 
-        let add_keys = config.keybindings.keys_for_action(UserAction::AddFeed);
-        let quit_keys = config.keybindings.keys_for_action(UserAction::Quit);
+        let add_keys = keymap.keys_for_action(UserAction::AddFeed);
+        let quit_keys = keymap.keys_for_action(UserAction::Quit);
 
         let add_str = match add_keys.len() {
             0 => "<missing>".to_string(),
@@ -580,9 +598,21 @@ impl<'a> UI<'a> {
             }
         };
 
-        let welcome_win = newwin(n_row, n_col, 0, 0);
-        welcome_win.mv(0, 0);
-        welcome_win.addstr(format!("Welcome to shellcaster!\n\nYour podcast list is currently empty. Press {} to add a new podcast feed, or {} to quit.\n\nOther keybindings can be found on the Github repo readme:\nhttps://github.com/jeff-hughes/shellcaster", add_str, quit_str));
+        let welcome_win = newwin(n_row-1, n_col, 0, 0);
+        welcome_win.border(
+            pancurses::ACS_VLINE(),
+            pancurses::ACS_VLINE(),
+            pancurses::ACS_HLINE(),
+            pancurses::ACS_HLINE(),
+            pancurses::ACS_ULCORNER(),
+            pancurses::ACS_URCORNER(),
+            pancurses::ACS_LLCORNER(),
+            pancurses::ACS_LRCORNER());
+        welcome_win.mvaddstr(0, 2, "Shellcaster");
+        welcome_win.mvaddstr(2, 2, "Welcome to shellcaster!");
+        welcome_win.mvaddstr(4, 2, format!("Your podcast list is currently empty. Press {} to add a new podcast feed, or {} to quit.", add_str, quit_str));
+        welcome_win.mvaddstr(6, 2, "Other keybindings can be found on the Github repo readme:");
+        welcome_win.mvaddstr(7, 2, "https://github.com/jeff-hughes/shellcaster");
         welcome_win.refresh();
         return welcome_win;
     }
@@ -657,22 +687,31 @@ impl<T: Clone + Menuable> Menu<T> {
     fn update_items(&mut self) {
         self.window.erase();
         self.draw_border();
-        // for visible rows, print strings from list
-        for i in 0..self.n_row {
-            let item_idx = (self.top_row + i) as usize;
-            if let Some(elem) = self.items.borrow().get(item_idx) {
-                // look for any unplayed episodes
-                let unplayed = !elem.is_played();
-                self.window.mv(self.abs_y(i), self.abs_x(0));
-                if unplayed {
-                    self.window.attron(Attribute::Bold);
+
+        if self.items.borrow().is_empty() {
+            self.selected = -1;
+        } else {
+            if self.selected == -1 {
+                self.selected = 0;
+            }
+
+            // for visible rows, print strings from list
+            for i in 0..self.n_row {
+                let item_idx = (self.top_row + i) as usize;
+                if let Some(elem) = self.items.borrow().get(item_idx) {
+                    // look for any unplayed episodes
+                    let unplayed = !elem.is_played();
+                    self.window.mv(self.abs_y(i), self.abs_x(0));
+                    if unplayed {
+                        self.window.attron(Attribute::Bold);
+                    }
+                    self.window.addstr(elem.get_title(self.n_col as usize));
+                    if unplayed {
+                        self.window.attroff(Attribute::Bold);
+                    }
+                } else {
+                    break;
                 }
-                self.window.addstr(elem.get_title(self.n_col as usize));
-                if unplayed {
-                    self.window.attroff(Attribute::Bold);
-                }
-            } else {
-                break;
             }
         }
         self.window.refresh();
@@ -685,6 +724,11 @@ impl<T: Clone + Menuable> Menu<T> {
     /// not fall out of bounds, and then updates the pancurses window to
     /// represent the new visible list.
     fn scroll(&mut self, lines: i32) {
+        // this happens when there are no items in the list yet
+        if self.selected == -1 {
+            return;
+        }
+
         // TODO: currently only handles scroll value of 1; need to extend
         // to be able to scroll multiple lines at a time
         let mut old_selected = self.selected;
@@ -756,16 +800,18 @@ impl<T: Clone + Menuable> Menu<T> {
     /// Controls how the window changes when it is active (i.e., available
     /// for user input to modify state).
     fn activate(&mut self) {
-        let played = if self.items.borrow().get(self.selected as usize).unwrap().is_played() {
-            pancurses::A_NORMAL
-        } else {
-            pancurses::A_BOLD
-        };
-        self.window.mvchgat(self.abs_y(self.selected), self.abs_x(-1),
-            self.n_col + 3,
-            played,
-            self.colors.get(ColorType::HighlightedActive));
-        self.window.refresh();
+        if self.selected > -1 {
+            let played = if self.items.borrow().get(self.selected as usize).unwrap().is_played() {
+                pancurses::A_NORMAL
+            } else {
+                pancurses::A_BOLD
+            };
+            self.window.mvchgat(self.abs_y(self.selected), self.abs_x(-1),
+                self.n_col + 3,
+                played,
+                self.colors.get(ColorType::HighlightedActive));
+            self.window.refresh();
+        }
     }
 
     /// Updates window size
@@ -807,16 +853,18 @@ impl Menu<Podcast> {
     /// Controls how the window changes when it is inactive (i.e., not
     /// available for user input to modify state).
     fn deactivate(&mut self) {
-        let played = if self.items.borrow().get(self.selected as usize).unwrap().is_played() {
-            pancurses::A_NORMAL
-        } else {
-            pancurses::A_BOLD
-        };
-        self.window.mvchgat(self.abs_y(self.selected), self.abs_x(-1),
-            self.n_col + 3,
-            played,
-            self.colors.get(ColorType::Highlighted));
-        self.window.refresh();
+        if self.selected > -1 {
+            let played = if self.items.borrow().get(self.selected as usize).unwrap().is_played() {
+                pancurses::A_NORMAL
+            } else {
+                pancurses::A_BOLD
+            };
+            self.window.mvchgat(self.abs_y(self.selected), self.abs_x(-1),
+                self.n_col + 3,
+                played,
+                self.colors.get(ColorType::Highlighted));
+            self.window.refresh();
+        }
     }
 }
 
@@ -824,16 +872,18 @@ impl Menu<Episode> {
     /// Controls how the window changes when it is inactive (i.e., not
     /// available for user input to modify state).
     fn deactivate(&mut self) {
-        let played = if self.items.borrow().get(self.selected as usize).unwrap().is_played() {
-            pancurses::A_NORMAL
-        } else {
-            pancurses::A_BOLD
-        };
-        self.window.mvchgat(self.abs_y(self.selected), self.abs_x(-1),
-            self.n_col + 3,
-            played,
-            self.colors.get(ColorType::Normal));
-        self.window.refresh();
+        if self.selected > -1 {
+            let played = if self.items.borrow().get(self.selected as usize).unwrap().is_played() {
+                pancurses::A_NORMAL
+            } else {
+                pancurses::A_BOLD
+            };
+            self.window.mvchgat(self.abs_y(self.selected), self.abs_x(-1),
+                self.n_col + 3,
+                played,
+                self.colors.get(ColorType::Normal));
+            self.window.refresh();
+        }
     }
 }
 
