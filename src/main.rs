@@ -47,6 +47,7 @@ const EPISODE_PUBDATE_LENGTH: usize = 60;
 /// input, and dispatches to the proper module as necessary. User input
 /// to quit the program breaks the loop, tears down the UI, and ends the
 /// program.
+#[allow(clippy::while_let_on_iterator)]
 fn main() {
     // SETUP -----------------------------------------------------------
 

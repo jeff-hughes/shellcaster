@@ -116,6 +116,7 @@ impl MainController {
 
     /// Handles the application logic for adding a new podcast, or
     /// synchronizing data from the RSS feed of an existing podcast.
+    #[allow(clippy::useless_let_if_seq)]
     pub fn add_or_sync_data(&self, pod: Podcast, update: bool) {
         let title = pod.title.clone();
         let db_result;
@@ -270,7 +271,7 @@ impl MainController {
             let ep_index = podcast.episodes
                 .id_to_index(ep_data.id).unwrap();
             let mut episode = podcast.episodes.clone_episode(ep_index).unwrap();
-            episode.path = Some(ep_data.file_path.clone());
+            episode.path = Some(ep_data.file_path);
             podcast.episodes.replace(ep_index, episode).unwrap();
         }
 
