@@ -41,7 +41,7 @@ impl Menuable for Podcast {
             {
                 let borrow = self.episodes.borrow();
                 unplayed = format!("{}", borrow.iter()
-                    .fold(0, |acc, ep| acc + (ep.is_played() as i32)));
+                    .fold(0, |acc, ep| acc + (!ep.is_played() as i32)));
                 total = format!("{}", borrow.len());
             }
             let meta_str = format!("({}/{})", unplayed, total);
@@ -159,7 +159,7 @@ impl<T: Clone> LockVec<T> {
     /// the old T at that position in the vector.
     pub fn replace(&self, index: usize, t: T) -> Result<(), &'static str> {
         let mut borrowed = self.borrow();
-        if index > 0 && index < borrowed.len() {
+        if index < borrowed.len() {
             borrowed[index] = t;
             return Ok(());
         } else {

@@ -204,6 +204,7 @@ impl MainController {
             podcast.any_unplayed = any_unplayed;
             self.podcasts.replace(pod_index, podcast).unwrap();
         }
+        self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
     }
 
     /// Given a podcast, it marks all episodes for that podcast as
