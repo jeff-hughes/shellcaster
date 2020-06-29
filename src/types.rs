@@ -30,8 +30,28 @@ pub struct Podcast {
 }
 
 impl Menuable for Podcast {
+    /// Returns the title for the podcast, up to length characters.
     fn get_title(&self, length: usize) -> String {
-        return self.title[..].substring(0, length).to_string();
+        let mut out = self.title.substring(0, length);
+        // if the size available is big enough, we add the unplayed data
+        // to the end
+        if length > super::PODCAST_UNPLAYED_TOTALS_LENGTH {
+            let unplayed: String;
+            let total: String;
+            {
+                let borrow = self.episodes.borrow();
+                unplayed = format!("{}", borrow.iter()
+                    .fold(0, |acc, ep| acc + (ep.is_played() as i32)));
+                total = format!("{}", borrow.len());
+            }
+            let added_len = unplayed.len() + total.len() + 4;
+            out = out.substring(0, length-added_len);
+
+            return format!("{}{:>width$}{}/{})", out, "(", unplayed, total, width=length-out.chars().count()-added_len+2);
+                // this pads spaces between title and totals
+        } else {
+            return out.to_string();
+        }
     }
 
     fn is_played(&self) -> bool {
@@ -56,12 +76,51 @@ pub struct Episode {
     pub played: bool,
 }
 
-impl Menuable for Episode {
-    fn get_title(&self, length: usize) -> String {
-        return match self.path {
-            Some(_) => format!("[D] {}", self.title[..].substring(0, length-4)),
-            None => self.title[..].substring(0, length).to_string(),
+impl Episode {
+    /// Formats the duration in seconds into an HH:MM:SS format.
+    fn format_duration(&self) -> String {
+        return match self.duration {
+            Some(dur) => {
+                let mut seconds = dur;
+                let hours = seconds / 3600;
+                seconds -= hours * 3600;
+                let minutes = seconds / 60;
+                seconds -= minutes * 60;
+                format!("{:02}:{:02}:{:02}", hours, minutes, seconds)
+            },
+            None => "--:--:--".to_string(),
         };
+    }
+}
+
+impl Menuable for Episode {
+    /// Returns the title for the episode, up to length characters.
+    fn get_title(&self, length: usize) -> String {
+        let out = match self.path {
+            Some(_) => format!("[D] {}", self.title.substring(0, length-4)),
+            None => self.title.substring(0, length).to_string(),
+        };
+        if length > super::EPISODE_PUBDATE_LENGTH {
+            let dur = self.format_duration();
+            let mut added_len = dur.len() + 3;
+
+            if let Some(pubdate) = self.pubdate {
+                // print pubdate and duration
+                let pd = pubdate.format("%F")
+                    .to_string();
+                added_len = added_len + pd.len() + 3;
+                return format!("{}{:>width$}{}) [{}]", out.substring(0, length-added_len), "(", pd, dur, width=length-out.chars().count()-added_len+2);
+            } else {
+                // just print duration
+                return format!("{}{:>width$}{}]", out.substring(0, length-added_len), "[", dur, width=length-out.chars().count()-added_len+2);
+            }
+        } else if length > super::EPISODE_DURATION_LENGTH {
+            let dur = self.format_duration();
+            let added_len = dur.len() + 3;
+            return format!("{}{:>width$}{}]", out.substring(0, length-added_len), "[", dur, width=length-out.chars().count()-added_len+2);
+        } else {
+            return out;
+        }
     }
 
     fn is_played(&self) -> bool {
@@ -188,6 +247,45 @@ pub trait StringUtils {
 }
 
 impl StringUtils for str {
+    fn substring(&self, start: usize, len: usize) -> &str {
+        let mut char_pos = 0;
+        let mut byte_start = 0;
+        let mut it = self.chars();
+        loop {
+            if char_pos == start { break; }
+            if let Some(c) = it.next() {
+                char_pos += 1;
+                byte_start += c.len_utf8();
+            }
+            else { break; }
+        }
+        char_pos = 0;
+        let mut byte_end = byte_start;
+        loop {
+            if char_pos == len { break; }
+            if let Some(c) = it.next() {
+                char_pos += 1;
+                byte_end += c.len_utf8();
+            }
+            else { break; }
+        }
+        &self[byte_start..byte_end]
+    }
+    fn slice(&self, range: impl RangeBounds<usize>) -> &str {
+        let start = match range.start_bound() {
+            Bound::Included(bound) | Bound::Excluded(bound) => *bound,
+            Bound::Unbounded => 0,
+        };
+        let len = match range.end_bound() {
+            Bound::Included(bound) => *bound + 1,
+            Bound::Excluded(bound) => *bound,
+            Bound::Unbounded => self.len(),
+        } - start;
+        self.substring(start, len)
+    }
+}
+
+impl StringUtils for String {
     fn substring(&self, start: usize, len: usize) -> &str {
         let mut char_pos = 0;
         let mut byte_start = 0;

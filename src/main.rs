@@ -23,6 +23,19 @@ use crate::downloads::DownloadMsg;
 // bottom of the screen in the UI.
 const MESSAGE_TIME: u64 = 5000;
 
+// How many columns we need, minimum, before we display the
+// (unplayed/total) after the podcast title
+const PODCAST_UNPLAYED_TOTALS_LENGTH: usize = 30;
+
+// How many columns we need, minimum, before we display the duration of
+// the episode
+const EPISODE_DURATION_LENGTH: usize = 30;
+
+// How many columns we need, minimum, before we display the pubdate
+// of the episode
+const EPISODE_PUBDATE_LENGTH: usize = 40;
+
+
 /// Main controller for shellcaster program.
 /// 
 /// Setup involves connecting to the sqlite database (creating it if 
