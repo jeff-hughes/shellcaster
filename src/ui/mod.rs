@@ -345,12 +345,6 @@ impl<'a> UI<'a> {
                                         .borrow()
                                         .get(current_ep_index).unwrap()
                                         .is_played();
-
-                                    self.episode_menu.set_attrs(
-                                        self.episode_menu.selected,
-                                        !played,
-                                        ColorType::HighlightedActive);
-                                    self.episode_menu.window.refresh();
                                     return UiMsg::MarkPlayed(current_pod_index, current_ep_index, !played);
                                 }
                             },
@@ -365,7 +359,6 @@ impl<'a> UI<'a> {
                                 .borrow()
                                 .get(current_pod_index).unwrap()
                                 .is_played();
-                            self.podcast_menu.update_items();
                             return UiMsg::MarkAllPlayed(current_pod_index, !played);
                         }
                     },
@@ -520,6 +513,14 @@ impl<'a> UI<'a> {
     pub fn update_menus(&mut self) {
         self.podcast_menu.update_items();
         self.episode_menu.update_items();
+
+        match self.active_menu {
+            ActiveMenu::PodcastMenu => self.podcast_menu.highlight_selected(true),
+            ActiveMenu::EpisodeMenu => {
+                self.podcast_menu.highlight_selected(false);
+                self.episode_menu.highlight_selected(true);
+            },
+        }
     }
     
     /// When the program is ending, this performs tear-down functions so

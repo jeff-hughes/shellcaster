@@ -1,6 +1,6 @@
 use std::cmp::min;
 
-use pancurses::{Window, Attribute};
+use pancurses::Window;
 use crate::types::*;
 use super::{Colors, ColorType};
 
@@ -80,16 +80,21 @@ impl<T: Clone + Menuable> Menu<T> {
             for i in 0..self.n_row {
                 let item_idx = (self.top_row + i) as usize;
                 if let Some(elem) = borrow.get(item_idx) {
-                    // look for any unplayed episodes
-                    let unplayed = !elem.is_played();
-                    self.window.mv(self.abs_y(i), self.abs_x(0));
-                    if unplayed {
-                        self.window.attron(Attribute::Bold);
-                    }
-                    self.window.addstr(elem.get_title(self.n_col as usize));
-                    if unplayed {
-                        self.window.attroff(Attribute::Bold);
-                    }
+                    self.window.mvaddstr(self.abs_y(i), self.abs_x(0),
+                        elem.get_title(self.n_col as usize));
+
+                    // this is literally the same logic as
+                    // self.set_attrs(), but it's complaining about
+                    // immutable borrows, so...
+                    let attr = if elem.is_played() {
+                        pancurses::A_NORMAL
+                    } else {
+                        pancurses::A_BOLD
+                    };
+                    self.window.mvchgat(self.abs_y(i), self.abs_x(-1),
+                        self.n_col + 3,
+                        attr,
+                        self.colors.get(ColorType::Normal));
                 } else {
                     break;
                 }
@@ -182,6 +187,18 @@ impl<T: Clone + Menuable> Menu<T> {
             self.colors.get(color));
     }
 
+    pub fn highlight_selected(&mut self, active_menu: bool) {
+        let played = self.items.borrow()
+            .get((self.top_row + self.selected) as usize).unwrap()
+            .is_played();
+        if active_menu {
+            self.set_attrs(self.selected, played, ColorType::HighlightedActive);
+        } else {
+            self.set_attrs(self.selected, played, ColorType::Highlighted);
+        }
+        self.window.refresh();
+    }
+
     /// Controls how the window changes when it is active (i.e., available
     /// for user input to modify state).
     pub fn activate(&mut self) {
@@ -257,5 +274,6 @@ impl Menu<Episode> {
             let played = self.items.borrow().get(self.selected as usize).unwrap().is_played();
             self.set_attrs(self.selected, played, ColorType::Normal);
         }
+        self.window.refresh();
     }
 }
