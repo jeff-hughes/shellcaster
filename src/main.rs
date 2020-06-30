@@ -114,6 +114,13 @@ fn main() {
                 }
                 let episode = main_ctrl.podcasts
                     .clone_episode(pod_index, ep_index).unwrap();
+                if episode.path.is_some() {
+                    // don't re-download if file already exists
+                    // TODO: Might want to revisit this decision at some
+                    // point, and ask user if they want to re-download
+                    // the file
+                    return;
+                }
 
                 // add directory for podcast, create if it does not exist
                 let dir_name = sanitize_with_options(&pod_title, Options {
