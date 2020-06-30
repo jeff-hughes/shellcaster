@@ -25,7 +25,6 @@ pub enum UserAction {
     Remove,
     RemoveAll,
 
-    Search,
     Quit,
 }
 

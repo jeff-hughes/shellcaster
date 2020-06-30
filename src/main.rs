@@ -63,7 +63,13 @@ fn main() {
         });
     let config = Config::new(&config_path);
 
-    let mut main_ctrl = MainController::new(config);
+    let mut db_path = config_path.clone();
+    if !db_path.pop() {
+        println!("Could not correctly parse the config file location. Please specify a valid path to the config file.");
+        process::exit(1);
+    }
+
+    let mut main_ctrl = MainController::new(config, &db_path);
 
 
     // MAIN LOOP --------------------------------------------------------

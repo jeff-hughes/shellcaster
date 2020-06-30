@@ -35,13 +35,13 @@ impl MainController {
     /// Instantiates the main controller (used during app startup), which
     /// sets up the connection to the database, download manager, and UI
     /// thread, and reads the list of podcasts from the database.
-    pub fn new(config: Config) -> MainController {
+    pub fn new(config: Config, db_path: &PathBuf) -> MainController {
         // create transmitters and receivers for passing messages between threads
         let (tx_to_ui, rx_from_main) = mpsc::channel();
         let (tx_to_main, rx_to_main) = mpsc::channel();
         
         // get connection to the database
-        let db_inst = Database::connect(&config.config_path);
+        let db_inst = Database::connect(&db_path);
     
         // set up download manager
         let tx_dl_to_main = tx_to_main.clone();

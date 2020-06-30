@@ -8,7 +8,6 @@ use crate::keymap::{Keybindings, UserAction};
 /// Holds information about user configuration of program. 
 #[derive(Debug, Clone)]
 pub struct Config {
-    pub config_path: PathBuf,
     pub download_path: PathBuf,
     pub simultaneous_downloads: usize,
     pub play_command: String,
@@ -20,7 +19,6 @@ pub struct Config {
 #[derive(Debug)]
 #[derive(Deserialize)]
 struct ConfigFromToml {
-    config_path: Option<String>,
     download_path: Option<String>,
     simultaneous_downloads: Option<usize>,
     play_command: Option<String>,
@@ -48,7 +46,6 @@ struct KeybindingsFromToml {
     delete_all: Option<Vec<String>>,
     remove: Option<Vec<String>>,
     remove_all: Option<Vec<String>>,
-    search: Option<Vec<String>>,
     quit: Option<Vec<String>>,
 }
 
@@ -88,11 +85,9 @@ impl Config {
                     delete_all: None,
                     remove: None,
                     remove_all: None,
-                    search: None,
                     quit: None,
                 };
                 config_toml = ConfigFromToml {
-                    config_path: None,
                     download_path: None,
                     simultaneous_downloads: None,
                     play_command: None,
@@ -132,7 +127,6 @@ fn config_with_defaults(config_toml: &ConfigFromToml) -> Config {
         (&config_toml.keybindings.remove, UserAction::Remove, vec!["r".to_string()]),
         (&config_toml.keybindings.remove_all, UserAction::RemoveAll, vec!["R".to_string()]),
 
-        (&config_toml.keybindings.search, UserAction::Search, vec!["/".to_string()]),
         (&config_toml.keybindings.quit, UserAction::Quit, vec!["q".to_string()]),
     ];
 
@@ -148,10 +142,6 @@ fn config_with_defaults(config_toml: &ConfigFromToml) -> Config {
 
     // paths are set by user, or they resolve to OS-specific path as
     // provided by dirs crate
-    let config_path = parse_create_dir(
-        config_toml.config_path.as_deref(),
-        dirs::config_dir());
-
     let download_path = parse_create_dir(
         config_toml.download_path.as_deref(),
         dirs::data_local_dir());
@@ -168,7 +158,6 @@ fn config_with_defaults(config_toml: &ConfigFromToml) -> Config {
     };
 
     return Config {
-        config_path: config_path,
         download_path: download_path,
         simultaneous_downloads: simultaneous_downloads,
         play_command: play_command,

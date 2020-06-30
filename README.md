@@ -26,7 +26,6 @@ Right now the program only has bare-bones functionality. Currently you can add n
 | Shift+X | Delete all downloaded files |
 | r       | Remove selected feed/episode from list |
 | Shift+R | Remove all feeds/episodes from list |
-| /       | Search episodes |
 
 Keybindings can be modified in the config.toml file. Actions can be
 mapped to more than one key, but a single key may not do more than one

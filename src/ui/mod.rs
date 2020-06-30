@@ -379,7 +379,6 @@ impl<'a> UI<'a> {
                     Some(UserAction::DeleteAll) => {},
                     Some(UserAction::Remove) => {},
                     Some(UserAction::RemoveAll) => {},
-                    Some(UserAction::Search) => {},
 
                     Some(UserAction::Quit) => {
                         return UiMsg::Quit;

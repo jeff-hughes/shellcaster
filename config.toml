@@ -1,15 +1,6 @@
 # Shellcaster settings
 # --------------------
 
-# Specifies where configuration data for shellcaster is stored.
-# Defaults:
-# $XDG_CONFIG_HOME/shellcaster/ or $HOME/.config/shellcaster/ on Linux
-# $HOME/Library/Preferences/shellcaster/ on Mac
-# C:\Users\<User>\AppData\Roaming\shellcaster\ on Windows
-
-#config_path = "~/.config/shellcaster/"
-
-
 # Specifies where podcast episodes that are downloaded will be stored.
 # Defaults:
 # $XDG_DATA_HOME/shellcaster/ or $HOME/.local/share/shellcaster/ on Linux
@@ -74,5 +65,4 @@ delete_all = [ "X" ]
 remove = [ "r" ]
 remove_all = [ "R" ]
 
-search = [ "/" ]
 quit = [ "q" ]
