@@ -40,7 +40,7 @@ impl Database {
         // create podcasts table
         match conn.execute(
             "CREATE TABLE IF NOT EXISTS podcasts (
-                id INTEGER PRIMARY KEY,
+                id INTEGER PRIMARY KEY NOT NULL,
                 title TEXT NOT NULL,
                 url TEXT NOT NULL UNIQUE,
                 description TEXT,
@@ -57,7 +57,7 @@ impl Database {
         // create episodes table
         match conn.execute(
             "CREATE TABLE IF NOT EXISTS episodes (
-                id INTEGER PRIMARY KEY,
+                id INTEGER PRIMARY KEY NOT NULL,
                 podcast_id INTEGER NOT NULL,
                 title TEXT NOT NULL,
                 url TEXT NOT NULL UNIQUE,
@@ -77,9 +77,9 @@ impl Database {
         // create files table
         match conn.execute(
             "CREATE TABLE IF NOT EXISTS files (
-                id INTEGER PRIMARY KEY,
+                id INTEGER PRIMARY KEY NOT NULL,
                 episode_id INTEGER NOT NULL,
-                path TEXT NOT NULL,
+                path TEXT NOT NULL UNIQUE,
                 FOREIGN KEY (episode_id) REFERENCES episodes(id)
             );",
             params![],
