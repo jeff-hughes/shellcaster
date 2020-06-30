@@ -4,6 +4,8 @@ Shellcaster is a terminal-based podcast manager, built in Rust. It is currently 
 
 The end goal is to provide a terminal UI (i.e., ncurses) to allow users to subscribe to podcast feeds, and periodically check for new episodes. Podcasts and episodes will be listed in a menu, and episodes may be downloaded locally, played (probably with an external media player, at least for now), and marked as played/unplayed. Keybindings and other options will be configurable via a config file.
 
+![shellcaster screenshot](https://raw.githubusercontent.com/jeff-hughes/shellcaster/master/img/screenshot.png)
+
 ## Current progress
 
 Right now the program only has bare-bones functionality. Currently you can add new feeds, synchronize them, download files, play them, and navigate through the list of podcasts and episodes. It does not yet keep track of whether an episode has been played or not, and deleting files, and removing podcasts/episodes is not yet implemented.
