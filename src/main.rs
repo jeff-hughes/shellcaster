@@ -184,6 +184,10 @@ fn main() {
                 }
             },
 
+            Message::Ui(UiMsg::Delete(pod_index, ep_index)) => main_ctrl.delete_file(pod_index, ep_index),
+
+            Message::Ui(UiMsg::DeleteAll(pod_index)) => main_ctrl.delete_files(pod_index),
+                    
             Message::Ui(UiMsg::Noop) => (),
         }
     }

@@ -169,6 +169,32 @@ impl Database {
         return Ok(());
     }
 
+    /// Removes a file listing for an episode from the database when the
+    /// user has chosen to delete the file.
+    pub fn remove_file(&self, episode_id: i64) {
+        let conn = self.conn.as_ref().unwrap();
+        let _ = conn.execute(
+            "DELETE FROM files WHERE episode_id = ?;",
+            params![episode_id]
+        ).unwrap();
+    }
+
+    /// Removes all file listings for the selected episode ids.
+    pub fn remove_files(&self, episode_ids: &[i64]) {
+        let conn = self.conn.as_ref().unwrap();
+
+        // convert list of episode ids into a comma-separated String
+        let episode_list: Vec<String> = episode_ids.iter()
+            .map(|x| x.to_string())
+            .collect();
+        let episodes = episode_list.join(", ");
+
+        let _ = conn.execute(
+            "DELETE FROM files WHERE episode_id = (?);",
+            params![episodes]
+        ).unwrap();
+    }
+
     /// Updates an existing podcast in the database, where metadata is
     /// changed if necessary, and episodes are updated (modified episodes
     /// are updated, new episodes are inserted).

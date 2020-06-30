@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use std::sync::mpsc;
+use std::fs;
 
 use crate::types::*;
 use crate::config::Config;
@@ -286,6 +287,69 @@ impl MainController {
         return match std::fs::create_dir_all(&download_path) {
             Ok(_) => Ok(download_path),
             Err(err) => Err(err),
+        }
+    }
+
+    /// Deletes a downloaded file for an episode from the user's local
+    /// system.
+    pub fn delete_file(&self, pod_index: usize, ep_index: usize) {
+        let borrowed_podcast_list = self.podcasts.borrow();
+        let borrowed_podcast = borrowed_podcast_list.get(pod_index).unwrap();
+
+        let mut episode = borrowed_podcast.episodes.clone_episode(ep_index).unwrap();
+        if episode.path.is_some() {
+            let title = episode.title.clone();
+            match fs::remove_file(episode.path.unwrap()) {
+                Ok(_) => {
+                    self.db.remove_file(episode.id.unwrap());
+                    episode.path = None;
+                    borrowed_podcast.episodes.replace(ep_index, episode).unwrap();
+
+                    self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
+                    self.msg_to_ui(
+                    format!("Deleted \"{}\"", title), false);
+                },
+                Err(_) => self.msg_to_ui(
+                    format!("Error deleting \"{}\"", title), true),
+            }
+        }
+    }
+
+    /// Deletes all downloaded files for a given podcast from the user's
+    /// local system.
+    pub fn delete_files(&self, pod_index: usize) {
+        let mut eps_to_remove = Vec::new();
+        let mut success = true;
+        {
+            let borrowed_podcast_list = self.podcasts.borrow();
+            let borrowed_podcast = borrowed_podcast_list.get(pod_index).unwrap();
+            let mut borrowed_ep_list = borrowed_podcast.episodes.borrow();
+
+            let n_eps = borrowed_ep_list.len();
+            for e in 0..n_eps {
+                if borrowed_ep_list[e].path.is_some() {
+                    let mut episode = borrowed_ep_list[e].clone();
+                    match fs::remove_file(episode.path.unwrap()) {
+                        Ok(_) => {
+                            eps_to_remove.push(episode.id.unwrap());
+                            episode.path = None;
+                            borrowed_ep_list[e] = episode;
+                        },
+                        Err(_) => success = false,
+                    }
+                }
+            }
+        }
+
+        self.db.remove_files(&eps_to_remove);
+        self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
+
+        if success {
+            self.msg_to_ui(
+                "Files successfully deleted.".to_string(), false);
+        } else {
+            self.msg_to_ui(
+                "Error while deleting files".to_string(), true);
         }
     }
 }

@@ -28,6 +28,8 @@ pub enum UiMsg {
     SyncAll,
     Download(usize, usize),
     DownloadAll(usize),
+    Delete(usize, usize),
+    DeleteAll(usize),
     Quit,
     Noop,
 }
@@ -375,8 +377,23 @@ impl<'a> UI<'a> {
                         }
                     },
 
-                    Some(UserAction::Delete) => {},
-                    Some(UserAction::DeleteAll) => {},
+                    Some(UserAction::Delete) => {
+                        match self.active_menu {
+                            ActiveMenu::PodcastMenu => (),
+                            ActiveMenu::EpisodeMenu => {
+                                if ep_len > 0 {
+                                    return UiMsg::Delete(current_pod_index, current_ep_index);
+                                }
+                            },
+                        }
+                    },
+
+                    Some(UserAction::DeleteAll) => {
+                        if pod_len > 0 {
+                            return UiMsg::DeleteAll(current_pod_index);
+                        }
+                    },
+
                     Some(UserAction::Remove) => {},
                     Some(UserAction::RemoveAll) => {},
 

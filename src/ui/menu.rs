@@ -175,6 +175,11 @@ impl<T: Clone + Menuable> Menu<T> {
         self.window.refresh();
     }
 
+    /// Sets font style and color of menu item. `index` is the position
+    /// of the menu item to be changed. `played` is an indicator of
+    /// whether that item has been played or not. `color` is a ColorType
+    /// representing the appropriate state of the item (e.g., Normal,
+    /// Highlighted).
     pub fn set_attrs(&mut self, index: i32, played: bool, color: ColorType) {
         let attr = if played {
             pancurses::A_NORMAL
@@ -187,6 +192,8 @@ impl<T: Clone + Menuable> Menu<T> {
             self.colors.get(color));
     }
 
+    /// Highlights the currently selected item in the menu, based on
+    /// whether the menu is currently active or not.
     pub fn highlight_selected(&mut self, active_menu: bool) {
         let played = self.items.borrow()
             .get((self.top_row + self.selected) as usize).unwrap()
