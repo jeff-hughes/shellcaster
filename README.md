@@ -48,7 +48,7 @@ shellcaster -c /path/to/config.toml
 
 **Note:** Shellcaster has currently only been tested on Linux x86. Earlier versions were tested on MacOS, but not extensively. You may be able to compile and use it on Windows as well, but you're on your own for that right now. If you are on Windows, your best bet at this point is to use Windows Subsystem for Linux (WSL) to compile and use it.
 
-## Keybindings
+## Default Keybindings
 
 | Key     | Action         |
 | ------- | -------------- |
