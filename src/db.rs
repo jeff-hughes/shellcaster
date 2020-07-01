@@ -118,10 +118,14 @@ impl Database {
         let pod_id = stmt
             .query_row::<i64,_,_>(params![podcast.url], |row| row.get(0))
             .unwrap();
-        let num_episodes = podcast.episodes.borrow().len();
+        let num_episodes;
+        {
+            let borrow = podcast.episodes.borrow();
+            num_episodes = borrow.len();
 
-        for ep in podcast.episodes.borrow().iter().rev() {
-            let _ = &self.insert_episode(pod_id, &ep)?;
+            for ep in borrow.iter().rev() {
+                let _ = &self.insert_episode(pod_id, &ep)?;
+            }
         }
 
         return Ok(num_episodes);

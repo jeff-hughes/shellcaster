@@ -19,7 +19,7 @@ use crate::types::*;
 use crate::config::Config;
 use crate::ui::UiMsg;
 use crate::feeds::FeedMsg;
-use crate::downloads::DownloadMsg;
+use crate::downloads::{DownloadMsg, EpData};
 
 // Specifies how long, in milliseconds, to display messages at the
 // bottom of the screen in the UI.
@@ -114,13 +114,23 @@ fn main() {
             // mutable borrow
             Message::Ui(UiMsg::Download(pod_index, ep_index)) => {
                 let pod_title;
+                let ep_data;
                 {
                     let borrowed_podcast_list = main_ctrl.podcasts.borrow();
-                    pod_title = borrowed_podcast_list[pod_index].title.clone();
+                    let borrowed_podcast = borrowed_podcast_list.get(pod_index).unwrap();
+                    pod_title = borrowed_podcast.title.clone();
+
+                    // grab just the relevant data we need
+                    ep_data = borrowed_podcast.episodes
+                        .map_single(ep_index, |ep| (EpData {
+                            id: ep.id.unwrap(),
+                            pod_id: ep.pod_id.unwrap(),
+                            title: ep.title.clone(),
+                            url: ep.url.clone(),
+                            file_path: None,
+                        }, ep.path.is_some())).unwrap();
                 }
-                let episode = main_ctrl.podcasts
-                    .clone_episode(pod_index, ep_index).unwrap();
-                if episode.path.is_some() {
+                if ep_data.1 {
                     // don't re-download if file already exists
                     // TODO: Might want to revisit this decision at some
                     // point, and ask user if they want to re-download
@@ -136,7 +146,7 @@ fn main() {
                 });
                 match main_ctrl.create_podcast_dir(dir_name) {
                     Ok(path) => main_ctrl.download_manager.download_list(
-                        &[&episode], &path),
+                        vec![ep_data.0], &path),
                     Err(_) => main_ctrl.msg_to_ui(
                         format!("Could not create dir: {}", pod_title), true),
                 }
@@ -158,29 +168,41 @@ fn main() {
             // `main_ctrl.download_manager.download_list()` requires
             // mutable borrow
             Message::Ui(UiMsg::DownloadAll(pod_index)) => {
-                // TODO: Try to do this without cloning the podcast...
-                let podcast = main_ctrl.podcasts
-                    .clone_podcast(pod_index).unwrap();
-                let pod_title = podcast.title.clone();
-                let borrowed_ep_list = podcast
-                    .episodes.borrow();
+                let pod_title;
+                let ep_data;
+                {
+                    // TODO: Try to do this without cloning the podcast...
+                    let podcast = main_ctrl.podcasts
+                        .clone_podcast(pod_index).unwrap();
+                    pod_title = podcast.title.clone();
 
-                let mut episodes = Vec::new();
-                for e in borrowed_ep_list.iter() {
-                    episodes.push(e);
+                    // grab just the relevant data we need
+                    ep_data = podcast.episodes
+                        .filter_map(|ep| match ep.path.is_some() {
+                            true => None,
+                            false => Some(EpData {
+                                id: ep.id.unwrap(),
+                                pod_id: ep.pod_id.unwrap(),
+                                title: ep.title.clone(),
+                                url: ep.url.clone(),
+                                file_path: None,
+                            }),
+                        });
                 }
 
-                // add directory for podcast, create if it does not exist
-                let dir_name = sanitize_with_options(&pod_title, Options {
-                    truncate: true,
-                    windows: true,  // for simplicity, we'll just use Windows-friendly paths for everyone
-                    replacement: ""
-                });
-                match main_ctrl.create_podcast_dir(dir_name) {
-                    Ok(path) => main_ctrl.download_manager.download_list(
-                        &episodes, &path),
-                    Err(_) => main_ctrl.msg_to_ui(
-                        format!("Could not create dir: {}", pod_title), true),
+                if !ep_data.is_empty() {
+                    // add directory for podcast, create if it does not exist
+                    let dir_name = sanitize_with_options(&pod_title, Options {
+                        truncate: true,
+                        windows: true,  // for simplicity, we'll just use Windows-friendly paths for everyone
+                        replacement: ""
+                    });
+                    match main_ctrl.create_podcast_dir(dir_name) {
+                        Ok(path) => main_ctrl.download_manager.download_list(
+                            ep_data, &path),
+                        Err(_) => main_ctrl.msg_to_ui(
+                            format!("Could not create dir: {}", pod_title), true),
+                    }
                 }
             },
 

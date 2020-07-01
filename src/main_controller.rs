@@ -89,22 +89,15 @@ impl MainController {
         // one), but then it won't block other tasks that
         // need to access the list.
         let mut pod_data = Vec::new();
-        {
-            let borrowed_pod_list = self.podcasts
-                .borrow();
-            match pod_index {
-                Some(idx) => {
-                    // just grab one podcast
-                    let podcast = &borrowed_pod_list[idx];
-                    pod_data.push((podcast.url.clone(), podcast.id));
-                },
-                None => {
-                    // get all of 'em!
-                    for podcast in borrowed_pod_list.iter() {
-                        pod_data.push((podcast.url.clone(), podcast.id));
-                    }
-                },
-            }
+        match pod_index {
+            // just grab one podcast
+            Some(idx) => pod_data.push(self.podcasts
+                .map_single(idx,
+                    |pod| (pod.url.clone(), pod.id))
+                .unwrap()),
+            // get all of 'em!
+            None => pod_data = self.podcasts
+                .map(|pod| (pod.url.clone(), pod.id)),
         }
         for data in pod_data.into_iter() {
             let url = data.0;
@@ -132,7 +125,9 @@ impl MainController {
         }
         match db_result {
             Ok(num_ep) => {
-                *self.podcasts.borrow() = self.db.get_podcasts();
+                {
+                    *self.podcasts.borrow() = self.db.get_podcasts();
+                }
                 self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
 
                 if update {
@@ -186,7 +181,6 @@ impl MainController {
         let mut episode = podcast.episodes.clone_episode(ep_index).unwrap();
         episode.played = played;
         
-        // eprintln!("{}", ep_index);
         self.db.set_played_status(episode.id.unwrap(), played);
         podcast.episodes.replace(ep_index, episode).unwrap();
 
@@ -230,38 +224,67 @@ impl MainController {
     // borrowing the MainController object, and the last line of this
     // function mutates MainController, so the borrow checker complains.
     // pub fn download(&mut self, pod_index: usize, ep_index: Option<usize>) {
-    //     // TODO: Try to do this without cloning the podcast...
-    //     let podcast = self.podcasts
-    //         .clone_podcast(pod_index).unwrap();
-    //     let pod_title = podcast.title.clone();
-    //     let borrowed_ep_list = podcast
-    //         .episodes.borrow();
+    //     let pod_title;
+    //     let mut ep_data = Vec::new();
+    //     {
+    //         // TODO: Try to do this without cloning the podcast...
+    //         let podcast = self.podcasts
+    //             .clone_podcast(pod_index).unwrap();
+    //         pod_title = podcast.title.clone();
 
-    //     let mut episodes = Vec::new();
-
-    //     // if we are selecting one specific episode, just grab that one;
-    //     // otherwise, loop through them all
-    //     match ep_index {
-    //         Some(ep_idx) => episodes.push(&borrowed_ep_list[ep_idx]),
-    //         None => {
-    //             for e in borrowed_ep_list.iter() {
-    //                 episodes.push(e);
+    //         // if we are selecting one specific episode, just grab that
+    //         // one; otherwise, loop through them all
+    //         match ep_index {
+    //             Some(ep_idx) => {
+    //                 // grab just the relevant data we need
+    //                 let data = podcast.episodes.map_single(ep_idx, |ep| (EpData {
+    //                     id: ep.id.unwrap(),
+    //                     pod_id: ep.pod_id.unwrap(),
+    //                     title: ep.title.clone(),
+    //                     url: ep.url.clone(),
+    //                     file_path: None,
+    //                 }, ep.path.is_some())).unwrap();
+    //                 if data.1 {
+    //                     ep_data.push(data.0);
+    //                 }
+    //             },
+    //             None => {
+    //                 // grab just the relevant data we need
+    //                 ep_data = podcast.episodes
+    //                     .filter_map(|ep| match ep.path.is_some() {
+    //                         true => None,
+    //                         false => Some(EpData {
+    //                             id: ep.id.unwrap(),
+    //                             pod_id: ep.pod_id.unwrap(),
+    //                             title: ep.title.clone(),
+    //                             url: ep.url.clone(),
+    //                             file_path: None,
+    //                         }),
+    //                     });
     //             }
     //         }
     //     }
 
-    //     // add directory for podcast, create if it does not exist
-    //     match main_ctrl.create_podcast_dir(pod_title.clone()) {
-    //         Ok(path) => main_ctrl.download_manager.download_list(
-    //             &episodes, &path),
-    //         Err(_) => main_ctrl.msg_to_ui(
-    //             format!("Could not create dir: {}", pod_title)),
-    //     })
+    //     if !ep_data.is_empty() {
+    //         // add directory for podcast, create if it does not exist
+    //         let dir_name = sanitize_with_options(&pod_title, Options {
+    //             truncate: true,
+    //             windows: true,  // for simplicity, we'll just use Windows-friendly paths for everyone
+    //             replacement: ""
+    //         });
+    //         match self.create_podcast_dir(dir_name) {
+    //             Ok(path) => self.download_manager.download_list(
+    //                 ep_data, &path),
+    //             Err(_) => self.msg_to_ui(
+    //                 format!("Could not create dir: {}", pod_title), true),
+    //         }
+    //     }
     // }
 
     /// Handles logic for what to do when a download successfully completes.
     pub fn download_complete(&self, ep_data: EpData) {
-        let _ = self.db.insert_file(ep_data.id, &ep_data.file_path);
+        let file_path = ep_data.file_path.unwrap().clone();
+        let _ = self.db.insert_file(ep_data.id, &file_path);
         {
             let pod_index = self.podcasts
                 .id_to_index(ep_data.pod_id).unwrap();
@@ -272,7 +295,7 @@ impl MainController {
             let ep_index = podcast.episodes
                 .id_to_index(ep_data.id).unwrap();
             let mut episode = podcast.episodes.clone_episode(ep_index).unwrap();
-            episode.path = Some(ep_data.file_path);
+            episode.path = Some(file_path);
             podcast.episodes.replace(ep_index, episode).unwrap();
         }
 
@@ -360,12 +383,12 @@ impl MainController {
             self.delete_files(pod_index);
         }
 
-        let mut borrowed_podcast_list = self.podcasts.borrow();
-        let borrowed_podcast = borrowed_podcast_list.get(pod_index).unwrap();
-
-        self.db.remove_podcast(borrowed_podcast.id.unwrap());
-
-        *borrowed_podcast_list = self.db.get_podcasts();
+        let pod_id = self.podcasts
+            .map_single(pod_index, |pod| pod.id).unwrap();
+        self.db.remove_podcast(pod_id.unwrap());
+        {
+            *self.podcasts.borrow() = self.db.get_podcasts();
+        }
         self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
     }
 
@@ -377,13 +400,15 @@ impl MainController {
         }
 
         let borrowed_podcast_list = self.podcasts.borrow();
-        let borrowed_podcast = borrowed_podcast_list.get(pod_index).unwrap();
-        let mut borrowed_ep_list = borrowed_podcast.episodes.borrow();
-        let episode = borrowed_ep_list.get(ep_index).unwrap();
+        let borrowed_podcast = borrowed_podcast_list
+            .get(pod_index).unwrap();
 
-        self.db.hide_episode(episode.id.unwrap(), true);
-
-        *borrowed_ep_list = self.db.get_episodes(borrowed_podcast.id.unwrap());
+        let ep_id = borrowed_podcast.episodes
+            .map_single(ep_index, |ep| ep.id).unwrap();
+        self.db.hide_episode(ep_id.unwrap(), true);
+        {
+            *borrowed_podcast.episodes.borrow() = self.db.get_episodes(borrowed_podcast.id.unwrap());
+        }
         self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
     }
 

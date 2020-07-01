@@ -7,7 +7,7 @@ use std::thread;
 use reqwest::blocking::Client;
 use sanitize_filename::{sanitize_with_options, Options};
 
-use crate::types::{Episode, Message};
+use crate::types::Message;
 
 /// Enum used for communicating back to the main controller upon
 /// successful or unsuccessful downloading of a file. i32 value
@@ -26,8 +26,9 @@ pub enum DownloadMsg {
 pub struct EpData {
     pub id: i64,
     pub pod_id: i64,
+    pub title: String,
     pub url: String,
-    pub file_path: PathBuf,
+    pub file_path: Option<PathBuf>,
 }
 
 
@@ -61,7 +62,7 @@ impl DownloadManager {
     /// threadpool if one is not already running, and then starts jobs
     /// for every episode to be downloaded. New jobs can be requested
     /// by the user while there are still ongoing jobs.
-    pub fn download_list(&mut self, episodes: &[&Episode], dest: &PathBuf) {
+    pub fn download_list(&mut self, episodes: Vec<EpData>, dest: &PathBuf) {
         // download thread and threadpool only exist when download
         // queue is not empty
         if self.threadpool.is_none() {
@@ -69,7 +70,7 @@ impl DownloadManager {
         }
 
         // parse episode details and push to queue
-        for ep in episodes.iter() {
+        for mut ep in episodes.into_iter() {
             let file_name = sanitize_with_options(&ep.title, Options {
                 truncate: true,
                 windows: true,  // for simplicity, we'll just use Windows-friendly paths for everyone
@@ -79,18 +80,13 @@ impl DownloadManager {
             let mut file_path = dest.clone();
             file_path.push(format!("{}.mp3", file_name));
 
-            let ep_data = EpData {
-                id: ep.id.unwrap(),
-                pod_id: ep.pod_id.unwrap(),
-                url: ep.url.clone(),
-                file_path: file_path,
-            };
+            ep.file_path = Some(file_path);
 
             let client_clone = self.get_client();
             let tx_to_main = self.tx_to_main.clone();
 
             self.threadpool.as_ref().unwrap().execute(move || {
-                let result = download_file(client_clone, ep_data);
+                let result = download_file(client_clone, ep);
                 tx_to_main.send(Message::Dl(result)).unwrap();
             });
         }
@@ -101,24 +97,25 @@ impl DownloadManager {
 /// Downloads a file to a local filepath, returning DownloadMsg variant
 /// indicating success or failure.
 fn download_file(client: Client, ep_data: EpData) -> DownloadMsg {
+    let data = ep_data.clone();
     let response = client.get(&ep_data.url).send();
     if response.is_err() {
-        return DownloadMsg::ResponseError(ep_data);
+        return DownloadMsg::ResponseError(data);
     }
 
     let resp_data = response.unwrap().bytes();
     if resp_data.is_err() {
-        return DownloadMsg::ResponseDataError(ep_data);
+        return DownloadMsg::ResponseDataError(data);
     }
 
-    let dst = File::create(&ep_data.file_path);
+    let dst = File::create(&ep_data.file_path.unwrap());
     if dst.is_err() {
-        return DownloadMsg::FileCreateError(ep_data);
+        return DownloadMsg::FileCreateError(data);
     };
 
     return match dst.unwrap().write(&resp_data.unwrap()) {
-        Ok(_) => DownloadMsg::Complete(ep_data),
-        Err(_) => DownloadMsg::FileWriteError(ep_data),
+        Ok(_) => DownloadMsg::Complete(data),
+        Err(_) => DownloadMsg::FileWriteError(data),
     };
 }
 

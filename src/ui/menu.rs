@@ -122,8 +122,8 @@ impl<T: Clone + Menuable> Menu<T> {
         let new_played;
         
         {
-            let borrow = self.items.borrow();
-            if borrow.is_empty() {
+            let list_len = self.items.len();
+            if list_len == 0 {
                 return;
             }
 
@@ -135,7 +135,7 @@ impl<T: Clone + Menuable> Menu<T> {
             // don't allow scrolling past last item in list (if shorter than
             // self.n_row)
             let abs_bottom = min(self.n_row,
-                (borrow.len() - 1) as i32);
+                (list_len - 1) as i32);
             if self.selected > abs_bottom {
                 self.selected = abs_bottom;
             }
@@ -144,7 +144,10 @@ impl<T: Clone + Menuable> Menu<T> {
             // scroll down
             if self.selected > (self.n_row - 1) {
                 self.selected = self.n_row - 1;
-                if let Some(elem) = borrow.get((self.top_row + self.n_row) as usize) {
+                if let Some(title) = self.items
+                    .map_single((self.top_row + self.n_row) as usize, 
+                        |el| el.get_title(self.n_col as usize)) {
+
                     self.top_row += 1;
                     self.window.mv(self.abs_y(0), self.abs_x(0));
                     self.window.deleteln();
@@ -152,7 +155,7 @@ impl<T: Clone + Menuable> Menu<T> {
 
                     self.window.mv(self.abs_y(self.n_row-1), self.abs_x(-1));
                     self.window.clrtobot();
-                    self.window.mvaddstr(self.abs_y(self.n_row-1), self.abs_x(0), elem.get_title(self.n_col as usize));
+                    self.window.mvaddstr(self.abs_y(self.n_row-1), self.abs_x(0), title);
 
                     self.draw_border();
                 }
@@ -160,21 +163,28 @@ impl<T: Clone + Menuable> Menu<T> {
             // scroll up
             } else if self.selected < 0 {
                 self.selected = 0;
-                if let Some(elem) = borrow.get((self.top_row - 1) as usize) {
+                if let Some(title) = self.items
+                    .map_single((self.top_row - 1) as usize,
+                        |el| el.get_title(self.n_col as usize)) {
+
                     self.top_row -= 1;
                     self.window.mv(self.abs_y(0), 0);
                     self.window.insertln();
                     old_selected += 1;
 
                     self.window.mv(self.abs_y(0), self.abs_x(0));
-                    self.window.addstr(elem.get_title(self.n_col as usize));
+                    self.window.addstr(title);
 
                     self.draw_border();
                 }
             }
 
-            old_played = borrow.get((self.top_row + old_selected) as usize).unwrap().is_played();
-            new_played = borrow.get((self.top_row + self.selected) as usize).unwrap().is_played();
+            old_played = self.items
+                .map_single((self.top_row + old_selected) as usize, 
+                    |el| el.is_played()).unwrap();
+            new_played = self.items
+                .map_single((self.top_row + self.selected) as usize,
+                    |el| el.is_played()).unwrap();
         }
 
         self.set_attrs(old_selected, old_played, ColorType::Normal);
@@ -202,15 +212,9 @@ impl<T: Clone + Menuable> Menu<T> {
     /// Highlights the currently selected item in the menu, based on
     /// whether the menu is currently active or not.
     pub fn highlight_selected(&mut self, active_menu: bool) {
-        let mut is_played = None;
-        {
-            let borrow = self.items.borrow();
-            let selected = borrow.get((self.top_row + self.selected) as usize);
-    
-            if let Some(el) = selected {
-                is_played = Some(el.is_played());
-            }
-        }
+        let is_played = self.items
+            .map_single((self.top_row + self.selected) as usize,
+            |el| el.is_played());
 
         if let Some(played) = is_played {
             if active_menu {
@@ -225,16 +229,14 @@ impl<T: Clone + Menuable> Menu<T> {
     /// Controls how the window changes when it is active (i.e., available
     /// for user input to modify state).
     pub fn activate(&mut self) {
-        let played;
-        {
-            let borrow = self.items.borrow();
-            if borrow.is_empty() {
-                return;
-            }
-                played = borrow.get(self.selected as usize).unwrap().is_played();
+        // if list is empty, will return None
+        if let Some(played) = self.items
+            .map_single((self.top_row + self.selected) as usize,
+            |el| el.is_played()) {
+
+            self.set_attrs(self.selected, played, ColorType::HighlightedActive);
+            self.window.refresh();
         }
-        self.set_attrs(self.selected, played, ColorType::HighlightedActive);
-        self.window.refresh();
     }
 
     /// Updates window size
@@ -276,16 +278,14 @@ impl Menu<Podcast> {
     /// Controls how the window changes when it is inactive (i.e., not
     /// available for user input to modify state).
     pub fn deactivate(&mut self) {
-        let played;
-        {
-            let borrow = self.items.borrow();
-            if borrow.is_empty() {
-                return;
-            }
-                played = borrow.get(self.selected as usize).unwrap().is_played();
+        // if list is empty, will return None
+        if let Some(played) = self.items
+            .map_single((self.top_row + self.selected) as usize,
+            |el| el.is_played()) {
+
+            self.set_attrs(self.selected, played, ColorType::Highlighted);
+            self.window.refresh();
         }
-        self.set_attrs(self.selected, played, ColorType::Highlighted);
-        self.window.refresh();
     }
 }
 
@@ -293,10 +293,13 @@ impl Menu<Episode> {
     /// Controls how the window changes when it is inactive (i.e., not
     /// available for user input to modify state).
     pub fn deactivate(&mut self) {
-        if !self.items.borrow().is_empty() {
-            let played = self.items.borrow().get(self.selected as usize).unwrap().is_played();
+        // if list is empty, will return None
+        if let Some(played) = self.items
+            .map_single((self.top_row + self.selected) as usize,
+            |el| el.is_played()) {
+
             self.set_attrs(self.selected, played, ColorType::Normal);
+            self.window.refresh();
         }
-        self.window.refresh();
     }
 }

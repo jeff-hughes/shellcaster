@@ -160,6 +160,51 @@ impl<T: Clone> LockVec<T> {
         }
     }
 
+    /// Maps a closure to every element in the LockVec, in the same way
+    /// as an Iterator. However, to avoid issues with keeping the borrow
+    /// alive, the function returns a Vec of the collected results,
+    /// rather than an iterator.
+    pub fn map<B, F>(&self, f: F) -> Vec<B>
+        where F: FnMut(&T) -> B {
+
+        let borrowed = self.borrow();
+        return borrowed.iter().map(f).collect();
+    }
+
+    /// Maps a closure to a single element in the LockVec, specified by
+    /// `index`. If there is no element at `index`, this returns None.
+    pub fn map_single<B, F>(&self, index: usize, f: F) -> Option<B>
+        where F: FnOnce(&T) -> B {
+
+        let borrowed = self.borrow();
+        return match borrowed.get(index) {
+            Some(item) => Some(f(item)),
+            None => return None,
+        };
+    }
+
+    /// Maps a closure to every element in the LockVec, in the same way
+    /// as the `filter_map()` does on an Iterator, both mapping and
+    /// filtering. However, to avoid issues with keeping the borrow
+    /// alive, the function returns a Vec of the collected results,
+    /// rather than an iterator.
+    pub fn filter_map<B, F>(&self, f: F) -> Vec<B>
+        where F: FnMut(&T) -> Option<B> {
+
+        let borrowed = self.borrow();
+        return borrowed.iter().filter_map(f).collect();
+    }
+
+    /// Implements the same functionality as the `fold()` method of an
+    /// Iterator, applying a function that accumulates a value over 
+    /// each element to produce a single, final value.
+    // pub fn fold<B, F>(&self, init: B, f: F) -> B
+    //     where F: FnMut(B, &T) -> B {
+
+    //     let borrowed = self.borrow();
+    //     return borrowed.iter().fold(init, f);
+    // }
+
     pub fn len(&self) -> usize {
         return self.borrow().len();
     }
