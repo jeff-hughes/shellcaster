@@ -10,7 +10,7 @@ categories = ["multimedia::audio", "command-line-interface"]
 
 homepage = "https://github.com/jeff-hughes/shellcaster"
 repository = "https://github.com/jeff-hughes/shellcaster"
-documentation = "https://docs.rs/shellcaster"
+documentation = "https://github.com/jeff-hughes/shellcaster"
 readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
