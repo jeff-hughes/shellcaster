@@ -352,4 +352,59 @@ impl MainController {
                 "Error while deleting files".to_string(), true);
         }
     }
+
+    /// Removes a podcast from the list, optionally deleting local files
+    /// first
+    pub fn remove_podcast(&self, pod_index: usize, delete_files: bool) {
+        if delete_files {
+            self.delete_files(pod_index);
+        }
+
+        let mut borrowed_podcast_list = self.podcasts.borrow();
+        let borrowed_podcast = borrowed_podcast_list.get(pod_index).unwrap();
+
+        self.db.remove_podcast(borrowed_podcast.id.unwrap());
+
+        *borrowed_podcast_list = self.db.get_podcasts();
+        self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
+    }
+
+    /// Removes an episode from the list, optionally deleting local files
+    /// first
+    pub fn remove_episode(&self, pod_index: usize, ep_index: usize, delete_files: bool) {
+        if delete_files {
+            self.delete_file(pod_index, ep_index);
+        }
+
+        let borrowed_podcast_list = self.podcasts.borrow();
+        let borrowed_podcast = borrowed_podcast_list.get(pod_index).unwrap();
+        let mut borrowed_ep_list = borrowed_podcast.episodes.borrow();
+        let episode = borrowed_ep_list.get(ep_index).unwrap();
+
+        self.db.hide_episode(episode.id.unwrap(), true);
+
+        *borrowed_ep_list = self.db.get_episodes(borrowed_podcast.id.unwrap());
+        self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
+    }
+
+    /// Removes all episodes for a podcast from the list, optionally
+    /// deleting local files first
+    pub fn remove_all_episodes(&self, pod_index: usize, delete_files: bool) {
+        if delete_files {
+            self.delete_files(pod_index);
+        }
+
+        let mut podcast = self.podcasts.clone_podcast(pod_index).unwrap();
+        {
+            let mut borrowed_ep_list = podcast.episodes.borrow();
+            for ep in borrowed_ep_list.iter() {
+                self.db.hide_episode(ep.id.unwrap(), true);
+            }
+            *borrowed_ep_list = Vec::new();
+        }
+        podcast.num_unplayed = 0;
+        self.podcasts.replace(pod_index, podcast).unwrap();
+
+        self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
+    }
 }

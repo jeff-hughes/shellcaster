@@ -25,6 +25,10 @@ impl Database {
                     conn: Some(conn),
                 };
                 db_conn.create();
+
+                // SQLite defaults to foreign key support off
+                db_conn.conn.as_ref().unwrap().execute("PRAGMA foreign_keys=ON;", params![]).unwrap();
+
                 return db_conn;
             },
             Err(err) => panic!("Could not open database: {}", err),
@@ -66,7 +70,7 @@ impl Database {
                 duration INTEGER,
                 played INTEGER,
                 hidden INTEGER,
-                FOREIGN KEY(podcast_id) REFERENCES podcasts(id)
+                FOREIGN KEY(podcast_id) REFERENCES podcasts(id) ON DELETE CASCADE
             );",
             params![],
         ) {
@@ -80,7 +84,7 @@ impl Database {
                 id INTEGER PRIMARY KEY NOT NULL,
                 episode_id INTEGER NOT NULL,
                 path TEXT NOT NULL UNIQUE,
-                FOREIGN KEY (episode_id) REFERENCES episodes(id)
+                FOREIGN KEY (episode_id) REFERENCES episodes(id) ON DELETE CASCADE
             );",
             params![],
         ) {
@@ -195,6 +199,19 @@ impl Database {
         ).unwrap();
     }
 
+    /// Removes a podcast, all episodes, and files from the database.
+    pub fn remove_podcast(&self, podcast_id: i64) {
+        let conn = self.conn.as_ref().unwrap();
+        // Note: Because of the foreign key constraints on `episodes`
+        // and `files` tables, all associated episodes for this podcast
+        // will also be deleted, and all associated file entries for
+        // those episodes as well.
+        let _ = conn.execute(
+            "DELETE FROM podcasts WHERE id = ?;",
+            params![podcast_id]
+        ).unwrap();
+    }
+
     /// Updates an existing podcast in the database, where metadata is
     /// changed if necessary, and episodes are updated (modified episodes
     /// are updated, new episodes are inserted).
@@ -284,6 +301,18 @@ impl Database {
         let _ = conn.execute(
             "UPDATE episodes SET played = ? WHERE id = ?;",
             params![played, episode_id]
+        ).unwrap();
+    }
+
+    /// Updates an episode to "remove" it by hiding it. "Removed"
+    /// episodes need to stay in the database so that they don't get
+    /// re-added when the podcast is synced again.
+    pub fn hide_episode(&self, episode_id: i64, hide: bool) {
+        let conn = self.conn.as_ref().unwrap();
+
+        let _ = conn.execute(
+            "UPDATE episodes SET hidden = ? WHERE id = ?;",
+            params![hide, episode_id]
         ).unwrap();
     }
 

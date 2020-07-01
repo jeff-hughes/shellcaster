@@ -76,6 +76,13 @@ impl<T: Clone + Menuable> Menu<T> {
 
         let borrow = self.items.borrow();
         if !borrow.is_empty() {
+            // update selected item if list has gotten shorter
+            let current_selected = self.selected + self.top_row;
+            let list_len = borrow.len() as i32;
+            if current_selected >= list_len {
+                self.selected = self.selected - (current_selected - list_len) - 1;
+            }
+
             // for visible rows, print strings from list
             for i in 0..self.n_row {
                 let item_idx = (self.top_row + i) as usize;
@@ -195,15 +202,24 @@ impl<T: Clone + Menuable> Menu<T> {
     /// Highlights the currently selected item in the menu, based on
     /// whether the menu is currently active or not.
     pub fn highlight_selected(&mut self, active_menu: bool) {
-        let played = self.items.borrow()
-            .get((self.top_row + self.selected) as usize).unwrap()
-            .is_played();
-        if active_menu {
-            self.set_attrs(self.selected, played, ColorType::HighlightedActive);
-        } else {
-            self.set_attrs(self.selected, played, ColorType::Highlighted);
+        let mut is_played = None;
+        {
+            let borrow = self.items.borrow();
+            let selected = borrow.get((self.top_row + self.selected) as usize);
+    
+            if let Some(el) = selected {
+                is_played = Some(el.is_played());
+            }
         }
-        self.window.refresh();
+
+        if let Some(played) = is_played {
+            if active_menu {
+                self.set_attrs(self.selected, played, ColorType::HighlightedActive);
+            } else {
+                self.set_attrs(self.selected, played, ColorType::Highlighted);
+            }
+            self.window.refresh();
+        }
     }
 
     /// Controls how the window changes when it is active (i.e., available

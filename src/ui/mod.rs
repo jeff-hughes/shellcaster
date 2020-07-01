@@ -30,6 +30,9 @@ pub enum UiMsg {
     DownloadAll(usize),
     Delete(usize, usize),
     DeleteAll(usize),
+    RemovePodcast(usize, bool),
+    RemoveEpisode(usize, usize, bool),
+    RemoveAllEpisodes(usize, bool),
     Quit,
     Noop,
 }
@@ -394,8 +397,94 @@ impl<'a> UI<'a> {
                         }
                     },
 
-                    Some(UserAction::Remove) => {},
-                    Some(UserAction::RemoveAll) => {},
+                    Some(UserAction::Remove) => {
+                        let mut delete = false;
+
+                        match self.active_menu {
+                            ActiveMenu::PodcastMenu => {
+                                if pod_len > 0 {
+                                    // check if we have local files first
+                                    let mut any_downloaded = false;
+                                    {
+                                        let borrowed_podcast_list = self.podcast_menu.items.borrow();
+                                        let borrowed_podcast = borrowed_podcast_list.get(current_pod_index).unwrap();
+                                        let borrowed_ep_list = borrowed_podcast.episodes.borrow();
+
+                                        for ep in borrowed_ep_list.iter() {
+                                            if ep.path.is_some() {
+                                                any_downloaded = true;
+                                                break;
+                                            }
+                                        }
+                                    }
+
+                                    if any_downloaded {
+                                        let ask_delete = self.spawn_yes_no_win("Delete local files too?");
+                                        delete = match ask_delete {
+                                            Some(val) => val,
+                                            None => false,  // default not to delete
+                                        };
+                                    }
+
+                                    return UiMsg::RemovePodcast(current_pod_index, delete);
+                                }
+                            },
+                            ActiveMenu::EpisodeMenu => {
+                                if ep_len > 0 {
+
+                                    // check if we have local files first
+                                    let is_downloaded;
+                                    {
+                                        let borrowed_ep_list = self.episode_menu.items.borrow();
+                                        is_downloaded = borrowed_ep_list
+                                            .get(current_ep_index).unwrap()
+                                            .path.is_some();
+                                    }
+                                    if is_downloaded {
+                                        let ask_delete = self.spawn_yes_no_win("Delete local file too?");
+                                        delete = match ask_delete {
+                                            Some(val) => val,
+                                            None => false,  // default not to delete
+                                        };
+                                    }
+
+                                    return UiMsg::RemoveEpisode(current_pod_index, current_ep_index, delete);
+                                }
+                            },
+                        }
+                    },
+                    Some(UserAction::RemoveAll) => {
+                        if pod_len > 0 {
+                            let mut delete = false;
+                            
+                            // check if we have local files first
+                            let mut any_downloaded = false;
+                            {
+                                let borrowed_podcast_list = self.podcast_menu.items.borrow();
+                                let borrowed_podcast = borrowed_podcast_list.get(current_pod_index).unwrap();
+                                let borrowed_ep_list = borrowed_podcast.episodes.borrow();
+
+                                for ep in borrowed_ep_list.iter() {
+                                    if ep.path.is_some() {
+                                        any_downloaded = true;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if any_downloaded {
+                                let ask_delete = self.spawn_yes_no_win("Delete local files too?");
+                                delete = match ask_delete {
+                                    Some(val) => val,
+                                    None => false,  // default not to delete
+                                };
+                            }
+                            return match self.active_menu {
+                                ActiveMenu::PodcastMenu => UiMsg::RemovePodcast(current_pod_index, delete),
+                                ActiveMenu::EpisodeMenu => UiMsg::RemoveAllEpisodes(current_pod_index, delete),
+                            }
+                        }
+                    },
 
                     Some(UserAction::Quit) => {
                         return UiMsg::Quit;
@@ -493,6 +582,26 @@ impl<'a> UI<'a> {
         return inputs;
     }
 
+    /// Adds a one-line pancurses window to the bottom of the screen to
+    /// solicit user for a yes/no input. A prefix can be specified as a
+    /// prompt for the user at the beginning of the input line. "(y/n)"
+    /// will automatically be appended to the end of the prefix. If the
+    /// user types 'y' or 'n', the boolean will represent this value. If
+    /// the user cancels the input or types anything else, the function
+    /// will return None.
+    pub fn spawn_yes_no_win(&self, prefix: &str) -> Option<bool> {
+        let mut out_val = None;
+        let input = self.spawn_input_win(&format!("{} {}", prefix, "(y/n) "));
+        if let Some(c) = input.trim().chars().next() {
+            if c == 'Y' || c == 'y' {
+                out_val = Some(true);
+            } else if c == 'N' || c == 'n' {
+                out_val = Some(false);
+            }
+        }
+        return out_val;
+    }
+
     /// Adds a one-line pancurses window to the bottom of the screen for
     /// displaying messages to the user. `duration` indicates how long
     /// (in milliseconds) this message will remain on screen. Useful for
@@ -528,6 +637,7 @@ impl<'a> UI<'a> {
     /// update.
     pub fn update_menus(&mut self) {
         self.podcast_menu.update_items();
+        self.episode_menu.items = self.podcast_menu.get_episodes();
         self.episode_menu.update_items();
 
         match self.active_menu {

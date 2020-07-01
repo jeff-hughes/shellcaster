@@ -63,7 +63,7 @@ fn main() {
         });
     let config = Config::new(&config_path);
 
-    let mut db_path = config_path.clone();
+    let mut db_path = config_path;
     if !db_path.pop() {
         println!("Could not correctly parse the config file location. Please specify a valid path to the config file.");
         process::exit(1);
@@ -187,6 +187,12 @@ fn main() {
             Message::Ui(UiMsg::Delete(pod_index, ep_index)) => main_ctrl.delete_file(pod_index, ep_index),
 
             Message::Ui(UiMsg::DeleteAll(pod_index)) => main_ctrl.delete_files(pod_index),
+
+            Message::Ui(UiMsg::RemovePodcast(pod_index, delete_files)) => main_ctrl.remove_podcast(pod_index, delete_files),
+
+            Message::Ui(UiMsg::RemoveEpisode(pod_index, ep_index, delete_files)) => main_ctrl.remove_episode(pod_index, ep_index, delete_files),
+
+            Message::Ui(UiMsg::RemoveAllEpisodes(pod_index, delete_files)) => main_ctrl.remove_all_episodes(pod_index, delete_files),
                     
             Message::Ui(UiMsg::Noop) => (),
         }
