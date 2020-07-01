@@ -9,7 +9,6 @@ use crate::db::Database;
 use crate::feeds;
 use crate::downloads::{self, EpData};
 use crate::play_file;
-use crate::MESSAGE_TIME;
 
 /// Enum used for communicating with other threads.
 #[derive(Debug)]
@@ -78,7 +77,7 @@ impl MainController {
     /// the bottom of the screen.
     pub fn msg_to_ui(&self, message: String, error: bool) {
         self.tx_to_ui.send(MainMessage::UiSpawnMsgWin(
-            message, MESSAGE_TIME, error)).unwrap();
+            message, crate::config::MESSAGE_TIME, error)).unwrap();
     }
 
     /// Synchronize RSS feed data for one or more podcasts.
@@ -283,7 +282,7 @@ impl MainController {
 
     /// Handles logic for what to do when a download successfully completes.
     pub fn download_complete(&self, ep_data: EpData) {
-        let file_path = ep_data.file_path.unwrap().clone();
+        let file_path = ep_data.file_path.unwrap();
         let _ = self.db.insert_file(ep_data.id, &file_path);
         {
             let pod_index = self.podcasts

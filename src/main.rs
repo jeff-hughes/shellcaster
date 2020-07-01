@@ -21,23 +21,6 @@ use crate::ui::UiMsg;
 use crate::feeds::FeedMsg;
 use crate::downloads::{DownloadMsg, EpData};
 
-// Specifies how long, in milliseconds, to display messages at the
-// bottom of the screen in the UI.
-const MESSAGE_TIME: u64 = 5000;
-
-// How many columns we need, minimum, before we display the
-// (unplayed/total) after the podcast title
-const PODCAST_UNPLAYED_TOTALS_LENGTH: usize = 25;
-
-// How many columns we need, minimum, before we display the duration of
-// the episode
-const EPISODE_DURATION_LENGTH: usize = 45;
-
-// How many columns we need, minimum, before we display the pubdate
-// of the episode
-const EPISODE_PUBDATE_LENGTH: usize = 60;
-
-
 /// Main controller for shellcaster program.
 /// 
 /// Setup involves connecting to the sqlite database (creating it if 
@@ -178,15 +161,16 @@ fn main() {
 
                     // grab just the relevant data we need
                     ep_data = podcast.episodes
-                        .filter_map(|ep| match ep.path.is_some() {
-                            true => None,
-                            false => Some(EpData {
+                        .filter_map(|ep| if ep.path.is_some() {
+                            None
+                        } else {
+                            Some(EpData {
                                 id: ep.id.unwrap(),
                                 pod_id: ep.pod_id.unwrap(),
                                 title: ep.title.clone(),
                                 url: ep.url.clone(),
                                 file_path: None,
-                            }),
+                            })
                         });
                 }
 

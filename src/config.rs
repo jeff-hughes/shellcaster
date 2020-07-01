@@ -5,6 +5,23 @@ use std::path::PathBuf;
 
 use crate::keymap::{Keybindings, UserAction};
 
+// Specifies how long, in milliseconds, to display messages at the
+// bottom of the screen in the UI.
+pub const MESSAGE_TIME: u64 = 5000;
+
+// How many columns we need, minimum, before we display the
+// (unplayed/total) after the podcast title
+pub const PODCAST_UNPLAYED_TOTALS_LENGTH: usize = 25;
+
+// How many columns we need, minimum, before we display the duration of
+// the episode
+pub const EPISODE_DURATION_LENGTH: usize = 45;
+
+// How many columns we need, minimum, before we display the pubdate
+// of the episode
+pub const EPISODE_PUBDATE_LENGTH: usize = 60;
+
+
 /// Holds information about user configuration of program. 
 #[derive(Debug, Clone)]
 pub struct Config {
