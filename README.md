@@ -1,14 +1,52 @@
 # Shellcaster
 
-Shellcaster is a terminal-based podcast manager, built in Rust. It is currently not yet in stable format, and is still in active development.
+Shellcaster is a terminal-based podcast manager, built in Rust. It provides a terminal UI (i.e., ncurses) to allow users to subscribe to podcast feeds, and sync feeds to check for new episodes. Episodes may be downloaded locally, played (with an external media player, at least for now), and marked as played/unplayed. Keybindings and other options are configurable via a config file.
 
-The app provides a terminal UI (i.e., ncurses) to allow users to subscribe to podcast feeds, and periodically check for new episodes. Podcasts and episodes are listed in a menu, and episodes may be downloaded locally, played (with an external media player, at least for now), and marked as played/unplayed. Keybindings and other options are configurable via a config file.
+Note that shellcaster is not yet in stable format, and is still in active development. However, the basic functionality is present, and it should generally be usable (with some bugs and irritations still to be worked out!).
 
 ![shellcaster screenshot](https://raw.githubusercontent.com/jeff-hughes/shellcaster/master/img/screenshot.png)
 
-## Current progress
+## Installing shellcaster
 
-Right now the program has most of the basic functionality, but has not yet been optimized, and there are still features that have not yet been implemented. See the keybindings below for the list of functions available.
+There are currently a couple of ways to install shellcaster. The following assumes you already have Rust + cargo installed.
+
+1. You can install the latest version of the binary directly from crates.io with one command:
+
+```bash
+cargo install shellcaster
+```
+
+2. You can clone the Github repo and compile it yourself:
+
+```bash
+git clone https://github.com/jeff-hughes/shellcaster.git
+cd shellcaster
+cargo build --release
+sudo cp target/release/shellcaster /usr/local/bin/
+shellcaster  # to run
+```
+
+If you want to change configuration settings:
+
+```bash
+# on Linux
+mkdir -p ~/.config/shellcaster
+cp config.toml ~/.config/shellcaster/
+
+# on MacOS
+mkdir -p ~/Library/Preferences/shellcaster
+cp config.toml ~/Library/Preferences/shellcaster/
+```
+
+(If you installed directly with cargo, the sample `config.toml` file can be copied from [here](https://raw.githubusercontent.com/jeff-hughes/shellcaster/master/config.toml). Place it in the same location as noted above.)
+
+Or you can put `config.toml` in a place of your choosing, and specify the location at runtime:
+
+```bash
+shellcaster -c /path/to/config.toml
+```
+
+**Note:** Shellcaster has currently only been tested on Linux x86. Earlier versions were tested on MacOS, but not extensively. You may be able to compile and use it on Windows as well, but you're on your own for that right now. If you are on Windows, your best bet at this point is to use Windows Subsystem for Linux (WSL) to compile and use it.
 
 ## Keybindings
 
@@ -32,38 +70,6 @@ Right now the program has most of the basic functionality, but has not yet been 
 Keybindings can be modified in the config.toml file. Actions can be
 mapped to more than one key, but a single key may not do more than one
 action.
-
-## Compiling shellcaster
-
-To reiterate, shellcaster does *not* yet have a stable release. But if you're interested in compiling it yourself, you can build the binaries with the following commands.
-
-**Note:** This assumes you already have Rust + cargo installed, and are using a Unix shell (e.g., bash, zsh, fish). You can probably compile it on Windows as well, but you're on your own for that right now.
-
-```
-git clone https://github.com/jeff-hughes/shellcaster.git
-cd shellcaster
-cargo build --release
-sudo cp target/release/shellcaster /usr/local/bin/
-shellcaster  # to run
-```
-
-If you want to change configuration settings:
-
-```
-# on Linux
-mkdir -p ~/.config/shellcaster
-cp config.toml ~/.config/shellcaster/
-
-# on MacOS
-mkdir -p ~/Library/Preferences/shellcaster
-cp config.toml ~/Library/Preferences/shellcaster/
-```
-
-Or you can put `config.toml` in a place of your choosing, and specify the location at runtime:
-
-```
-shellcaster -c /path/to/config.toml
-```
 
 ## Why "shellcaster"?
 

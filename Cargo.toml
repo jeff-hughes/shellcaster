@@ -3,6 +3,15 @@ name = "shellcaster"
 version = "0.8.1"
 authors = ["Jeff Hughes <jeff.hughes@gmail.com>"]
 edition = "2018"
+license = "GPL-3.0-or-later"
+description = "A terminal-based podcast manager to subscribe to and play podcasts."
+keywords = ["podcast", "terminal", "TUI", "curses"]
+categories = ["multimedia::audio", "command-line-interface"]
+
+homepage = "https://github.com/jeff-hughes/shellcaster"
+repository = "https://github.com/jeff-hughes/shellcaster"
+documentation = "https://docs.rs/shellcaster"
+readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
