@@ -1,8 +1,9 @@
 use std::cmp::min;
 
-use pancurses::Window;
 use crate::types::*;
-use super::{Colors, ColorType};
+use super::ColorType;
+use super::panel::Panel;
+
 
 /// Generic struct holding details about a list menu. These menus are
 /// contained by the UI, and hold the list of podcasts or podcast
@@ -22,13 +23,8 @@ use super::{Colors, ColorType};
 #[derive(Debug)]
 pub struct Menu<T>
     where T: Clone + Menuable {
-    pub window: Window,
-    pub screen_pos: usize,
-    pub colors: Colors,
-    pub title: String,
+    pub panel: Panel,
     pub items: LockVec<T>,
-    pub n_row: i32,
-    pub n_col: i32,
     pub top_row: i32,  // top row of text shown in window
     pub selected: i32,  // which line of text is highlighted
 }
@@ -37,42 +33,14 @@ impl<T: Clone + Menuable> Menu<T> {
     /// Prints the list of visible items to the pancurses window and
     /// refreshes it.
     pub fn init(&mut self) {
-        self.draw_border();
+        self.panel.init();
         self.update_items();
-    }
-
-    /// Draws a border around the window.
-    fn draw_border(&self) {
-        let top_left;
-        let bot_left;
-        match self.screen_pos {
-            0 => {
-                top_left = pancurses::ACS_ULCORNER();
-                bot_left = pancurses::ACS_LLCORNER();
-            }
-            _ => {
-                top_left = pancurses::ACS_TTEE();
-                bot_left = pancurses::ACS_BTEE();
-            }
-        }
-        self.window.border(
-            pancurses::ACS_VLINE(),
-            pancurses::ACS_VLINE(),
-            pancurses::ACS_HLINE(),
-            pancurses::ACS_HLINE(),
-            top_left,
-            pancurses::ACS_URCORNER(),
-            bot_left,
-            pancurses::ACS_LRCORNER());
-
-        self.window.mvaddstr(0, 2, self.title.clone());
     }
 
     /// Prints or reprints the list of visible items to the pancurses
     /// window and refreshes it.
     pub fn update_items(&mut self) {
-        self.window.erase();
-        self.draw_border();
+        self.panel.erase();
 
         let borrow = self.items.borrow();
         if !borrow.is_empty() {
@@ -84,11 +52,11 @@ impl<T: Clone + Menuable> Menu<T> {
             }
 
             // for visible rows, print strings from list
-            for i in 0..self.n_row {
+            for i in 0..self.panel.get_rows() {
                 let item_idx = (self.top_row + i) as usize;
                 if let Some(elem) = borrow.get(item_idx) {
-                    self.window.mvaddstr(self.abs_y(i), self.abs_x(0),
-                        elem.get_title(self.n_col as usize));
+                    self.panel.write_line(i,
+                        elem.get_title(self.panel.get_cols() as usize));
 
                     // this is literally the same logic as
                     // self.set_attrs(), but it's complaining about
@@ -98,16 +66,14 @@ impl<T: Clone + Menuable> Menu<T> {
                     } else {
                         pancurses::A_BOLD
                     };
-                    self.window.mvchgat(self.abs_y(i), self.abs_x(-1),
-                        self.n_col + 3,
-                        attr,
-                        self.colors.get(ColorType::Normal));
+                    self.panel.change_attr(i, -1, self.panel.get_cols() + 3,
+                        attr, ColorType::Normal);
                 } else {
                     break;
                 }
             }
         }
-        self.window.refresh();
+        self.panel.refresh();
     }
 
     /// Scrolls the menu up or down by `lines` lines. Negative values of
@@ -127,14 +93,16 @@ impl<T: Clone + Menuable> Menu<T> {
                 return;
             }
 
+            let n_row = self.panel.get_rows();
+
             // TODO: currently only handles scroll value of 1; need to extend
             // to be able to scroll multiple lines at a time
             old_selected = self.selected;
             self.selected += lines;
 
-            // don't allow scrolling past last item in list (if shorter than
-            // self.n_row)
-            let abs_bottom = min(self.n_row,
+            // don't allow scrolling past last item in list (if shorter
+            // than self.panel.get_rows())
+            let abs_bottom = min(self.panel.get_rows(),
                 (list_len - 1) as i32);
             if self.selected > abs_bottom {
                 self.selected = abs_bottom;
@@ -142,22 +110,18 @@ impl<T: Clone + Menuable> Menu<T> {
 
             // scroll list if necessary:
             // scroll down
-            if self.selected > (self.n_row - 1) {
-                self.selected = self.n_row - 1;
+            if self.selected > (n_row - 1) {
+                self.selected = n_row - 1;
                 if let Some(title) = self.items
-                    .map_single((self.top_row + self.n_row) as usize, 
-                        |el| el.get_title(self.n_col as usize)) {
+                    .map_single((self.top_row + n_row) as usize, 
+                        |el| el.get_title(self.panel.get_cols() as usize)) {
 
                     self.top_row += 1;
-                    self.window.mv(self.abs_y(0), self.abs_x(0));
-                    self.window.deleteln();
+                    self.panel.delete_line(0);
                     old_selected -= 1;
 
-                    self.window.mv(self.abs_y(self.n_row-1), self.abs_x(-1));
-                    self.window.clrtobot();
-                    self.window.mvaddstr(self.abs_y(self.n_row-1), self.abs_x(0), title);
-
-                    self.draw_border();
+                    self.panel.delete_line(n_row-1);
+                    self.panel.write_line(n_row-1, title);
                 }
 
             // scroll up
@@ -165,17 +129,11 @@ impl<T: Clone + Menuable> Menu<T> {
                 self.selected = 0;
                 if let Some(title) = self.items
                     .map_single((self.top_row - 1) as usize,
-                        |el| el.get_title(self.n_col as usize)) {
+                        |el| el.get_title(self.panel.get_cols() as usize)) {
 
                     self.top_row -= 1;
-                    self.window.mv(self.abs_y(0), 0);
-                    self.window.insertln();
+                    self.panel.insert_line(0, title);
                     old_selected += 1;
-
-                    self.window.mv(self.abs_y(0), self.abs_x(0));
-                    self.window.addstr(title);
-
-                    self.draw_border();
                 }
             }
 
@@ -189,7 +147,7 @@ impl<T: Clone + Menuable> Menu<T> {
 
         self.set_attrs(old_selected, old_played, ColorType::Normal);
         self.set_attrs(self.selected, new_played, ColorType::HighlightedActive);
-        self.window.refresh();
+        self.panel.refresh();
     }
 
     /// Sets font style and color of menu item. `index` is the position
@@ -203,10 +161,8 @@ impl<T: Clone + Menuable> Menu<T> {
         } else {
             pancurses::A_BOLD
         };
-        self.window.mvchgat(self.abs_y(index), self.abs_x(-1),
-            self.n_col + 3,
-            attr,
-            self.colors.get(color));
+        self.panel.change_attr(index, -1, self.panel.get_cols() + 3,
+            attr, color);
     }
 
     /// Highlights the currently selected item in the menu, based on
@@ -222,7 +178,7 @@ impl<T: Clone + Menuable> Menu<T> {
             } else {
                 self.set_attrs(self.selected, played, ColorType::Highlighted);
             }
-            self.window.refresh();
+            self.panel.refresh();
         }
     }
 
@@ -235,33 +191,21 @@ impl<T: Clone + Menuable> Menu<T> {
             |el| el.is_played()) {
 
             self.set_attrs(self.selected, played, ColorType::HighlightedActive);
-            self.window.refresh();
+            self.panel.refresh();
         }
     }
 
     /// Updates window size
-    pub fn resize(&mut self, n_row: i32, n_col: i32) {
-        self.n_row = n_row;
-        self.n_col = n_col;
+    pub fn resize(&mut self, n_row: i32, n_col: i32, start_y: i32, start_x: i32) {
+        self.panel.resize(n_row, n_col, start_y, start_x);
+        let n_row = self.panel.get_rows();
 
         // if resizing moves selected item off screen, scroll the list
         // upwards to keep same item selected
-        if self.selected > (self.n_row - 1) {
-            self.top_row = self.top_row + self.selected - (self.n_row - 1);
-            self.selected = self.n_row - 1;
+        if self.selected > (n_row - 1) {
+            self.top_row = self.top_row + self.selected - (n_row - 1);
+            self.selected = n_row - 1;
         }
-    }
-
-    /// Calculates the y-value relative to the window rather than to the
-    /// menu (i.e., taking into account borders and margins).
-    fn abs_y(&self, y: i32) -> i32 {
-        return y + 1;
-    }
-
-    /// Calculates the x-value relative to the window rather than to the
-    /// menu (i.e., taking into account borders and margins).
-    fn abs_x(&self, x: i32) -> i32 {
-        return x + 2;
     }
 }
 
@@ -284,7 +228,7 @@ impl Menu<Podcast> {
             |el| el.is_played()) {
 
             self.set_attrs(self.selected, played, ColorType::Highlighted);
-            self.window.refresh();
+            self.panel.refresh();
         }
     }
 }
@@ -299,7 +243,7 @@ impl Menu<Episode> {
             |el| el.is_played()) {
 
             self.set_attrs(self.selected, played, ColorType::Normal);
-            self.window.refresh();
+            self.panel.refresh();
         }
     }
 }

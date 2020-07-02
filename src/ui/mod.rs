@@ -2,10 +2,12 @@ use std::thread;
 use std::sync::mpsc;
 use std::time::Duration;
 
+mod panel;
 mod menu;
 mod colors;
 
 use self::menu::Menu;
+use self::panel::Panel;
 use self::colors::{Colors, ColorType};
 
 use pancurses::{Window, newwin, Input};
@@ -117,44 +119,42 @@ impl<'a> UI<'a> {
         let pod_col = n_col / 2;
         let ep_col = n_col - pod_col + 1;
 
-        let podcast_menu_win = newwin(n_row - 1, pod_col, 0, 0);
+        let podcast_panel = Panel::new(
+            colors.clone(),
+            "Podcasts".to_string(),
+            0,
+            n_row - 1, pod_col,
+            0, 0
+        );
         let mut podcast_menu = Menu {
-            window: podcast_menu_win,
-            screen_pos: 0,
-            colors: colors.clone(),
-            title: "Podcasts".to_string(),
+            panel: podcast_panel,
             items: items.clone(),
-            n_row: n_row - 3,  // 2 for border and 1 for messages at bottom
-            n_col: pod_col - 5,  // 2 for border, 2 for margins
             top_row: 0,
             selected: 0,
         };
 
-        stdscr.noutrefresh();
+        stdscr.refresh();
         podcast_menu.init();
         podcast_menu.activate();
-        podcast_menu.window.noutrefresh();
 
-        let episode_menu_win = newwin(n_row - 1, ep_col, 0, pod_col - 1);
+        let episode_panel = Panel::new(
+            colors.clone(),
+            "Episodes".to_string(),
+            1,
+            n_row - 1, ep_col,
+            0, pod_col - 1
+        );
         let first_pod: LockVec<Episode> = match items.borrow().get(0) {
             Some(pod) => pod.episodes.clone(),
             None => LockVec::new(Vec::new()),
         };
         let mut episode_menu = Menu {
-            window: episode_menu_win,
-            screen_pos: 1,
-            colors: colors.clone(),
-            title: "Episodes".to_string(),
+            panel: episode_panel,
             items: first_pod,
-            n_row: n_row - 3,  // 2 for border and 1 for messages at bottom
-            n_col: ep_col - 5,  // 2 for border, 2 for margins, and...
-                                // 1 more for luck? I have no idea why
-                                // this needs an extra 1, but it works
             top_row: 0,
             selected: 0,
         };
         episode_menu.init();
-        episode_menu.window.noutrefresh();
 
         // welcome screen if user does not have any podcasts yet
         let welcome_win = if items.borrow().is_empty() {
@@ -162,8 +162,6 @@ impl<'a> UI<'a> {
         } else {
             None
         };
-
-        pancurses::doupdate();
 
         return UI {
             stdscr,
@@ -196,21 +194,10 @@ impl<'a> UI<'a> {
 
                 let pod_col = n_col / 2;
                 let ep_col = n_col - pod_col;
-                self.podcast_menu.resize(n_row-3, pod_col-5);
-                self.episode_menu.resize(n_row-3, ep_col-5);
 
-                // apparently pancurses does not implement `wresize()`
-                // from ncurses, so instead we create an entirely new
-                // window every time the terminal is resized...not ideal,
-                // but c'est la vie
-                let pod_oldwin = std::mem::replace(
-                    &mut self.podcast_menu.window,
-                    newwin(n_row-1, pod_col, 0, 0));
-                let ep_oldwin = std::mem::replace(
-                    &mut self.episode_menu.window,
-                    newwin(n_row-1, ep_col, 0, pod_col-1));
-                pod_oldwin.delwin();
-                ep_oldwin.delwin();
+                self.podcast_menu.resize(n_row-1, pod_col, 0, 0);
+                self.episode_menu.resize(n_row-1, ep_col, 0, pod_col - 1);
+
                 self.stdscr.refresh();
                 self.update_menus();
                 
