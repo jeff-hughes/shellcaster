@@ -18,6 +18,9 @@ impl Database {
     /// it does not already exist). Panics if database cannot be accessed.
     pub fn connect(path: &PathBuf) -> Database {
         let mut db_path = path.clone();
+        if std::fs::create_dir_all(&db_path).is_err() {
+            panic!("Unable to create subdirectory for database.");
+        }
         db_path.push("data.db");
         match Connection::open(db_path) {
             Ok(conn) => {
