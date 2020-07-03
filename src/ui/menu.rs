@@ -2,7 +2,7 @@ use std::cmp::min;
 
 use crate::types::*;
 use super::ColorType;
-use super::panel::Panel;
+use super::Panel;
 
 
 /// Generic struct holding details about a list menu. These menus are
@@ -245,5 +245,156 @@ impl Menu<Episode> {
             self.set_attrs(self.selected, played, ColorType::Normal);
             self.panel.refresh();
         }
+    }
+}
+
+
+// TESTS -----------------------------------------------------------------
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+
+    fn create_menu(n_row: i32, n_col: i32, top_row: i32, selected: i32) -> Menu<Episode> {
+        let titles = vec![
+            "A Very Cool Episode",
+            "This is a very long episode title but we'll get through it together",
+            "An episode with le Unicodé",
+            "How does an episode with emoji sound? 😉",
+            "Here's another title",
+            "Un titre, c'est moi!",
+            "One more just for good measure"
+        ];
+        let mut items = Vec::new();
+        for (i, t) in titles.iter().enumerate() {
+            let played = i % 2 == 0;
+            items.push(Episode {
+                id: None,
+                pod_id: None,
+                title: t.to_string(),
+                url: String::new(),
+                description: String::new(),
+                pubdate: Some(Utc::now()),
+                duration: Some(12345),
+                path: None,
+                played: played,
+            });
+        }
+
+        let panel = Panel::new(
+            crate::ui::colors::set_colors(),
+            "Episodes".to_string(),
+            1,
+            n_row, n_col,
+            0, 0
+        );
+        return Menu {
+            panel: panel,
+            items: LockVec::new(items),
+            top_row: top_row,
+            selected: selected,
+        };
+    }
+
+    #[test]
+    fn scroll_up() {
+        let real_rows = 5;
+        let real_cols = 65;
+        let mut menu = create_menu(real_rows+2, real_cols+5, 2, 0);
+        menu.update_items();
+
+        menu.scroll(-1);
+
+        let borrow = menu.items.borrow();
+        let expected_top = borrow[1].get_title(real_cols as usize);
+        let expected_bot = borrow[5].get_title(real_cols as usize);
+
+        assert_eq!(menu.panel.get_row(0).0, expected_top);
+        assert_eq!(menu.panel.get_row(4).0, expected_bot);
+    }
+
+    #[test]
+    fn scroll_down() {
+        let real_rows = 5;
+        let real_cols = 65;
+        let mut menu = create_menu(real_rows+2, real_cols+5, 0, 4);
+        menu.update_items();
+
+        menu.scroll(1);
+
+        let borrow = menu.items.borrow();
+        let expected_top = borrow[1].get_title(real_cols as usize);
+        let expected_bot = borrow[5].get_title(real_cols as usize);
+
+        assert_eq!(menu.panel.get_row(0).0, expected_top);
+        assert_eq!(menu.panel.get_row(4).0, expected_bot);
+    }
+
+    #[test]
+    fn resize_bigger() {
+        let real_rows = 5;
+        let real_cols = 65;
+        let mut menu = create_menu(real_rows+2, real_cols+5, 0, 4);
+        menu.update_items();
+
+        menu.resize(real_rows+2+5, real_cols+5+5, 0, 0);
+        menu.update_items();
+
+        assert_eq!(menu.top_row, 0);
+        assert_eq!(menu.selected, 4);
+
+        let non_empty: Vec<String> = menu.panel.window.iter()
+            .filter_map(|x| if x.0.is_empty() {
+                    None
+                } else {
+                    Some(x.0.clone())
+                }).collect();
+        assert_eq!(non_empty.len(), menu.items.len());
+    }
+
+    #[test]
+    fn resize_smaller() {
+        let real_rows = 7;
+        let real_cols = 65;
+        let mut menu = create_menu(real_rows+2, real_cols+5, 0, 6);
+        menu.update_items();
+
+        menu.resize(real_rows+2-2, real_cols+5-5, 0, 0);
+        menu.update_items();
+
+        assert_eq!(menu.top_row, 2);
+        assert_eq!(menu.selected, 4);
+
+        let non_empty: Vec<String> = menu.panel.window.iter()
+            .filter_map(|x| if x.0.is_empty() {
+                    None
+                } else {
+                    Some(x.0.clone())
+                }).collect();
+        assert_eq!(non_empty.len(), (real_rows-2) as usize);
+    }
+
+    #[test]
+    fn chop_accent() {
+        let real_rows = 5;
+        let real_cols = 25;
+        let mut menu = create_menu(real_rows+2, real_cols+5, 0, 0);
+        menu.update_items();
+
+        let expected = "An episode with le Unicod".to_string();
+
+        assert_eq!(menu.panel.get_row(2).0, expected);
+    }
+
+    #[test]
+    fn chop_emoji() {
+        let real_rows = 5;
+        let real_cols = 38;
+        let mut menu = create_menu(real_rows+2, real_cols+5, 0, 0);
+        menu.update_items();
+
+        let expected = "How does an episode with emoji sound? ".to_string();
+
+        assert_eq!(menu.panel.get_row(3).0, expected);
     }
 }

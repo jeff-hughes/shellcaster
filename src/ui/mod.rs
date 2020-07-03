@@ -2,12 +2,15 @@ use std::thread;
 use std::sync::mpsc;
 use std::time::Duration;
 
+#[cfg_attr(not(test), path="panel.rs")]
+#[cfg_attr(test, path="mock_panel.rs")]
 mod panel;
+
 mod menu;
 mod colors;
 
-use self::menu::Menu;
 use self::panel::Panel;
+use self::menu::Menu;
 use self::colors::{Colors, ColorType};
 
 use pancurses::{Window, newwin, Input};
