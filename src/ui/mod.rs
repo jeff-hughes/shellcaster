@@ -263,8 +263,12 @@ impl<'a> UI<'a> {
 
                 // resize welcome window, if it exists
                 if self.welcome_win.is_some() {
+                    let _ = std::mem::replace(
+                        &mut self.welcome_win,
+                        Some(UI::make_welcome_win(self.colors.clone(), &self.keymap, n_row-1, n_col)));
+                    
                     let ww = self.welcome_win.as_mut().unwrap();
-                    ww.resize(n_row-1, n_col, 0, 0);
+                    ww.refresh();
                 }
                 self.stdscr.refresh();
             },
@@ -697,7 +701,12 @@ impl<'a> UI<'a> {
     /// update.
     pub fn update_menus(&mut self) {
         self.podcast_menu.update_items();
-        self.episode_menu.items = self.podcast_menu.get_episodes();
+
+        self.episode_menu.items = if self.podcast_menu.items.len() > 0 {
+            self.podcast_menu.get_episodes()
+        } else {
+            LockVec::new(Vec::new())
+        };
         self.episode_menu.update_items();
 
         match self.active_menu {
