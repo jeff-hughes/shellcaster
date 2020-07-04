@@ -14,10 +14,22 @@ use self::menu::Menu;
 use self::colors::{Colors, ColorType};
 
 use pancurses::{Window, newwin, Input};
+use lazy_static::lazy_static;
+use regex::Regex;
+
 use crate::config::Config;
 use crate::keymap::{Keybindings, UserAction};
 use crate::types::*;
 use super::MainMessage;
+
+lazy_static! {
+    /// Regex for finding HTML tags
+    static ref RE_HTML_TAGS: Regex = Regex::new(r"<[^<>]*>").unwrap();
+
+    /// Regex for finding more than two line breaks
+    static ref RE_MULT_LINE_BREAKS: Regex = Regex::new(r"((\r\n)|\r|\n){3,}").unwrap();
+}
+
 
 /// Enum used for communicating back to the main controller after user
 /// input has been captured by the UI. usize values always represent the
@@ -748,7 +760,13 @@ impl<'a> UI<'a> {
                         let desc = if ep.description.is_empty() {
                             None
                         } else {
-                            Some(ep.description.clone())
+                            // strip all HTML tags and excessive line breaks
+                            let stripped_tags = RE_HTML_TAGS.replace_all(&ep.description, "").to_string();
+
+                            // remove anything more than two line breaks (i.e., one blank line)
+                            let no_line_breaks = RE_MULT_LINE_BREAKS.replace_all(&stripped_tags, "\n\n");
+
+                            Some(no_line_breaks.to_string())
                         };
 
                         let details = Details {
