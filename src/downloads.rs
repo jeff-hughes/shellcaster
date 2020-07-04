@@ -1,10 +1,10 @@
 use std::fs::File;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, mpsc, mpsc::Sender};
 use std::thread;
+use std::time::Duration;
 
-use reqwest::blocking::Client;
 use sanitize_filename::{sanitize_with_options, Options};
 
 use crate::types::Message;
@@ -35,7 +35,6 @@ pub struct EpData {
 /// Main controller for managing downloads. The DownloadManager will
 /// spin up a threadpool the first time downloads are requested.
 pub struct DownloadManager {
-    request_client: Client,
     tx_to_main: Sender<Message>,
     threadpool: Option<ThreadPool>,
     n_threads: usize,
@@ -45,16 +44,10 @@ impl DownloadManager {
     /// Creates a new DownloadManager.
     pub fn new(n_threads: usize, tx_to_main: Sender<Message>) -> DownloadManager {
         return DownloadManager {
-            request_client: Client::new(),
             tx_to_main: tx_to_main,
             threadpool: None,
             n_threads: n_threads,
         };
-    }
-
-    /// Clones the reference to the reqwest client.
-    fn get_client(&self) -> Client {
-        return self.request_client.clone();
     }
 
     /// This is the method the main controller uses to indicate new
@@ -82,11 +75,9 @@ impl DownloadManager {
 
             ep.file_path = Some(file_path);
 
-            let client_clone = self.get_client();
             let tx_to_main = self.tx_to_main.clone();
-
             self.threadpool.as_ref().unwrap().execute(move || {
-                let result = download_file(client_clone, ep);
+                let result = download_file(ep);
                 tx_to_main.send(Message::Dl(result)).unwrap();
             });
         }
@@ -96,15 +87,20 @@ impl DownloadManager {
 
 /// Downloads a file to a local filepath, returning DownloadMsg variant
 /// indicating success or failure.
-fn download_file(client: Client, ep_data: EpData) -> DownloadMsg {
+fn download_file(ep_data: EpData) -> DownloadMsg {
     let data = ep_data.clone();
-    let response = client.get(&ep_data.url).send();
-    if response.is_err() {
+
+    let response = ureq::get(&ep_data.url)
+        .timeout(Duration::from_secs(5))
+        .call();
+    if response.error() {
         return DownloadMsg::ResponseError(data);
     }
 
-    let resp_data = response.unwrap().bytes();
-    if resp_data.is_err() {
+    let mut reader = response.into_reader();
+    let mut resp_data = Vec::new();
+    let total_size = reader.read_to_end(&mut resp_data);
+    if total_size.is_err() {
         return DownloadMsg::ResponseDataError(data);
     }
 
@@ -113,7 +109,7 @@ fn download_file(client: Client, ep_data: EpData) -> DownloadMsg {
         return DownloadMsg::FileCreateError(data);
     };
 
-    return match dst.unwrap().write(&resp_data.unwrap()) {
+    return match dst.unwrap().write(&resp_data) {
         Ok(_) => DownloadMsg::Complete(data),
         Err(_) => DownloadMsg::FileWriteError(data),
     };

@@ -1,5 +1,7 @@
 use std::thread;
 use std::sync::mpsc;
+use std::time::Duration;
+use std::io::Read;
 
 use rss::{Channel, Item};
 use chrono::{DateTime, Utc};
@@ -47,8 +49,20 @@ pub fn spawn_feed_checker(tx_to_main: mpsc::Sender<Message>, url: String, pod_id
 /// Given a URL, this attempts to pull the data about a podcast and its
 /// episodes from an RSS feed.
 pub fn get_feed_data(url: String) -> Result<Podcast, Box<dyn std::error::Error>> {
-    let channel = Channel::from_url(&url)?;
-    return parse_feed_data(channel, &url);
+    let response = ureq::get(&url)
+        .timeout(Duration::from_secs(5))
+        .call();
+    if response.error() {
+        return Err(String::from("TODO: Better error handling here.").into());
+    }
+
+    let mut reader = response.into_reader();
+    let mut resp_data = Vec::new();
+    reader.read_to_end(&mut resp_data)?;
+
+    // let channel = Channel::from_url(&url)?;
+    let channel = Channel::read_from(&resp_data[..])?;
+    return Ok(parse_feed_data(channel, &url));
 }
 
 
@@ -57,7 +71,7 @@ pub fn get_feed_data(url: String) -> Result<Podcast, Box<dyn std::error::Error>>
 /// specifications for podcast RSS feeds that a feed should adhere to, but
 /// this does try to make some attempt to account for the possibility that
 /// a feed might not be valid according to the spec.
-pub fn parse_feed_data(channel: Channel, url: &str) -> Result<Podcast, Box<dyn std::error::Error>> {
+pub fn parse_feed_data(channel: Channel, url: &str) -> Podcast {
     let title = channel.title().to_string();
     let url = url.to_string();
     let description = Some(channel.description().to_string());
@@ -91,7 +105,7 @@ pub fn parse_feed_data(channel: Channel, url: &str) -> Result<Podcast, Box<dyn s
         }
     }
 
-    return Ok(Podcast {
+    return Podcast {
         id: None,
         title: title,
         url: url,
@@ -102,7 +116,7 @@ pub fn parse_feed_data(channel: Channel, url: &str) -> Result<Podcast, Box<dyn s
         episodes: LockVec::new(episodes),
         num_unplayed: 0,  // this will be set properly once it's inserted
                           // into the database and then read back
-    });
+    };
 }
 
 /// For an item (episode) in an RSS feed, this pulls data about the item
@@ -257,7 +271,7 @@ mod tests {
     fn no_description() {
         let path = "./tests/test_no_description.xml";
         let channel = Channel::read_from(open_file(path)).unwrap();
-        let data = parse_feed_data(channel, "dummy_url").unwrap();
+        let data = parse_feed_data(channel, "dummy_url");
         assert_eq!(data.description, Some("".to_string()));
     }
 
@@ -265,7 +279,7 @@ mod tests {
     fn invalid_explicit() {
         let path = "./tests/test_inval_explicit.xml";
         let channel = Channel::read_from(open_file(path)).unwrap();
-        let data = parse_feed_data(channel, "dummy_url").unwrap();
+        let data = parse_feed_data(channel, "dummy_url");
         assert_eq!(data.explicit, None);
     }
 
@@ -273,7 +287,7 @@ mod tests {
     fn no_episodes() {
         let path = "./tests/test_no_episodes.xml";
         let channel = Channel::read_from(open_file(path)).unwrap();
-        let data = parse_feed_data(channel, "dummy_url").unwrap();
+        let data = parse_feed_data(channel, "dummy_url");
         assert_eq!(data.episodes.borrow().len(), 0);
     }
 
