@@ -2,14 +2,13 @@ use std::process;
 use std::path::PathBuf;
 use std::sync::mpsc;
 
-use sanitize_filename::{sanitize_with_options, Options};
-
 mod main_controller;
 mod config;
 mod keymap;
 mod db;
 mod ui;
 mod types;
+mod threadpool;
 mod feeds;
 mod downloads;
 mod play_file;
@@ -19,7 +18,7 @@ use crate::types::*;
 use crate::config::Config;
 use crate::ui::UiMsg;
 use crate::feeds::FeedMsg;
-use crate::downloads::{DownloadMsg, EpData};
+use crate::downloads::DownloadMsg;
 
 /// Main controller for shellcaster program.
 /// 
@@ -52,7 +51,7 @@ fn main() {
         process::exit(1);
     }
 
-    let mut main_ctrl = MainController::new(config, &db_path);
+    let main_ctrl = MainController::new(config, &db_path);
 
 
     // MAIN LOOP --------------------------------------------------------
@@ -92,48 +91,8 @@ fn main() {
             Message::Ui(UiMsg::MarkAllPlayed(pod_index, played)) =>
                 main_ctrl.mark_all_played(pod_index, played),
 
-            // TODO: Stuck with this here for now because
-            // `main_ctrl.download_manager.download_list()` requires
-            // mutable borrow
-            Message::Ui(UiMsg::Download(pod_index, ep_index)) => {
-                let pod_title;
-                let ep_data;
-                {
-                    let borrowed_podcast_list = main_ctrl.podcasts.borrow();
-                    let borrowed_podcast = borrowed_podcast_list.get(pod_index).unwrap();
-                    pod_title = borrowed_podcast.title.clone();
-
-                    // grab just the relevant data we need
-                    ep_data = borrowed_podcast.episodes
-                        .map_single(ep_index, |ep| (EpData {
-                            id: ep.id.unwrap(),
-                            pod_id: ep.pod_id.unwrap(),
-                            title: ep.title.clone(),
-                            url: ep.url.clone(),
-                            file_path: None,
-                        }, ep.path.is_some())).unwrap();
-                }
-                if ep_data.1 {
-                    // don't re-download if file already exists
-                    // TODO: Might want to revisit this decision at some
-                    // point, and ask user if they want to re-download
-                    // the file
-                    return;
-                }
-
-                // add directory for podcast, create if it does not exist
-                let dir_name = sanitize_with_options(&pod_title, Options {
-                    truncate: true,
-                    windows: true,  // for simplicity, we'll just use Windows-friendly paths for everyone
-                    replacement: ""
-                });
-                match main_ctrl.create_podcast_dir(dir_name) {
-                    Ok(path) => main_ctrl.download_manager.download_list(
-                        vec![ep_data.0], &path),
-                    Err(_) => main_ctrl.msg_to_ui(
-                        format!("Could not create dir: {}", pod_title), true),
-                }
-            },
+            Message::Ui(UiMsg::Download(pod_index, ep_index)) =>
+                main_ctrl.download(pod_index, Some(ep_index)),
 
             // downloading can produce any one of these responses
             Message::Dl(DownloadMsg::Complete(ep_data)) =>
@@ -147,58 +106,23 @@ fn main() {
             Message::Dl(DownloadMsg::FileWriteError(_)) =>
                 main_ctrl.msg_to_ui("Error writing file to disk.".to_string(), true),
 
-            // TODO: Stuck with this here for now because
-            // `main_ctrl.download_manager.download_list()` requires
-            // mutable borrow
-            Message::Ui(UiMsg::DownloadAll(pod_index)) => {
-                let pod_title;
-                let ep_data;
-                {
-                    // TODO: Try to do this without cloning the podcast...
-                    let podcast = main_ctrl.podcasts
-                        .clone_podcast(pod_index).unwrap();
-                    pod_title = podcast.title.clone();
+            Message::Ui(UiMsg::DownloadAll(pod_index)) =>
+                main_ctrl.download(pod_index, None),
 
-                    // grab just the relevant data we need
-                    ep_data = podcast.episodes
-                        .filter_map(|ep| if ep.path.is_some() {
-                            None
-                        } else {
-                            Some(EpData {
-                                id: ep.id.unwrap(),
-                                pod_id: ep.pod_id.unwrap(),
-                                title: ep.title.clone(),
-                                url: ep.url.clone(),
-                                file_path: None,
-                            })
-                        });
-                }
+            Message::Ui(UiMsg::Delete(pod_index, ep_index)) =>
+                main_ctrl.delete_file(pod_index, ep_index),
 
-                if !ep_data.is_empty() {
-                    // add directory for podcast, create if it does not exist
-                    let dir_name = sanitize_with_options(&pod_title, Options {
-                        truncate: true,
-                        windows: true,  // for simplicity, we'll just use Windows-friendly paths for everyone
-                        replacement: ""
-                    });
-                    match main_ctrl.create_podcast_dir(dir_name) {
-                        Ok(path) => main_ctrl.download_manager.download_list(
-                            ep_data, &path),
-                        Err(_) => main_ctrl.msg_to_ui(
-                            format!("Could not create dir: {}", pod_title), true),
-                    }
-                }
-            },
+            Message::Ui(UiMsg::DeleteAll(pod_index)) =>
+                main_ctrl.delete_files(pod_index),
 
-            Message::Ui(UiMsg::Delete(pod_index, ep_index)) => main_ctrl.delete_file(pod_index, ep_index),
+            Message::Ui(UiMsg::RemovePodcast(pod_index, delete_files)) =>
+                main_ctrl.remove_podcast(pod_index, delete_files),
 
-            Message::Ui(UiMsg::DeleteAll(pod_index)) => main_ctrl.delete_files(pod_index),
+            Message::Ui(UiMsg::RemoveEpisode(pod_index, ep_index, delete_files)) =>
+                main_ctrl.remove_episode(pod_index, ep_index, delete_files),
 
-            Message::Ui(UiMsg::RemovePodcast(pod_index, delete_files)) => main_ctrl.remove_podcast(pod_index, delete_files),
-
-            Message::Ui(UiMsg::RemoveEpisode(pod_index, ep_index, delete_files)) => main_ctrl.remove_episode(pod_index, ep_index, delete_files),
-
-            Message::Ui(UiMsg::RemoveAllEpisodes(pod_index, delete_files)) => main_ctrl.remove_all_episodes(pod_index, delete_files),
+            Message::Ui(UiMsg::RemoveAllEpisodes(pod_index, delete_files)) =>
+                main_ctrl.remove_all_episodes(pod_index, delete_files),
                     
             Message::Ui(UiMsg::Noop) => (),
         }

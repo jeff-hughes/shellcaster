@@ -2,10 +2,13 @@ use std::path::PathBuf;
 use std::sync::mpsc;
 use std::fs;
 
+use sanitize_filename::{sanitize_with_options, Options};
+
 use crate::types::*;
 use crate::config::Config;
 use crate::ui::UI;
 use crate::db::Database;
+use crate::threadpool::Threadpool;
 use crate::feeds;
 use crate::downloads::{self, EpData};
 use crate::play_file;
@@ -23,7 +26,7 @@ pub enum MainMessage {
 pub struct MainController {
     pub config: Config,
     pub db: Database,
-    pub download_manager: downloads::DownloadManager,
+    pub threadpool: Threadpool,
     pub podcasts: LockVec<Podcast>,
     pub ui_thread: std::thread::JoinHandle<()>,
     pub tx_to_ui: mpsc::Sender<MainMessage>,
@@ -42,13 +45,10 @@ impl MainController {
         
         // get connection to the database
         let db_inst = Database::connect(&db_path);
-    
-        // set up download manager
-        let tx_dl_to_main = tx_to_main.clone();
-        let download_manager = downloads::DownloadManager::new(
-            config.simultaneous_downloads,
-            tx_dl_to_main);
-    
+
+        // set up threadpool
+        let threadpool = Threadpool::new(config.simultaneous_downloads);
+ 
         // create vector of podcasts, where references are checked at
         // runtime; this is necessary because we want main.rs to hold the
         // "ground truth" list of podcasts, and it must be mutable, but
@@ -64,7 +64,7 @@ impl MainController {
         return MainController {
             config: config,
             db: db_inst,
-            download_manager: download_manager,
+            threadpool: threadpool,
             podcasts: podcast_list,
             ui_thread: ui_thread,
             tx_to_ui: tx_to_ui,
@@ -219,66 +219,69 @@ impl MainController {
         self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
     }
 
-    // TODO: Right now this can't be used because the main loop is
-    // borrowing the MainController object, and the last line of this
-    // function mutates MainController, so the borrow checker complains.
-    // pub fn download(&mut self, pod_index: usize, ep_index: Option<usize>) {
-    //     let pod_title;
-    //     let mut ep_data = Vec::new();
-    //     {
-    //         // TODO: Try to do this without cloning the podcast...
-    //         let podcast = self.podcasts
-    //             .clone_podcast(pod_index).unwrap();
-    //         pod_title = podcast.title.clone();
+    /// Given a podcast index (and not an episode index), this will send
+    /// a vector of jobs to the threadpool to download all episodes in
+    /// the podcast. If given an episode index as well, it will download
+    /// just that episode.
+    pub fn download(&self, pod_index: usize, ep_index: Option<usize>) {
+        let pod_title;
+        let mut ep_data = Vec::new();
+        {
+            // TODO: Try to do this without cloning the podcast...
+            let podcast = self.podcasts
+                .clone_podcast(pod_index).unwrap();
+            pod_title = podcast.title.clone();
 
-    //         // if we are selecting one specific episode, just grab that
-    //         // one; otherwise, loop through them all
-    //         match ep_index {
-    //             Some(ep_idx) => {
-    //                 // grab just the relevant data we need
-    //                 let data = podcast.episodes.map_single(ep_idx, |ep| (EpData {
-    //                     id: ep.id.unwrap(),
-    //                     pod_id: ep.pod_id.unwrap(),
-    //                     title: ep.title.clone(),
-    //                     url: ep.url.clone(),
-    //                     file_path: None,
-    //                 }, ep.path.is_some())).unwrap();
-    //                 if data.1 {
-    //                     ep_data.push(data.0);
-    //                 }
-    //             },
-    //             None => {
-    //                 // grab just the relevant data we need
-    //                 ep_data = podcast.episodes
-    //                     .filter_map(|ep| match ep.path.is_some() {
-    //                         true => None,
-    //                         false => Some(EpData {
-    //                             id: ep.id.unwrap(),
-    //                             pod_id: ep.pod_id.unwrap(),
-    //                             title: ep.title.clone(),
-    //                             url: ep.url.clone(),
-    //                             file_path: None,
-    //                         }),
-    //                     });
-    //             }
-    //         }
-    //     }
+            // if we are selecting one specific episode, just grab that
+            // one; otherwise, loop through them all
+            match ep_index {
+                Some(ep_idx) => {
+                    // grab just the relevant data we need
+                    let data = podcast.episodes.map_single(ep_idx, |ep| (EpData {
+                        id: ep.id.unwrap(),
+                        pod_id: ep.pod_id.unwrap(),
+                        title: ep.title.clone(),
+                        url: ep.url.clone(),
+                        file_path: None,
+                    }, ep.path.is_some())).unwrap();
+                    if data.1 {
+                        ep_data.push(data.0);
+                    }
+                },
+                None => {
+                    // grab just the relevant data we need
+                    ep_data = podcast.episodes
+                        .filter_map(|ep| if ep.path.is_some() {
+                            None
+                        } else {
+                            Some(EpData {
+                                id: ep.id.unwrap(),
+                                pod_id: ep.pod_id.unwrap(),
+                                title: ep.title.clone(),
+                                url: ep.url.clone(),
+                                file_path: None,
+                            })
+                        });
+                }
+            }
+        }
 
-    //     if !ep_data.is_empty() {
-    //         // add directory for podcast, create if it does not exist
-    //         let dir_name = sanitize_with_options(&pod_title, Options {
-    //             truncate: true,
-    //             windows: true,  // for simplicity, we'll just use Windows-friendly paths for everyone
-    //             replacement: ""
-    //         });
-    //         match self.create_podcast_dir(dir_name) {
-    //             Ok(path) => self.download_manager.download_list(
-    //                 ep_data, &path),
-    //             Err(_) => self.msg_to_ui(
-    //                 format!("Could not create dir: {}", pod_title), true),
-    //         }
-    //     }
-    // }
+        if !ep_data.is_empty() {
+            // add directory for podcast, create if it does not exist
+            let dir_name = sanitize_with_options(&pod_title, Options {
+                truncate: true,
+                windows: true,  // for simplicity, we'll just use Windows-friendly paths for everyone
+                replacement: ""
+            });
+            match self.create_podcast_dir(dir_name) {
+                Ok(path) => downloads::download_list(
+                    ep_data, &path,
+                    &self.threadpool, self.tx_to_main.clone()),
+                Err(_) => self.msg_to_ui(
+                    format!("Could not create dir: {}", pod_title), true),
+            }
+        }
+    }
 
     /// Handles logic for what to do when a download successfully completes.
     pub fn download_complete(&self, ep_data: EpData) {
