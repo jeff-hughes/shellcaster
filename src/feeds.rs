@@ -1,4 +1,3 @@
-use std::thread;
 use std::sync::mpsc;
 use std::time::Duration;
 use std::io::Read;
@@ -10,6 +9,7 @@ use lazy_static::lazy_static;
 use regex::{Regex, Match};
 
 use crate::types::{Podcast, Episode, Message, LockVec};
+use crate::threadpool::Threadpool;
 
 lazy_static! {
     /// Regex for parsing an episode "duration", which could take the form
@@ -27,8 +27,8 @@ pub enum FeedMsg {
 }
 
 /// Spawns a new thread to check a feed and retrieve podcast data.
-pub fn spawn_feed_checker(tx_to_main: mpsc::Sender<Message>, url: String, pod_id: Option<i64>) -> thread::JoinHandle<()> {
-    return thread::spawn(move || {
+pub fn check_feed(url: String, pod_id: Option<i64>, threadpool: &Threadpool, tx_to_main: mpsc::Sender<Message>) {
+    threadpool.execute(move || {
         match get_feed_data(url) {
             Ok(mut pod) => {
                 match pod_id {
@@ -48,7 +48,7 @@ pub fn spawn_feed_checker(tx_to_main: mpsc::Sender<Message>, url: String, pod_id
 
 /// Given a URL, this attempts to pull the data about a podcast and its
 /// episodes from an RSS feed.
-pub fn get_feed_data(url: String) -> Result<Podcast, Box<dyn std::error::Error>> {
+fn get_feed_data(url: String) -> Result<Podcast, Box<dyn std::error::Error>> {
     let response = ureq::get(&url)
         .timeout(Duration::from_secs(5))
         .call();
@@ -71,7 +71,7 @@ pub fn get_feed_data(url: String) -> Result<Podcast, Box<dyn std::error::Error>>
 /// specifications for podcast RSS feeds that a feed should adhere to, but
 /// this does try to make some attempt to account for the possibility that
 /// a feed might not be valid according to the spec.
-pub fn parse_feed_data(channel: Channel, url: &str) -> Podcast {
+fn parse_feed_data(channel: Channel, url: &str) -> Podcast {
     let title = channel.title().to_string();
     let url = url.to_string();
     let description = Some(channel.description().to_string());

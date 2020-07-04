@@ -80,6 +80,12 @@ impl MainController {
             message, crate::config::MESSAGE_TIME, error)).unwrap();
     }
 
+    /// Add a new podcast by fetching the RSS feed data.
+    pub fn add_podcast(&self, url: String) {
+        feeds::check_feed(url, None,
+            &self.threadpool, self.tx_to_main.clone());
+    } 
+
     /// Synchronize RSS feed data for one or more podcasts.
     pub fn sync(&self, pod_index: Option<usize>) {
         // We pull out the data we need here first, so we can
@@ -101,9 +107,8 @@ impl MainController {
         for data in pod_data.into_iter() {
             let url = data.0;
             let id = data.1;
-
-            let tx_feeds_to_main = mpsc::Sender::clone(&self.tx_to_main);
-            let _ = feeds::spawn_feed_checker(tx_feeds_to_main, url, id);
+            feeds::check_feed(url, id,
+                &self.threadpool, self.tx_to_main.clone())
         }
     }
 

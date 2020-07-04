@@ -1,6 +1,5 @@
 use std::process;
 use std::path::PathBuf;
-use std::sync::mpsc;
 
 mod main_controller;
 mod config;
@@ -62,10 +61,8 @@ fn main() {
         match message {
             Message::Ui(UiMsg::Quit) => break,
 
-            Message::Ui(UiMsg::AddFeed(url)) => {
-                let tx_feeds_to_main = mpsc::Sender::clone(&main_ctrl.tx_to_main);
-                let _ = feeds::spawn_feed_checker(tx_feeds_to_main, url, None);
-            },
+            Message::Ui(UiMsg::AddFeed(url)) =>
+                main_ctrl.add_podcast(url),
 
             Message::Feed(FeedMsg::NewData(pod)) =>
                 main_ctrl.add_or_sync_data(pod, false),
