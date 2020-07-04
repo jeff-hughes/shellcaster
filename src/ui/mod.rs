@@ -154,15 +154,14 @@ impl<'a> UI<'a> {
             selected: 0,
         };
 
-        let details_panel;
-        if n_col > crate::config::DETAILS_PANEL_LENGTH {
-            details_panel = Some(Self::make_details_panel(
+        let details_panel = if n_col > crate::config::DETAILS_PANEL_LENGTH {
+            Some(Self::make_details_panel(
                 colors.clone(),
                 n_row-1, det_col,
-                0, pod_col + ep_col - 2));
+                0, pod_col + ep_col - 2))
         } else {
-            details_panel = None;
-        }
+            None
+        };
 
         // welcome screen if user does not have any podcasts yet
         let welcome_win = if items.borrow().is_empty() {
@@ -223,13 +222,11 @@ impl<'a> UI<'a> {
                     } else {
                         self.details_panel = None;
                     }
-                } else {
-                    if det_col > 0 {
-                        self.details_panel = Some(Self::make_details_panel(
-                            self.colors.clone(),
-                            n_row-1, det_col,
-                            0, pod_col + ep_col - 2));
-                    }
+                } else if det_col > 0 {
+                    self.details_panel = Some(Self::make_details_panel(
+                        self.colors.clone(),
+                        n_row-1, det_col,
+                        0, pod_col + ep_col - 2));
                 }
 
                 self.stdscr.refresh();
@@ -530,6 +527,7 @@ impl<'a> UI<'a> {
     /// main panels: podcast menu, episodes menu, and details panel; if
     /// the screen is too small to display the details panel, this size
     /// will be 0
+    #[allow(clippy::useless_let_if_seq)]
     pub fn calculate_sizes(n_col: i32) -> (i32, i32, i32) {
         let pod_col;
         let ep_col;

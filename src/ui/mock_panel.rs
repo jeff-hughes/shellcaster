@@ -120,12 +120,11 @@ impl Panel {
 
         // explicit
         if let Some(exp) = details.explicit {
-            let new_row;
-            if exp {
-                new_row = self.write_wrap_line(row+1, "Explicit: Yes".to_string());
+            let new_row = if exp {
+                self.write_wrap_line(row+1, "Explicit: Yes".to_string())
             } else {
-                new_row = self.write_wrap_line(row+1, "Explicit: No".to_string());
-            }
+                self.write_wrap_line(row+1, "Explicit: No".to_string())
+            };
             self.change_attr(row+1, 0, 9,
                 pancurses::A_UNDERLINE, ColorType::Normal);
             row = new_row;
