@@ -1,4 +1,15 @@
+use chrono::{DateTime, Utc};
 use super::{Colors, ColorType};
+
+/// Struct holding the raw data used for building the details panel.
+pub struct Details {
+    pub pod_title: Option<String>,
+    pub ep_title: Option<String>,
+    pub pubdate: Option<DateTime<Utc>>,
+    pub duration: Option<String>,
+    pub explicit: Option<bool>,
+    pub description: Option<String>,
+}
 
 #[derive(Debug)]
 pub struct Panel {
@@ -55,6 +66,83 @@ impl Panel {
         // add a new empty line to the end so the vector stays the
         // same size
         self.window.push((String::new(), pancurses::A_NORMAL, ColorType::Normal));
+    }
+
+    pub fn write_wrap_line(&mut self, start_y: i32, string: String) -> i32 {
+        let mut row = start_y;
+        let max_row = self.get_rows();
+        let wrapper = textwrap::wrap_iter(&string, self.get_cols() as usize);
+        for line in wrapper {
+            self.write_line(row, line.to_string());
+            row += 1;
+
+            if row >= max_row {
+                break;
+            }
+        }
+        return row-1;
+    }
+
+    pub fn details_template(&mut self, start_y: i32, details: Details) {
+        let mut row = start_y-1;
+
+        // podcast title
+        match details.pod_title {
+            Some(t) => row = self.write_wrap_line(row+1, t),
+            None => row = self.write_wrap_line(row+1, "No title".to_string()),
+        }
+
+        // episode title
+        match details.ep_title {
+            Some(t) => row = self.write_wrap_line(row+1, t),
+            None => row = self.write_wrap_line(row+1, "No title".to_string()),
+        }
+
+        row += 1;  // blank line
+
+        // published date
+        if let Some(date) = details.pubdate {
+            let new_row = self.write_wrap_line(row+1,
+                format!("Published: {}", date.format("%B %-d, %Y").to_string()));
+            self.change_attr(row+1, 0, 10,
+                pancurses::A_UNDERLINE, ColorType::Normal);
+            row = new_row;
+        }
+
+        // duration
+        if let Some(dur) = details.duration {
+            let new_row = self.write_wrap_line(row+1,
+                format!("Duration: {}", dur));
+            self.change_attr(row+1, 0, 9,
+                pancurses::A_UNDERLINE, ColorType::Normal);
+            row = new_row;
+        }
+
+        // explicit
+        if let Some(exp) = details.explicit {
+            let new_row;
+            if exp {
+                new_row = self.write_wrap_line(row+1, "Explicit: Yes".to_string());
+            } else {
+                new_row = self.write_wrap_line(row+1, "Explicit: No".to_string());
+            }
+            self.change_attr(row+1, 0, 9,
+                pancurses::A_UNDERLINE, ColorType::Normal);
+            row = new_row;
+        }
+
+        row += 1;  // blank line
+
+        // description
+        match details.description {
+            Some(desc) => {
+                row = self.write_wrap_line(row+1, "Description:".to_string());
+                let _row = self.write_wrap_line(row+1, desc);
+            },
+            None => {
+                let _row = self.write_wrap_line(row+1, "No description.".to_string());
+            },
+        }
     }
 
     // This doesn't fully replicate the functionality of Panel, as it

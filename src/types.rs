@@ -72,7 +72,7 @@ pub struct Episode {
 
 impl Episode {
     /// Formats the duration in seconds into an HH:MM:SS format.
-    fn format_duration(&self) -> String {
+    pub fn format_duration(&self) -> String {
         return match self.duration {
             Some(dur) => {
                 let mut seconds = dur;

@@ -21,6 +21,10 @@ pub const EPISODE_DURATION_LENGTH: usize = 45;
 // of the episode
 pub const EPISODE_PUBDATE_LENGTH: usize = 60;
 
+// How many columns we need (total terminal window width) before we
+// display the details panel
+pub const DETAILS_PANEL_LENGTH: i32 = 135;
+
 
 /// Holds information about user configuration of program. 
 #[derive(Debug, Clone)]

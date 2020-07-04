@@ -9,7 +9,7 @@ mod panel;
 mod menu;
 mod colors;
 
-use self::panel::Panel;
+use self::panel::{Panel, Details};
 use self::menu::Menu;
 use self::colors::{Colors, ColorType};
 
@@ -63,6 +63,7 @@ pub struct UI<'a> {
     podcast_menu: Menu<Podcast>,
     episode_menu: Menu<Episode>,
     active_menu: ActiveMenu,
+    details_panel: Option<Panel>,
     welcome_win: Option<Window>,
 }
 
@@ -72,6 +73,7 @@ impl<'a> UI<'a> {
     pub fn spawn(config: Config, items: LockVec<Podcast>, rx_from_main: mpsc::Receiver<MainMessage>, tx_to_main: mpsc::Sender<Message>) -> thread::JoinHandle<()> {
         return thread::spawn(move || {
             let mut ui = UI::new(&config, &items);
+            ui.init();
             let mut message_iter = rx_from_main.try_iter();
             // on each loop, we check for user input, then we process
             // any messages from the main thread
@@ -118,9 +120,7 @@ impl<'a> UI<'a> {
         let colors = self::colors::set_colors();
 
         let (n_row, n_col) = stdscr.get_max_yx();
-
-        let pod_col = n_col / 2;
-        let ep_col = n_col - pod_col + 1;
+        let (pod_col, ep_col, det_col) = Self::calculate_sizes(n_col);
 
         let podcast_panel = Panel::new(
             colors.clone(),
@@ -129,16 +129,12 @@ impl<'a> UI<'a> {
             n_row - 1, pod_col,
             0, 0
         );
-        let mut podcast_menu = Menu {
+        let podcast_menu = Menu {
             panel: podcast_panel,
             items: items.clone(),
             top_row: 0,
             selected: 0,
         };
-
-        stdscr.refresh();
-        podcast_menu.init();
-        podcast_menu.activate();
 
         let episode_panel = Panel::new(
             colors.clone(),
@@ -151,13 +147,22 @@ impl<'a> UI<'a> {
             Some(pod) => pod.episodes.clone(),
             None => LockVec::new(Vec::new()),
         };
-        let mut episode_menu = Menu {
+        let episode_menu = Menu {
             panel: episode_panel,
             items: first_pod,
             top_row: 0,
             selected: 0,
         };
-        episode_menu.init();
+
+        let details_panel;
+        if n_col > crate::config::DETAILS_PANEL_LENGTH {
+            details_panel = Some(Self::make_details_panel(
+                colors.clone(),
+                n_row-1, det_col,
+                0, pod_col + ep_col - 2));
+        } else {
+            details_panel = None;
+        }
 
         // welcome screen if user does not have any podcasts yet
         let welcome_win = if items.borrow().is_empty() {
@@ -175,8 +180,19 @@ impl<'a> UI<'a> {
             podcast_menu: podcast_menu,
             episode_menu: episode_menu,
             active_menu: ActiveMenu::PodcastMenu,
+            details_panel: details_panel,
             welcome_win: welcome_win,
         };
+    }
+
+    /// This should be called immediately after creating the UI, in order
+    /// to draw everything to the screen.
+    pub fn init(&mut self) {
+        self.stdscr.refresh();
+        self.podcast_menu.init();
+        self.podcast_menu.activate();
+        self.episode_menu.init();
+        self.update_details_panel();
     }
 
     /// Waits for user input and, where necessary, provides UiMessages
@@ -195,11 +211,26 @@ impl<'a> UI<'a> {
                 self.n_row = n_row;
                 self.n_col = n_col;
 
-                let pod_col = n_col / 2;
-                let ep_col = n_col - pod_col;
+                let (pod_col, ep_col, det_col) = Self::calculate_sizes(n_col);
 
                 self.podcast_menu.resize(n_row-1, pod_col, 0, 0);
                 self.episode_menu.resize(n_row-1, ep_col, 0, pod_col - 1);
+
+                if self.details_panel.is_some() {
+                    if det_col > 0 {
+                        let det = self.details_panel.as_mut().unwrap();
+                        det.resize(n_row-1, det_col, 0, pod_col+ep_col-2);
+                    } else {
+                        self.details_panel = None;
+                    }
+                } else {
+                    if det_col > 0 {
+                        self.details_panel = Some(Self::make_details_panel(
+                            self.colors.clone(),
+                            n_row-1, det_col,
+                            0, pod_col + ep_col - 2));
+                    }
+                }
 
                 self.stdscr.refresh();
                 self.update_menus();
@@ -210,6 +241,10 @@ impl<'a> UI<'a> {
                         self.podcast_menu.activate();
                         self.episode_menu.activate();
                     },
+                }
+
+                if self.details_panel.is_some() {
+                    self.update_details_panel();
                 }
 
                 // resize welcome window, if it exists
@@ -251,11 +286,13 @@ impl<'a> UI<'a> {
                                     // update episodes menu with new list
                                     self.episode_menu.items = self.podcast_menu.get_episodes();
                                     self.episode_menu.update_items();
+                                    self.update_details_panel();
                                 }
                             },
                             ActiveMenu::EpisodeMenu => {
                                 if ep_len > 0 {
                                     self.episode_menu.scroll(1);
+                                    self.update_details_panel();
                                 }
                             },
                         }
@@ -273,11 +310,13 @@ impl<'a> UI<'a> {
                                     // update episodes menu with new list
                                     self.episode_menu.items = self.podcast_menu.get_episodes();
                                     self.episode_menu.update_items();
+                                    self.update_details_panel();
                                 }
                             },
                             ActiveMenu::EpisodeMenu => {
                                 if pod_len > 0 {
                                     self.episode_menu.scroll(-1);
+                                    self.update_details_panel();
                                 }
                             },
                         }
@@ -487,6 +526,26 @@ impl<'a> UI<'a> {
         return UiMsg::Noop;
     }
 
+    /// Calculates the number of columns to allocate for each of the
+    /// main panels: podcast menu, episodes menu, and details panel; if
+    /// the screen is too small to display the details panel, this size
+    /// will be 0
+    pub fn calculate_sizes(n_col: i32) -> (i32, i32, i32) {
+        let pod_col;
+        let ep_col;
+        let det_col;
+        if n_col > crate::config::DETAILS_PANEL_LENGTH {
+            pod_col = n_col / 3;
+            ep_col = n_col / 3 + 1;
+            det_col = n_col - pod_col - ep_col + 2;
+        } else {
+            pod_col = n_col / 2;
+            ep_col = n_col - pod_col + 1;
+            det_col = 0;
+        }
+        return (pod_col, ep_col, det_col);
+    }
+
     /// Adds a one-line pancurses window to the bottom of the screen to
     /// solicit user text input. A prefix can be specified as a prompt
     /// for the user at the beginning of the input line. This returns the
@@ -643,6 +702,71 @@ impl<'a> UI<'a> {
     /// that the terminal is properly restored to its prior settings.
     pub fn tear_down(&self) {
         pancurses::endwin();
+    }
+
+    /// Create a details panel.
+    pub fn make_details_panel(colors: Colors, n_row: i32, n_col: i32, start_y: i32, start_x: i32) -> Panel {
+        return Panel::new(
+            colors,
+            "Details".to_string(),
+            2,
+            n_row, n_col,
+            start_y, start_x);
+    }
+
+    /// Updates the details panel with information about the current
+    /// podcast and episode, and redraws to the screen.
+    pub fn update_details_panel(&mut self) {
+        if self.details_panel.is_some() {
+            let det = self.details_panel.as_mut().unwrap();
+            det.erase();
+            if self.episode_menu.items.len() > 0 {
+                // let det = self.details_panel.as_ref().unwrap();
+                let current_pod = (self.podcast_menu.selected +
+                    self.podcast_menu.top_row) as usize;
+                let current_ep = (self.episode_menu.selected +
+                    self.episode_menu.top_row) as usize;
+
+                    // get a couple details from the current podcast
+                    let mut pod_title = None;
+                    let mut pod_explicit = None;
+                    if let Some(pod) = self.podcast_menu.items.borrow().get(current_pod) {
+                        pod_title = if pod.title.is_empty() {
+                            None
+                        } else {
+                            Some(pod.title.clone())
+                        };
+                        pod_explicit = pod.explicit;
+                    };
+
+                    // the rest of the details come from the current episode
+                    if let Some(ep) = self.episode_menu.items.borrow().get(current_ep) {
+                        let ep_title = if ep.title.is_empty() {
+                            None
+                        } else {
+                            Some(ep.title.clone())
+                        };
+
+                        let desc = if ep.description.is_empty() {
+                            None
+                        } else {
+                            Some(ep.description.clone())
+                        };
+
+                        let details = Details {
+                            pod_title: pod_title,
+                            ep_title: ep_title,
+                            pubdate: ep.pubdate,
+                            duration: Some(ep.format_duration()),
+                            explicit: pod_explicit,
+                            description: desc,
+                        };
+                        det.details_template(0, details);
+                    };
+
+                det.refresh();
+            }
+        }
     }
 
     /// Creates a pancurses window with a welcome message for when users
