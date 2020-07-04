@@ -76,7 +76,7 @@ pub struct UI<'a> {
     episode_menu: Menu<Episode>,
     active_menu: ActiveMenu,
     details_panel: Option<Panel>,
-    welcome_win: Option<Window>,
+    welcome_win: Option<Panel>,
 }
 
 impl<'a> UI<'a> {
@@ -177,7 +177,7 @@ impl<'a> UI<'a> {
 
         // welcome screen if user does not have any podcasts yet
         let welcome_win = if items.borrow().is_empty() {
-            Some(UI::make_welcome_win(&config.keybindings, n_row, n_col))
+            Some(UI::make_welcome_win(colors.clone(), &config.keybindings, n_row-1, n_col))
         } else {
             None
         };
@@ -204,6 +204,11 @@ impl<'a> UI<'a> {
         self.podcast_menu.activate();
         self.episode_menu.init();
         self.update_details_panel();
+
+        if self.welcome_win.is_some() {
+            let ww = self.welcome_win.as_mut().unwrap();
+            ww.refresh();
+        }
     }
 
     /// Waits for user input and, where necessary, provides UiMessages
@@ -258,11 +263,8 @@ impl<'a> UI<'a> {
 
                 // resize welcome window, if it exists
                 if self.welcome_win.is_some() {
-                    let oldwwin = std::mem::replace(
-                        &mut self.welcome_win,
-                        Some(UI::make_welcome_win(&self.keymap, n_row, n_col)));
-                    
-                    oldwwin.unwrap().delwin();
+                    let ww = self.welcome_win.as_mut().unwrap();
+                    ww.resize(n_row-1, n_col, 0, 0);
                 }
                 self.stdscr.refresh();
             },
@@ -278,8 +280,7 @@ impl<'a> UI<'a> {
                 // get rid of the "welcome" window once the podcast list
                 // is no longer empty
                 if self.welcome_win.is_some() && pod_len > 0 {
-                    let ww = self.welcome_win.take().unwrap();
-                    ww.delwin();
+                    self.welcome_win = None;
                 }
 
                 match self.keymap.get_from_input(input) {
@@ -788,8 +789,8 @@ impl<'a> UI<'a> {
     /// Creates a pancurses window with a welcome message for when users
     /// start the program for the first time. Responsibility for managing
     /// the window is given back to the main UI object.
-    pub fn make_welcome_win(keymap: &Keybindings,
-        n_row: i32, n_col:i32) -> Window {
+    pub fn make_welcome_win(colors: Colors, keymap: &Keybindings,
+        n_row: i32, n_col:i32) -> Panel {
 
         let add_keys = keymap.keys_for_action(UserAction::AddFeed);
         let quit_keys = keymap.keys_for_action(UserAction::Quit);
@@ -828,22 +829,25 @@ impl<'a> UI<'a> {
             }
         };
 
-        let welcome_win = newwin(n_row-1, n_col, 0, 0);
-        welcome_win.border(
-            pancurses::ACS_VLINE(),
-            pancurses::ACS_VLINE(),
-            pancurses::ACS_HLINE(),
-            pancurses::ACS_HLINE(),
-            pancurses::ACS_ULCORNER(),
-            pancurses::ACS_URCORNER(),
-            pancurses::ACS_LLCORNER(),
-            pancurses::ACS_LRCORNER());
-        welcome_win.mvaddstr(0, 2, "Shellcaster");
-        welcome_win.mvaddstr(2, 2, "Welcome to shellcaster!");
-        welcome_win.mvaddstr(4, 2, format!("Your podcast list is currently empty. Press {} to add a new podcast feed, or {} to quit.", add_str, quit_str));
-        welcome_win.mvaddstr(6, 2, "Other keybindings can be found on the Github repo readme:");
-        welcome_win.mvaddstr(7, 2, "https://github.com/jeff-hughes/shellcaster");
-        welcome_win.refresh();
+        // the warning on the unused mut is a function of Rust getting
+        // confused between panel.rs and mock_panel.rs
+        #[allow(unused_mut)]
+        let mut welcome_win = Panel::new(
+            colors,
+            "Shellcaster".to_string(),
+            0,
+            n_row, n_col, 0, 0
+        );
+
+        let mut row = 0;
+        row = welcome_win.write_wrap_line(row+1, "Welcome to shellcaster!".to_string());
+
+        row = welcome_win.write_wrap_line(row+2,
+            format!("Your podcast list is currently empty. Press {} to add a new podcast feed, or {} to quit.", add_str, quit_str));
+
+        row = welcome_win.write_wrap_line(row+2, "Other keybindings can be found on the Github repo readme:".to_string());
+        let _ = welcome_win.write_wrap_line(row+1, "https://github.com/jeff-hughes/shellcaster".to_string());
+
         return welcome_win;
     }
 }
