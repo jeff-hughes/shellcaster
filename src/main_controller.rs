@@ -242,13 +242,14 @@ impl MainController {
             match ep_index {
                 Some(ep_idx) => {
                     // grab just the relevant data we need
-                    let data = podcast.episodes.map_single(ep_idx, |ep| (EpData {
-                        id: ep.id.unwrap(),
-                        pod_id: ep.pod_id.unwrap(),
-                        title: ep.title.clone(),
-                        url: ep.url.clone(),
-                        file_path: None,
-                    }, ep.path.is_some())).unwrap();
+                    let data = podcast.episodes.map_single(ep_idx,
+                        |ep| (EpData {
+                            id: ep.id.unwrap(),
+                            pod_id: ep.pod_id.unwrap(),
+                            title: ep.title.clone(),
+                            url: ep.url.clone(),
+                            file_path: None,
+                        }, ep.path.is_none())).unwrap();
                     if data.1 {
                         ep_data.push(data.0);
                     }
@@ -256,9 +257,7 @@ impl MainController {
                 None => {
                     // grab just the relevant data we need
                     ep_data = podcast.episodes
-                        .filter_map(|ep| if ep.path.is_some() {
-                            None
-                        } else {
+                        .filter_map(|ep| if ep.path.is_none() {
                             Some(EpData {
                                 id: ep.id.unwrap(),
                                 pod_id: ep.pod_id.unwrap(),
@@ -266,6 +265,8 @@ impl MainController {
                                 url: ep.url.clone(),
                                 file_path: None,
                             })
+                        } else {
+                            None
                         });
                 }
             }

@@ -91,20 +91,18 @@ fn main() {
             Message::Ui(UiMsg::Download(pod_index, ep_index)) =>
                 main_ctrl.download(pod_index, Some(ep_index)),
 
+            Message::Ui(UiMsg::DownloadAll(pod_index)) =>
+                main_ctrl.download(pod_index, None),
+
             // downloading can produce any one of these responses
             Message::Dl(DownloadMsg::Complete(ep_data)) =>
                 main_ctrl.download_complete(ep_data),
             Message::Dl(DownloadMsg::ResponseError(_)) =>
                 main_ctrl.msg_to_ui("Error sending download request.".to_string(), true),
-            Message::Dl(DownloadMsg::ResponseDataError(_)) =>
-                main_ctrl.msg_to_ui("Error downloading episode.".to_string(), true),
             Message::Dl(DownloadMsg::FileCreateError(_)) =>
                 main_ctrl.msg_to_ui("Error creating file.".to_string(), true),
             Message::Dl(DownloadMsg::FileWriteError(_)) =>
-                main_ctrl.msg_to_ui("Error writing file to disk.".to_string(), true),
-
-            Message::Ui(UiMsg::DownloadAll(pod_index)) =>
-                main_ctrl.download(pod_index, None),
+                main_ctrl.msg_to_ui("Error downloading episode.".to_string(), true),
 
             Message::Ui(UiMsg::Delete(pod_index, ep_index)) =>
                 main_ctrl.delete_file(pod_index, ep_index),

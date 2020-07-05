@@ -1,8 +1,6 @@
 use std::fs::File;
-use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
-use std::time::Duration;
 
 use sanitize_filename::{sanitize_with_options, Options};
 
@@ -16,7 +14,6 @@ use crate::threadpool::Threadpool;
 pub enum DownloadMsg {
     Complete(EpData),
     ResponseError(EpData),
-    ResponseDataError(EpData),
     FileCreateError(EpData),
     FileWriteError(EpData),
 }
@@ -63,26 +60,21 @@ pub fn download_list(episodes: Vec<EpData>, dest: &PathBuf, threadpool: &Threadp
 fn download_file(ep_data: EpData) -> DownloadMsg {
     let data = ep_data.clone();
 
+    let dst = File::create(&ep_data.file_path.unwrap());
+    if dst.is_err() {
+        return DownloadMsg::FileCreateError(data);
+    };
+
     let response = ureq::get(&ep_data.url)
-        .timeout(Duration::from_secs(5))
+        .timeout_connect(5000)
+        .timeout_read(30000)
         .call();
     if response.error() {
         return DownloadMsg::ResponseError(data);
     }
 
     let mut reader = response.into_reader();
-    let mut resp_data = Vec::new();
-    let total_size = reader.read_to_end(&mut resp_data);
-    if total_size.is_err() {
-        return DownloadMsg::ResponseDataError(data);
-    }
-
-    let dst = File::create(&ep_data.file_path.unwrap());
-    if dst.is_err() {
-        return DownloadMsg::FileCreateError(data);
-    };
-
-    return match dst.unwrap().write(&resp_data) {
+    return match std::io::copy(&mut reader, &mut dst.unwrap()) {
         Ok(_) => DownloadMsg::Complete(data),
         Err(_) => DownloadMsg::FileWriteError(data),
     };

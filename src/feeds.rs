@@ -1,5 +1,4 @@
 use std::sync::mpsc;
-use std::time::Duration;
 use std::io::Read;
 
 use rss::{Channel, Item};
@@ -50,7 +49,8 @@ pub fn check_feed(url: String, pod_id: Option<i64>, threadpool: &Threadpool, tx_
 /// episodes from an RSS feed.
 fn get_feed_data(url: String) -> Result<Podcast, Box<dyn std::error::Error>> {
     let response = ureq::get(&url)
-        .timeout(Duration::from_secs(5))
+        .timeout_connect(5000)
+        .timeout_read(15000)
         .call();
     if response.error() {
         return Err(String::from("TODO: Better error handling here.").into());
