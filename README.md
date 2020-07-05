@@ -8,15 +8,26 @@ Note that shellcaster is not yet in stable format, and is still in active develo
 
 ## Installing shellcaster
 
-There are currently a couple of ways to install shellcaster. The following assumes you already have Rust + cargo installed.
+There are currently a few ways to install shellcaster.
 
-1. You can install the latest version of the binary directly from crates.io with one command:
+1. If you are running Linux or MacOS on x86_64 (i.e., 64-bit), you can find binaries for the latest release on the [Releases page](https://github.com/jeff-hughes/shellcaster/releases). Download the `.tar.gz` file appropriate for your system, and install it with the following commands in your terminal:
+
+```bash
+tar xzvf shellcaster-OS_NAME.tar.gz
+cd shellcaster
+sudo cp shellcaster /usr/local/bin
+shellcaster  # to run
+```
+
+Replacing *OS_NAME* with the filename you downloaded.
+
+2. If you have Rust + cargo installed, you can install the latest version of the binary directly from crates.io with one command:
 
 ```bash
 cargo install shellcaster
 ```
 
-2. You can clone the Github repo and compile it yourself:
+3. If you have Rust + cargo installed, you can also clone the Github repo and compile it yourself:
 
 ```bash
 git clone https://github.com/jeff-hughes/shellcaster.git
@@ -45,6 +56,8 @@ Or you can put `config.toml` in a place of your choosing, and specify the locati
 ```bash
 shellcaster -c /path/to/config.toml
 ```
+
+**Note:** Packages for various Linux distros are on their way -- stay tuned!
 
 ## Platform support
 
