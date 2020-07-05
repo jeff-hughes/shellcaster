@@ -13,7 +13,7 @@ pub struct Details {
 
 #[derive(Debug)]
 pub struct Panel {
-    pub window: Vec<(String, u32, ColorType)>,
+    pub window: Vec<(String, pancurses::chtype, ColorType)>,
     pub screen_pos: usize,
     pub colors: Colors,
     pub title: String,
@@ -148,7 +148,7 @@ impl Panel {
     // only applies the attribute to the line as a whole, rather than
     // specific characters. But I'm primarily using it to change whole
     // lines anyway.
-    pub fn change_attr(&mut self, y: i32, _x: i32, _nchars: i32, attr: u32, color: ColorType) {
+    pub fn change_attr(&mut self, y: i32, _x: i32, _nchars: i32, attr: pancurses::chtype, color: ColorType) {
         let current = &self.window[y as usize];
         self.window[y as usize] = (current.0.clone(), attr, color);
     }
@@ -177,7 +177,7 @@ impl Panel {
                                 // extra for some reason...
     }
 
-    pub fn get_row(&self, row: usize) -> (String, u32, ColorType) {
+    pub fn get_row(&self, row: usize) -> (String, pancurses::chtype, ColorType) {
         return self.window[row].clone();
     }
 }
