@@ -46,9 +46,13 @@ Or you can put `config.toml` in a place of your choosing, and specify the locati
 shellcaster -c /path/to/config.toml
 ```
 
-**Note:** Shellcaster has currently only been tested on Linux x86. Earlier versions were tested on MacOS, but not extensively. You may be able to compile and use it on Windows as well, but you're on your own for that right now. If you are on Windows, your best bet at this point is to use Windows Subsystem for Linux (WSL) to compile and use it.
+## Platform support
 
-## Default Keybindings
+Shellcaster has currently only been tested extensively on Linux x86_64. Earlier versions were tested on MacOS, but not extensively. Unix systems in general, on x86_64 (64-bit), i686 (32-bit), and ARM, are the primary targets for support for the app.
+
+Shellcaster is not currently supported on Windows, although some work has been done to try to get it working. Unicode support is weak, however, and there are issues when resizing the screen. You may have better luck using Windows Subsystem for Linux 2 (WSL 2), but this has not been tested. If you are a Windows user and want to help work out the bugs, pull requests are more than welcome!
+
+## Default keybindings
 
 | Key     | Action         |
 | ------- | -------------- |
@@ -70,6 +74,10 @@ shellcaster -c /path/to/config.toml
 Keybindings can be modified in the config.toml file. Actions can be
 mapped to more than one key, but a single key may not do more than one
 action.
+
+## Contributing
+
+Contributions from others are welcome! If you wish to contribute, feel free to clone the repo and submit pull requests. **Please ensure you are on the `develop` branch when making your edits**, as this is where the continued development of the app is taking place. Pull requests will only be merged to the `develop` branch, so you can help to avoid merge conflicts by doing your work on that branch in the first place.
 
 ## Why "shellcaster"?
 

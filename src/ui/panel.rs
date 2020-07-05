@@ -206,7 +206,7 @@ impl Panel {
 
     /// Changes the attributes (text style and color) for a line of
     /// text.
-    pub fn change_attr(&self, y: i32, x: i32, nchars: i32, attr: u32, color: ColorType) {
+    pub fn change_attr(&self, y: i32, x: i32, nchars: i32, attr: pancurses::chtype, color: ColorType) {
         self.window.mvchgat(self.abs_y(y), self.abs_x(x), nchars,
             attr, self.colors.get(color));
     }
