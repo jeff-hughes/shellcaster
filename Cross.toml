@@ -1,0 +1,8 @@
+[target.x86_64-unknown-linux-gnu]
+image = "jeffhughes22/shellcaster_x86_64-unknown-linux-gnu:1.0"
+
+[target.aarch64-unknown-linux-gnu]
+image = "jeffhughes22/shellcaster_aarch64-unknown-linux-gnu:1.0"
+
+[target.i686-unknown-linux-gnu]
+image = "jeffhughes22/shellcaster_i686-unknown-linux-gnu:1.0"
