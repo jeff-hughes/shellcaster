@@ -26,9 +26,9 @@ pub enum FeedMsg {
 }
 
 /// Spawns a new thread to check a feed and retrieve podcast data.
-pub fn check_feed(url: String, pod_id: Option<i64>, threadpool: &Threadpool, tx_to_main: mpsc::Sender<Message>) {
+pub fn check_feed(url: String, pod_id: Option<i64>, max_retries: usize, threadpool: &Threadpool, tx_to_main: mpsc::Sender<Message>) {
     threadpool.execute(move || {
-        match get_feed_data(url) {
+        match get_feed_data(url, max_retries) {
             Ok(mut pod) => {
                 match pod_id {
                     Some(id) => {
@@ -47,22 +47,33 @@ pub fn check_feed(url: String, pod_id: Option<i64>, threadpool: &Threadpool, tx_
 
 /// Given a URL, this attempts to pull the data about a podcast and its
 /// episodes from an RSS feed.
-fn get_feed_data(url: String) -> Result<Podcast, Box<dyn std::error::Error>> {
-    let response = ureq::get(&url)
-        .timeout_connect(5000)
-        .timeout_read(15000)
-        .call();
-    if response.error() {
-        return Err(String::from("TODO: Better error handling here.").into());
+fn get_feed_data(url: String, mut max_retries: usize) -> Result<Podcast, Box<dyn std::error::Error>> {
+    let request: Result<ureq::Response, Box<dyn std::error::Error>> = loop {
+        let response = ureq::get(&url)
+            .timeout_connect(5000)
+            .timeout_read(15000)
+            .call();
+        if response.error() {
+            max_retries -= 1;
+            if max_retries == 0 {
+                break Err(String::from("TODO: Better error handling here.").into());
+            }
+        } else {
+            break Ok(response);
+        }
+    };
+
+    return match request {
+        Ok(resp) => {
+            let mut reader = resp.into_reader();
+            let mut resp_data = Vec::new();
+            reader.read_to_end(&mut resp_data)?;
+
+            let channel = Channel::read_from(&resp_data[..])?;
+            Ok(parse_feed_data(channel, &url))
+        },
+        Err(err) => Err(err),
     }
-
-    let mut reader = response.into_reader();
-    let mut resp_data = Vec::new();
-    reader.read_to_end(&mut resp_data)?;
-
-    // let channel = Channel::from_url(&url)?;
-    let channel = Channel::read_from(&resp_data[..])?;
-    return Ok(parse_feed_data(channel, &url));
 }
 
 

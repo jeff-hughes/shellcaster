@@ -32,7 +32,7 @@ pub struct EpData {
 /// files to download. It uses the threadpool to start jobs
 /// for every episode to be downloaded. New jobs can be requested
 /// by the user while there are still ongoing jobs.
-pub fn download_list(episodes: Vec<EpData>, dest: &PathBuf, threadpool: &Threadpool, tx_to_main: Sender<Message>) {
+pub fn download_list(episodes: Vec<EpData>, dest: &PathBuf, max_retries: usize, threadpool: &Threadpool, tx_to_main: Sender<Message>) {
     // parse episode details and push to queue
     for mut ep in episodes.into_iter() {
         let file_name = sanitize_with_options(&ep.title, Options {
@@ -48,7 +48,7 @@ pub fn download_list(episodes: Vec<EpData>, dest: &PathBuf, threadpool: &Threadp
 
         let tx = tx_to_main.clone();
         threadpool.execute(move || {
-            let result = download_file(ep);
+            let result = download_file(ep, max_retries);
             tx.send(Message::Dl(result)).unwrap();
         });
     }
@@ -57,7 +57,7 @@ pub fn download_list(episodes: Vec<EpData>, dest: &PathBuf, threadpool: &Threadp
 
 /// Downloads a file to a local filepath, returning DownloadMsg variant
 /// indicating success or failure.
-fn download_file(ep_data: EpData) -> DownloadMsg {
+fn download_file(ep_data: EpData, mut max_retries: usize) -> DownloadMsg {
     let data = ep_data.clone();
 
     let dst = File::create(&ep_data.file_path.unwrap());
@@ -65,14 +65,26 @@ fn download_file(ep_data: EpData) -> DownloadMsg {
         return DownloadMsg::FileCreateError(data);
     };
 
-    let response = ureq::get(&ep_data.url)
-        .timeout_connect(5000)
-        .timeout_read(30000)
-        .call();
-    if response.error() {
-        return DownloadMsg::ResponseError(data);
-    }
+    let request: Result<ureq::Response, ()> = loop {
+        let response = ureq::get(&ep_data.url)
+            .timeout_connect(5000)
+            .timeout_read(30000)
+            .call();
+        if response.error() {
+            max_retries -= 1;
+            if max_retries == 0 {
+                break Err(());
+            }
+        } else {
+            break Ok(response);
+        }
+    };
 
+    if request.is_err() {
+        return DownloadMsg::ResponseError(data);
+    };
+
+    let response = request.unwrap();
     let mut reader = response.into_reader();
     return match std::io::copy(&mut reader, &mut dst.unwrap()) {
         Ok(_) => DownloadMsg::Complete(data),

@@ -82,7 +82,7 @@ impl MainController {
 
     /// Add a new podcast by fetching the RSS feed data.
     pub fn add_podcast(&self, url: String) {
-        feeds::check_feed(url, None,
+        feeds::check_feed(url, None, self.config.max_retries,
             &self.threadpool, self.tx_to_main.clone());
     } 
 
@@ -107,7 +107,7 @@ impl MainController {
         for data in pod_data.into_iter() {
             let url = data.0;
             let id = data.1;
-            feeds::check_feed(url, id,
+            feeds::check_feed(url, id, self.config.max_retries,
                 &self.threadpool, self.tx_to_main.clone())
         }
     }
@@ -281,7 +281,7 @@ impl MainController {
             });
             match self.create_podcast_dir(dir_name) {
                 Ok(path) => downloads::download_list(
-                    ep_data, &path,
+                    ep_data, &path, self.config.max_retries,
                     &self.threadpool, self.tx_to_main.clone()),
                 Err(_) => self.msg_to_ui(
                     format!("Could not create dir: {}", pod_title), true),

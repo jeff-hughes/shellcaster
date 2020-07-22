@@ -30,8 +30,9 @@ pub const DETAILS_PANEL_LENGTH: i32 = 135;
 #[derive(Debug, Clone)]
 pub struct Config {
     pub download_path: PathBuf,
-    pub simultaneous_downloads: usize,
     pub play_command: String,
+    pub simultaneous_downloads: usize,
+    pub max_retries: usize,
     pub keybindings: Keybindings,
 }
 
@@ -41,8 +42,9 @@ pub struct Config {
 #[derive(Deserialize)]
 struct ConfigFromToml {
     download_path: Option<String>,
-    simultaneous_downloads: Option<usize>,
     play_command: Option<String>,
+    simultaneous_downloads: Option<usize>,
+    max_retries: Option<usize>,
     keybindings: KeybindingsFromToml,
 }
 
@@ -110,8 +112,9 @@ impl Config {
                 };
                 config_toml = ConfigFromToml {
                     download_path: None,
-                    simultaneous_downloads: None,
                     play_command: None,
+                    simultaneous_downloads: None,
+                    max_retries: None,
                     keybindings: keybindings,
                 };
             }
@@ -167,21 +170,28 @@ fn config_with_defaults(config_toml: &ConfigFromToml) -> Config {
         config_toml.download_path.as_deref(),
         dirs::data_local_dir());
 
+    let play_command = match config_toml.play_command.as_deref() {
+        Some(cmd) => cmd.to_string(),
+        None => "vlc %s".to_string(),
+    };
+
     let simultaneous_downloads = match config_toml.simultaneous_downloads {
         Some(num) if num > 0 => num,
         Some(_) => 3,
         None => 3,
     };
 
-    let play_command = match config_toml.play_command.as_deref() {
-        Some(cmd) => cmd.to_string(),
-        None => "vlc %s".to_string(),
+    let max_retries = match config_toml.max_retries {
+        Some(num) if num > 0 => num,
+        Some(_) => 3,
+        None => 3,
     };
 
     return Config {
         download_path: download_path,
-        simultaneous_downloads: simultaneous_downloads,
         play_command: play_command,
+        simultaneous_downloads: simultaneous_downloads,
+        max_retries: max_retries,
         keybindings: keymap,
     };
 }
