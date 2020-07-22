@@ -147,6 +147,7 @@ impl MainController {
     /// Attempts to execute the play command on the given podcast
     /// episode.
     pub fn play_file(&self, pod_index: usize, ep_index: usize) {
+        self.mark_played(pod_index, ep_index, true);
         let episode = self.podcasts.clone_episode(
             pod_index, ep_index).unwrap();
 
