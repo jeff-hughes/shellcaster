@@ -257,13 +257,13 @@ impl Database {
         let conn = self.conn.as_ref().unwrap();
 
         let mut stmt = conn.prepare(
-            "SELECT id, url, pubdate FROM episodes
+            "SELECT id, title, pubdate FROM episodes
                 WHERE podcast_id = ?;").unwrap();
         let episode_iter = stmt.query_map(params![podcast_id], |row| {
-            Ok((row.get("id")?, row.get("url")?, row.get("pubdate")?))
+            Ok((row.get("id")?, row.get("title")?, row.get("pubdate")?))
         }).unwrap();
 
-        // create hashmap of all episodes, indexed by URL and pub date
+        // create hashmap of all episodes, indexed by title and pub date
         let mut ep_map: HashMap<(String, i64), i64> = HashMap::new();
         for ep in episode_iter {
             let epuw = ep.unwrap();
@@ -271,7 +271,7 @@ impl Database {
         }
 
         for ep in episodes.borrow().iter().rev() {
-            match ep_map.get(&(ep.url.clone(), ep.pubdate.unwrap().timestamp())) {
+            match ep_map.get(&(ep.title.clone(), ep.pubdate.unwrap().timestamp())) {
                 // update existing episode
                 Some(id) => {
                     let pubdate = match ep.pubdate {
