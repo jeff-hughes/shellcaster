@@ -104,7 +104,9 @@ impl<'a> UI<'a> {
                 if let Some(message) = message_iter.next() {
                     match message {
                         MainMessage::UiUpdateMenus => ui.update_menus(),
-                        MainMessage::UiSpawnMsgWin(msg, duration, error) => ui.timed_notif(msg, duration, error),
+                        MainMessage::UiSpawnNotif(msg, duration, error) => ui.timed_notif(msg, error, duration),
+                        MainMessage::UiSpawnPersistentNotif(msg, error) => ui.persistent_notif(msg, error),
+                        MainMessage::UiClearPersistentNotif => ui.clear_persistent_notif(),
                         MainMessage::UiTearDown => {
                             ui.tear_down();
                             break;

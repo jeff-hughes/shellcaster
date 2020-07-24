@@ -13,11 +13,7 @@ mod downloads;
 mod play_file;
 
 use crate::main_controller::{MainController, MainMessage};
-use crate::types::*;
 use crate::config::Config;
-use crate::ui::UiMsg;
-use crate::feeds::FeedMsg;
-use crate::downloads::DownloadMsg;
 
 /// Main controller for shellcaster program.
 /// 
@@ -33,7 +29,6 @@ use crate::downloads::DownloadMsg;
 #[allow(clippy::while_let_on_iterator)]
 fn main() {
     // SETUP -----------------------------------------------------------
-
     // figure out where config file is located -- either specified from
     // command line args, or using default config location for OS
     let args: Vec<String> = std::env::args().collect();
@@ -50,78 +45,12 @@ fn main() {
         process::exit(1);
     }
 
-    let main_ctrl = MainController::new(config, &db_path);
+    let mut main_ctrl = MainController::new(config, &db_path);
 
 
     // MAIN LOOP --------------------------------------------------------
+    main_ctrl.loop_msgs();
 
-    // wait for messages from the UI and other threads, and then process
-    let mut message_iter = main_ctrl.rx_to_main.iter();
-    while let Some(message) = message_iter.next() {
-        match message {
-            Message::Ui(UiMsg::Quit) => break,
-
-            Message::Ui(UiMsg::AddFeed(url)) =>
-                main_ctrl.add_podcast(url),
-
-            Message::Feed(FeedMsg::NewData(pod)) =>
-                main_ctrl.add_or_sync_data(pod, false),
-
-            Message::Feed(FeedMsg::Error) =>
-                main_ctrl.msg_to_ui("Error retrieving RSS feed.".to_string(), true),
-
-            Message::Ui(UiMsg::Sync(pod_index)) =>
-                main_ctrl.sync(Some(pod_index)),
-
-            Message::Feed(FeedMsg::SyncData(pod)) =>
-                main_ctrl.add_or_sync_data(pod, true),
-
-            Message::Ui(UiMsg::SyncAll) =>
-                main_ctrl.sync(None),
-
-            Message::Ui(UiMsg::Play(pod_index, ep_index)) =>
-                main_ctrl.play_file(pod_index, ep_index),
-
-            Message::Ui(UiMsg::MarkPlayed(pod_index, ep_index, played)) =>
-                main_ctrl.mark_played(pod_index, ep_index, played),
-
-            Message::Ui(UiMsg::MarkAllPlayed(pod_index, played)) =>
-                main_ctrl.mark_all_played(pod_index, played),
-
-            Message::Ui(UiMsg::Download(pod_index, ep_index)) =>
-                main_ctrl.download(pod_index, Some(ep_index)),
-
-            Message::Ui(UiMsg::DownloadAll(pod_index)) =>
-                main_ctrl.download(pod_index, None),
-
-            // downloading can produce any one of these responses
-            Message::Dl(DownloadMsg::Complete(ep_data)) =>
-                main_ctrl.download_complete(ep_data),
-            Message::Dl(DownloadMsg::ResponseError(_)) =>
-                main_ctrl.msg_to_ui("Error sending download request.".to_string(), true),
-            Message::Dl(DownloadMsg::FileCreateError(_)) =>
-                main_ctrl.msg_to_ui("Error creating file.".to_string(), true),
-            Message::Dl(DownloadMsg::FileWriteError(_)) =>
-                main_ctrl.msg_to_ui("Error downloading episode.".to_string(), true),
-
-            Message::Ui(UiMsg::Delete(pod_index, ep_index)) =>
-                main_ctrl.delete_file(pod_index, ep_index),
-
-            Message::Ui(UiMsg::DeleteAll(pod_index)) =>
-                main_ctrl.delete_files(pod_index),
-
-            Message::Ui(UiMsg::RemovePodcast(pod_index, delete_files)) =>
-                main_ctrl.remove_podcast(pod_index, delete_files),
-
-            Message::Ui(UiMsg::RemoveEpisode(pod_index, ep_index, delete_files)) =>
-                main_ctrl.remove_episode(pod_index, ep_index, delete_files),
-
-            Message::Ui(UiMsg::RemoveAllEpisodes(pod_index, delete_files)) =>
-                main_ctrl.remove_all_episodes(pod_index, delete_files),
-                    
-            Message::Ui(UiMsg::Noop) => (),
-        }
-    }
 
     // CLEANUP ----------------------------------------------------------
     main_ctrl.tx_to_ui.send(MainMessage::UiTearDown).unwrap();
