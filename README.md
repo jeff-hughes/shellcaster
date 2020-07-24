@@ -13,7 +13,7 @@ There are currently a few ways to install shellcaster.
 1. If you are running Linux or MacOS on x86_64 (i.e., 64-bit), you can find binaries for the latest release on the [Releases page](https://github.com/jeff-hughes/shellcaster/releases). Download the `.tar.gz` file appropriate for your system, and install it with the following commands in your terminal:
 
 ```bash
-tar xzvf shellcaster-OS_NAME.tar.gz
+tar xzvf shellcaster-OS_NAME-x64_64-bundled.tar.gz
 cd shellcaster
 sudo cp shellcaster /usr/local/bin
 shellcaster  # to run
@@ -61,9 +61,9 @@ shellcaster -c /path/to/config.toml
 
 ## Platform support
 
-Shellcaster has currently only been tested extensively on Linux x86_64. Earlier versions were tested on MacOS, but not extensively. Unix systems in general, on x86_64 (64-bit), i686 (32-bit), and ARM, are the primary targets for support for the app.
+Shellcaster has currently only been tested extensively on Linux x86_64. Earlier versions were tested on MacOS, but not extensively. Unix systems in general, on x86_64 (64-bit), i686 (32-bit), and ARM, will be the primary targets for support for the app.
 
-Shellcaster is not currently supported on Windows, although some work has been done to try to get it working. Unicode support is weak, however, and there are issues when resizing the screen. You may have better luck using Windows Subsystem for Linux 2 (WSL 2), but this has not been tested. If you are a Windows user and want to help work out the bugs, pull requests are more than welcome!
+Shellcaster is **not currently supported on Windows**, although some work has been done to try to get it working. Unicode support is weak, however, and there are issues when resizing the screen. You *might* have better luck using the new Windows Terminal and building with the `win32a` feature enabled, but this has not been tested. If you are a Windows user and want to help work out the bugs, pull requests are more than welcome!
 
 ## Default keybindings
 

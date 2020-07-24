@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.8.2 (2020-07-24)
+- Adds details panel on the right-hand side when the screen is large enough, providing more information about the selected episode
+- Better notifications for syncing and downloading files
+- New config option: Adjust the maximum number of retries to connect when syncing podcasts or downloading episodes
+- Changed from `reqwest` package to `ureq` package, which simplifies some things, and also cuts out numerous other dependencies (meaning a smaller binary size!)
+- Syncing podcasts now uses the same threadpool as downloading, leading to some efficiencies and somewhat simpler code
+- Bug fixes:
+    - Creates directory for database if it does not exist
+    - Mark episode as played when user plays the episode
+
 ## v0.8.1 (2020-07-01)
 - Can now remove one or more episodes from the list of episodes, effectively hiding them so they will not be re-synced
 - Can also remove podcasts entirely
