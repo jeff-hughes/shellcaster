@@ -7,13 +7,15 @@ use std::time::Duration;
 mod panel;
 
 mod menu;
+mod notification;
 mod colors;
 
 use self::panel::{Panel, Details};
 use self::menu::Menu;
+use self::notification::NotifWin;
 use self::colors::{Colors, ColorType};
 
-use pancurses::{Window, newwin, Input};
+use pancurses::{Window, Input};
 use lazy_static::lazy_static;
 use regex::Regex;
 
@@ -76,6 +78,7 @@ pub struct UI<'a> {
     episode_menu: Menu<Episode>,
     active_menu: ActiveMenu,
     details_panel: Option<Panel>,
+    notif_win: NotifWin,
     welcome_win: Option<Panel>,
 }
 
@@ -87,9 +90,12 @@ impl<'a> UI<'a> {
             let mut ui = UI::new(&config, &items);
             ui.init();
             let mut message_iter = rx_from_main.try_iter();
-            // on each loop, we check for user input, then we process
-            // any messages from the main thread
+            // this is the main event loop: on each loop, we update
+            // any messages at the bottom, check for user input, and
+            // then process any messages from the main thread
             loop {
+                ui.notif_win.check_notifs();
+
                 match ui.getch() {
                     UiMsg::Noop => (),
                     input => tx_to_main.send(Message::Ui(input)).unwrap(),
@@ -98,7 +104,7 @@ impl<'a> UI<'a> {
                 if let Some(message) = message_iter.next() {
                     match message {
                         MainMessage::UiUpdateMenus => ui.update_menus(),
-                        MainMessage::UiSpawnMsgWin(msg, duration, error) => ui.spawn_msg_win(msg, duration, error),
+                        MainMessage::UiSpawnMsgWin(msg, duration, error) => ui.timed_notif(msg, duration, error),
                         MainMessage::UiTearDown => {
                             ui.tear_down();
                             break;
@@ -175,6 +181,9 @@ impl<'a> UI<'a> {
             None
         };
 
+        let notif_win = NotifWin::new(colors.clone(), 
+        n_row, n_col);
+
         // welcome screen if user does not have any podcasts yet
         let welcome_win = if items.borrow().is_empty() {
             Some(UI::make_welcome_win(colors.clone(), &config.keybindings, n_row-1, n_col))
@@ -192,6 +201,7 @@ impl<'a> UI<'a> {
             episode_menu: episode_menu,
             active_menu: ActiveMenu::PodcastMenu,
             details_panel: details_panel,
+            notif_win: notif_win,
             welcome_win: welcome_win,
         };
     }
@@ -363,7 +373,7 @@ impl<'a> UI<'a> {
                     },
 
                     Some(UserAction::AddFeed) => {
-                        let url = &self.spawn_input_win("Feed URL: ");
+                        let url = &self.spawn_input_notif("Feed URL: ");
                         if !url.is_empty() {
                             return UiMsg::AddFeed(url.to_string());
                         }
@@ -462,7 +472,7 @@ impl<'a> UI<'a> {
                                     }
 
                                     if any_downloaded {
-                                        let ask_delete = self.spawn_yes_no_win("Delete local files too?");
+                                        let ask_delete = self.spawn_yes_no_notif("Delete local files too?");
                                         delete = match ask_delete {
                                             Some(val) => val,
                                             None => false,  // default not to delete
@@ -484,7 +494,7 @@ impl<'a> UI<'a> {
                                             .path.is_some();
                                     }
                                     if is_downloaded {
-                                        let ask_delete = self.spawn_yes_no_win("Delete local file too?");
+                                        let ask_delete = self.spawn_yes_no_notif("Delete local file too?");
                                         delete = match ask_delete {
                                             Some(val) => val,
                                             None => false,  // default not to delete
@@ -516,7 +526,7 @@ impl<'a> UI<'a> {
                             }
 
                             if any_downloaded {
-                                let ask_delete = self.spawn_yes_no_win("Delete local files too?");
+                                let ask_delete = self.spawn_yes_no_notif("Delete local files too?");
                                 delete = match ask_delete {
                                     Some(val) => val,
                                     None => false,  // default not to delete
@@ -561,101 +571,24 @@ impl<'a> UI<'a> {
         return (pod_col, ep_col, det_col);
     }
 
-    /// Adds a one-line pancurses window to the bottom of the screen to
-    /// solicit user text input. A prefix can be specified as a prompt
-    /// for the user at the beginning of the input line. This returns the
-    /// user's input; if the user cancels their input, the String will be
-    /// empty.
-    pub fn spawn_input_win(&self, prefix: &str) -> String {
-        let input_win = newwin(1, self.n_col, self.n_row-1, 0);
-        // input_win.overlay(&self.podcast_menu.window);
-        input_win.mv(self.n_row-1, 0);
-        input_win.addstr(&prefix);
-        input_win.keypad(true);
-        input_win.refresh();
-        pancurses::curs_set(2);
-        
-        let mut inputs = String::new();
-        let mut cancelled = false;
-
-        let min_x = prefix.len() as i32;
-        let mut current_x = prefix.len() as i32;
-        let mut cursor_x = prefix.len() as i32;
-        loop {
-            match input_win.getch() {
-                // Cancel input
-                Some(Input::KeyExit) |
-                Some(Input::Character('\u{1b}')) => {
-                    cancelled = true;
-                    break;
-                },
-                // Complete input
-                Some(Input::KeyEnter) |
-                Some(Input::Character('\n')) => {
-                    break;
-                },
-                Some(Input::KeyBackspace) |
-                Some(Input::Character('\u{7f}')) => {
-                    if current_x > min_x {
-                        current_x -= 1;
-                        cursor_x -= 1;
-                        let _ = inputs.remove((cursor_x as usize) - prefix.len());
-                        input_win.mv(0, cursor_x);
-                        input_win.delch();
-                    }
-                },
-                Some(Input::KeyDC) => {
-                    if cursor_x < current_x {
-                        let _ = inputs.remove((cursor_x as usize) - prefix.len());
-                        input_win.delch();
-                    }
-                },
-                Some(Input::KeyLeft) => {
-                    if cursor_x > min_x {
-                        cursor_x -= 1;
-                        input_win.mv(0, cursor_x);
-                    }
-                },
-                Some(Input::KeyRight) => {
-                    if cursor_x < current_x {
-                        cursor_x += 1;
-                        input_win.mv(0, cursor_x);
-                    }
-                },
-                Some(Input::Character(c)) => {
-                    current_x += 1;
-                    cursor_x += 1;
-                    input_win.insch(c);
-                    input_win.mv(0, cursor_x);
-                    inputs.push(c);
-                },
-                Some(_) => (),
-                None => (),
-            }
-            input_win.refresh();
-        }
-
-        pancurses::curs_set(0);
-        input_win.deleteln();
-        input_win.refresh();
-        input_win.delwin();
-
-        if cancelled {
-            return String::from("");
-        }
-        return inputs;
+    /// Adds a notification to the bottom of the screen that solicits
+    /// user text input. A prefix can be specified as a prompt for the
+    /// user at the beginning of the input line. This returns the user's
+    /// input; if the user cancels their input, the String will be empty.
+    pub fn spawn_input_notif(&self, prefix: &str) -> String {
+        return self.notif_win.input_notif(prefix);
     }
 
-    /// Adds a one-line pancurses window to the bottom of the screen to
-    /// solicit user for a yes/no input. A prefix can be specified as a
-    /// prompt for the user at the beginning of the input line. "(y/n)"
-    /// will automatically be appended to the end of the prefix. If the
-    /// user types 'y' or 'n', the boolean will represent this value. If
-    /// the user cancels the input or types anything else, the function
-    /// will return None.
-    pub fn spawn_yes_no_win(&self, prefix: &str) -> Option<bool> {
+    /// Adds a notification to the bottom of the screen that solicits
+    /// user for a yes/no input. A prefix can be specified as a prompt
+    /// for the user at the beginning of the input line. "(y/n)" will
+    /// automatically be appended to the end of the prefix. If the user
+    /// types 'y' or 'n', the boolean will represent this value. If the
+    /// user cancels the input or types anything else, the function will
+    /// return None.
+    pub fn spawn_yes_no_notif(&self, prefix: &str) -> Option<bool> {
         let mut out_val = None;
-        let input = self.spawn_input_win(&format!("{} {}", prefix, "(y/n) "));
+        let input = self.notif_win.input_notif(&format!("{} {}", prefix, "(y/n) "));
         if let Some(c) = input.trim().chars().next() {
             if c == 'Y' || c == 'y' {
                 out_val = Some(true);
@@ -666,35 +599,24 @@ impl<'a> UI<'a> {
         return out_val;
     }
 
-    /// Adds a one-line pancurses window to the bottom of the screen for
-    /// displaying messages to the user. `duration` indicates how long
-    /// (in milliseconds) this message will remain on screen. Useful for
-    /// presenting error messages, among other things.
-    pub fn spawn_msg_win(&self, message: String, duration: u64, error: bool) {
-        let n_col = self.n_col;
-        let begy = self.n_row - 1;
-        let err_color = self.colors.get(ColorType::Error);
-        thread::spawn(move || {
-            let msg_win = newwin(1, n_col, begy, 0);
-            msg_win.mv(begy, 0);
-            msg_win.attrset(pancurses::A_NORMAL);
-            msg_win.addstr(message);
+    /// Adds a notification to the bottom of the screen for `duration`
+    /// time  (in milliseconds). Useful for presenting error messages,
+    /// among other things.
+    pub fn timed_notif(&mut self, message: String, duration: u64, error: bool) {
+        self.notif_win.timed_notif(message, duration, error);
+    }
 
-            if error {
-                msg_win.mvchgat(0, 0, -1, pancurses::A_BOLD,
-                    err_color);
-            }
-            msg_win.refresh();
+    /// Adds a notification to the bottom of the screen that will stay on
+    /// screen indefinitely. Must use `clear_persistent_msg()` to erase.
+    pub fn persistent_notif(&mut self, message: String, error: bool) {
+        self.notif_win.persistent_notif(message, error);
+    }
 
-            // TODO: This probably should be some async function, but this
-            // works for now
-            // pancurses::napms(duration);
-            thread::sleep(Duration::from_millis(duration));
-            
-            msg_win.erase();
-            msg_win.refresh();
-            msg_win.delwin();
-        });
+    /// Clears any persistent notification that is being displayed at the
+    /// bottom of the screen. Does not affect timed notifications, user
+    /// input notifications, etc.
+    pub fn clear_persistent_notif(&mut self) {
+        self.notif_win.clear_persistent_notif();
     }
 
     /// Forces the menus to check the list of podcasts/episodes again and
