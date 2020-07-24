@@ -546,16 +546,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rfc822_sanitizer"
-version = "0.3.3"
-source = "git+https://github.com/jeff-hughes/rfc822_sanitizer_copy#e262dac63a420acea7acdf5d5419e99dcca438a4"
-dependencies = [
- "chrono 0.4.11 (registry+https://github.com/rust-lang/crates.io-index)",
- "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "regex 1.3.6 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
 name = "ring"
 version = "0.16.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -690,7 +680,6 @@ dependencies = [
  "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "pancurses 0.16.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "regex 1.3.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "rfc822_sanitizer 0.3.3 (git+https://github.com/jeff-hughes/rfc822_sanitizer_copy)",
  "rss 1.9.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rusqlite 0.21.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "sanitize-filename 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1021,7 +1010,6 @@ dependencies = [
 "checksum regex 1.3.6 (registry+https://github.com/rust-lang/crates.io-index)" = "7f6946991529684867e47d86474e3a6d0c0ab9b82d5821e314b1ede31fa3a4b3"
 "checksum regex-syntax 0.6.17 (registry+https://github.com/rust-lang/crates.io-index)" = "7fe5bd57d1d7414c6b5ed48563a2c855d995ff777729dcd91c369ec7fea395ae"
 "checksum remove_dir_all 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)" = "3acd125665422973a33ac9d3dd2df85edad0f4ae9b00dafb1a05e43a9f5ef8e7"
-"checksum rfc822_sanitizer 0.3.3 (git+https://github.com/jeff-hughes/rfc822_sanitizer_copy)" = "<none>"
 "checksum ring 0.16.15 (registry+https://github.com/rust-lang/crates.io-index)" = "952cd6b98c85bbc30efa1ba5783b8abf12fec8b3287ffa52605b9432313e34e4"
 "checksum rss 1.9.0 (registry+https://github.com/rust-lang/crates.io-index)" = "99979205510c60f80a119dedbabd0b8426517384edf205322f8bcd51796bcef9"
 "checksum rusqlite 0.21.0 (registry+https://github.com/rust-lang/crates.io-index)" = "64a656821bb6317a84b257737b7934f79c0dbb7eb694710475908280ebad3e64"
