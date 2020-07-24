@@ -233,4 +233,27 @@ impl NotifWin {
             self.current_msg = None;
         }
     }
+
+    /// Updates window size/location
+    pub fn resize(&mut self, total_rows: i32, total_cols: i32) {
+        self.total_rows = total_rows;
+        self.total_cols = total_cols;
+
+        // apparently pancurses does not implement `wresize()`
+        // from ncurses, so instead we create an entirely new
+        // window every time the terminal is resized...not ideal,
+        // but c'est la vie
+        let oldwin = std::mem::replace(
+            &mut self.window,
+            pancurses::newwin(
+                1,
+                total_cols,
+                total_rows-1,
+                0));
+        oldwin.delwin();
+
+        if let Some(curr) = &self.current_msg {
+            self.display_notif(curr.clone());
+        }
+    }
 }

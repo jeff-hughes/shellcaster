@@ -280,6 +280,8 @@ impl<'a> UI<'a> {
                     let ww = self.welcome_win.as_mut().unwrap();
                     ww.refresh();
                 }
+
+                self.notif_win.resize(n_row, n_col);
                 self.stdscr.refresh();
             },
 
