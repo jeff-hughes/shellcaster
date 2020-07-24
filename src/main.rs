@@ -1,8 +1,5 @@
 use std::process;
 use std::path::PathBuf;
-use std::sync::mpsc;
-
-use sanitize_filename::{sanitize_with_options, Options};
 
 mod main_controller;
 mod config;
@@ -10,33 +7,13 @@ mod keymap;
 mod db;
 mod ui;
 mod types;
+mod threadpool;
 mod feeds;
 mod downloads;
 mod play_file;
 
 use crate::main_controller::{MainController, MainMessage};
-use crate::types::*;
 use crate::config::Config;
-use crate::ui::UiMsg;
-use crate::feeds::FeedMsg;
-use crate::downloads::DownloadMsg;
-
-// Specifies how long, in milliseconds, to display messages at the
-// bottom of the screen in the UI.
-const MESSAGE_TIME: u64 = 5000;
-
-// How many columns we need, minimum, before we display the
-// (unplayed/total) after the podcast title
-const PODCAST_UNPLAYED_TOTALS_LENGTH: usize = 25;
-
-// How many columns we need, minimum, before we display the duration of
-// the episode
-const EPISODE_DURATION_LENGTH: usize = 45;
-
-// How many columns we need, minimum, before we display the pubdate
-// of the episode
-const EPISODE_PUBDATE_LENGTH: usize = 60;
-
 
 /// Main controller for shellcaster program.
 /// 
@@ -52,7 +29,6 @@ const EPISODE_PUBDATE_LENGTH: usize = 60;
 #[allow(clippy::while_let_on_iterator)]
 fn main() {
     // SETUP -----------------------------------------------------------
-
     // figure out where config file is located -- either specified from
     // command line args, or using default config location for OS
     let args: Vec<String> = std::env::args().collect();
@@ -73,130 +49,8 @@ fn main() {
 
 
     // MAIN LOOP --------------------------------------------------------
+    main_ctrl.loop_msgs();
 
-    // wait for messages from the UI and other threads, and then process
-    let mut message_iter = main_ctrl.rx_to_main.iter();
-    while let Some(message) = message_iter.next() {
-        match message {
-            Message::Ui(UiMsg::Quit) => break,
-
-            Message::Ui(UiMsg::AddFeed(url)) => {
-                let tx_feeds_to_main = mpsc::Sender::clone(&main_ctrl.tx_to_main);
-                let _ = feeds::spawn_feed_checker(tx_feeds_to_main, url, None);
-            },
-
-            Message::Feed(FeedMsg::NewData(pod)) =>
-                main_ctrl.add_or_sync_data(pod, false),
-
-            Message::Feed(FeedMsg::Error) =>
-                main_ctrl.msg_to_ui("Error retrieving RSS feed.".to_string(), true),
-
-            Message::Ui(UiMsg::Sync(pod_index)) =>
-                main_ctrl.sync(Some(pod_index)),
-
-            Message::Feed(FeedMsg::SyncData(pod)) =>
-                main_ctrl.add_or_sync_data(pod, true),
-
-            Message::Ui(UiMsg::SyncAll) =>
-                main_ctrl.sync(None),
-
-            Message::Ui(UiMsg::Play(pod_index, ep_index)) =>
-                main_ctrl.play_file(pod_index, ep_index),
-
-            Message::Ui(UiMsg::MarkPlayed(pod_index, ep_index, played)) =>
-                main_ctrl.mark_played(pod_index, ep_index, played),
-
-            Message::Ui(UiMsg::MarkAllPlayed(pod_index, played)) =>
-                main_ctrl.mark_all_played(pod_index, played),
-
-            // TODO: Stuck with this here for now because
-            // `main_ctrl.download_manager.download_list()` requires
-            // mutable borrow
-            Message::Ui(UiMsg::Download(pod_index, ep_index)) => {
-                let pod_title;
-                {
-                    let borrowed_podcast_list = main_ctrl.podcasts.borrow();
-                    pod_title = borrowed_podcast_list[pod_index].title.clone();
-                }
-                let episode = main_ctrl.podcasts
-                    .clone_episode(pod_index, ep_index).unwrap();
-                if episode.path.is_some() {
-                    // don't re-download if file already exists
-                    // TODO: Might want to revisit this decision at some
-                    // point, and ask user if they want to re-download
-                    // the file
-                    return;
-                }
-
-                // add directory for podcast, create if it does not exist
-                let dir_name = sanitize_with_options(&pod_title, Options {
-                    truncate: true,
-                    windows: true,  // for simplicity, we'll just use Windows-friendly paths for everyone
-                    replacement: ""
-                });
-                match main_ctrl.create_podcast_dir(dir_name) {
-                    Ok(path) => main_ctrl.download_manager.download_list(
-                        &[&episode], &path),
-                    Err(_) => main_ctrl.msg_to_ui(
-                        format!("Could not create dir: {}", pod_title), true),
-                }
-            },
-
-            // downloading can produce any one of these responses
-            Message::Dl(DownloadMsg::Complete(ep_data)) =>
-                main_ctrl.download_complete(ep_data),
-            Message::Dl(DownloadMsg::ResponseError(_)) =>
-                main_ctrl.msg_to_ui("Error sending download request.".to_string(), true),
-            Message::Dl(DownloadMsg::ResponseDataError(_)) =>
-                main_ctrl.msg_to_ui("Error downloading episode.".to_string(), true),
-            Message::Dl(DownloadMsg::FileCreateError(_)) =>
-                main_ctrl.msg_to_ui("Error creating file.".to_string(), true),
-            Message::Dl(DownloadMsg::FileWriteError(_)) =>
-                main_ctrl.msg_to_ui("Error writing file to disk.".to_string(), true),
-
-            // TODO: Stuck with this here for now because
-            // `main_ctrl.download_manager.download_list()` requires
-            // mutable borrow
-            Message::Ui(UiMsg::DownloadAll(pod_index)) => {
-                // TODO: Try to do this without cloning the podcast...
-                let podcast = main_ctrl.podcasts
-                    .clone_podcast(pod_index).unwrap();
-                let pod_title = podcast.title.clone();
-                let borrowed_ep_list = podcast
-                    .episodes.borrow();
-
-                let mut episodes = Vec::new();
-                for e in borrowed_ep_list.iter() {
-                    episodes.push(e);
-                }
-
-                // add directory for podcast, create if it does not exist
-                let dir_name = sanitize_with_options(&pod_title, Options {
-                    truncate: true,
-                    windows: true,  // for simplicity, we'll just use Windows-friendly paths for everyone
-                    replacement: ""
-                });
-                match main_ctrl.create_podcast_dir(dir_name) {
-                    Ok(path) => main_ctrl.download_manager.download_list(
-                        &episodes, &path),
-                    Err(_) => main_ctrl.msg_to_ui(
-                        format!("Could not create dir: {}", pod_title), true),
-                }
-            },
-
-            Message::Ui(UiMsg::Delete(pod_index, ep_index)) => main_ctrl.delete_file(pod_index, ep_index),
-
-            Message::Ui(UiMsg::DeleteAll(pod_index)) => main_ctrl.delete_files(pod_index),
-
-            Message::Ui(UiMsg::RemovePodcast(pod_index, delete_files)) => main_ctrl.remove_podcast(pod_index, delete_files),
-
-            Message::Ui(UiMsg::RemoveEpisode(pod_index, ep_index, delete_files)) => main_ctrl.remove_episode(pod_index, ep_index, delete_files),
-
-            Message::Ui(UiMsg::RemoveAllEpisodes(pod_index, delete_files)) => main_ctrl.remove_all_episodes(pod_index, delete_files),
-                    
-            Message::Ui(UiMsg::Noop) => (),
-        }
-    }
 
     // CLEANUP ----------------------------------------------------------
     main_ctrl.tx_to_ui.send(MainMessage::UiTearDown).unwrap();

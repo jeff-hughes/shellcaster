@@ -1,0 +1,23 @@
+name: Compile and test
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  test:
+    name: Check and run tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - run: sudo apt-get update
+      # need to install ncurses library headers
+      - run: sudo apt-get install libncurses5-dev libncursesw5-dev
+      - run: cargo check --locked
+      - run: cargo test --locked

@@ -10,20 +10,27 @@
 #download_path = "~/.local/share/shellcaster/"
 
 
+# Command to use to play episodes. Use "%s" to indicate where file/URL
+# will be entered to the command.
+# Default: vlc %s
+
+play_command = "vlc %s"
+
+
 # Maximum number of files to download simultaneously. Setting this too
 # high could result in network requests being denied. A good general
 # guide would be to set this to the number of processor cores on your
 # computer.
 # Default: 3
 
-#simultaneous_downloads = 3;
+#simultaneous_downloads = 3
 
 
-# Command to use to play episodes. Use "%s" to indicate where file/URL
-# will be entered to the command.
-# Default: vlc %s
+# Maximum number of times to retry connecting to a URL to sync a
+# podcast or download an episode.
+# Default: 3
 
-play_command = "vlc %s"
+#max_retries = 3
 
 
 [keybindings]

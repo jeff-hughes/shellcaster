@@ -35,7 +35,7 @@ impl Menuable for Podcast {
         let mut out = self.title.substring(0, length);
         // if the size available is big enough, we add the unplayed data
         // to the end
-        if length > super::PODCAST_UNPLAYED_TOTALS_LENGTH {
+        if length > crate::config::PODCAST_UNPLAYED_TOTALS_LENGTH {
             let meta_str = format!("({}/{})",
                 self.num_unplayed, self.episodes.len());
             out = out.substring(0, length-meta_str.chars().count());
@@ -72,7 +72,7 @@ pub struct Episode {
 
 impl Episode {
     /// Formats the duration in seconds into an HH:MM:SS format.
-    fn format_duration(&self) -> String {
+    pub fn format_duration(&self) -> String {
         return match self.duration {
             Some(dur) => {
                 let mut seconds = dur;
@@ -94,7 +94,7 @@ impl Menuable for Episode {
             Some(_) => format!("[D] {}", self.title.substring(0, length-4)),
             None => self.title.substring(0, length).to_string(),
         };
-        if length > super::EPISODE_PUBDATE_LENGTH {
+        if length > crate::config::EPISODE_PUBDATE_LENGTH {
             let dur = self.format_duration();
             let meta_dur = format!("[{}]", dur);
 
@@ -109,7 +109,7 @@ impl Menuable for Episode {
                 // just print duration
                 return format!("{} {:>width$}", out.substring(0, length-meta_dur.chars().count()), meta_dur, width=length-out.chars().count());
             }
-        } else if length > super::EPISODE_DURATION_LENGTH {
+        } else if length > crate::config::EPISODE_DURATION_LENGTH {
             let dur = self.format_duration();
             let meta_dur = format!("[{}]", dur);
             return format!("{} {:>width$}", out.substring(0, length-meta_dur.chars().count()), meta_dur, width=length-out.chars().count());
@@ -159,6 +159,51 @@ impl<T: Clone> LockVec<T> {
             return Err("Invalid index");
         }
     }
+
+    /// Maps a closure to every element in the LockVec, in the same way
+    /// as an Iterator. However, to avoid issues with keeping the borrow
+    /// alive, the function returns a Vec of the collected results,
+    /// rather than an iterator.
+    pub fn map<B, F>(&self, f: F) -> Vec<B>
+        where F: FnMut(&T) -> B {
+
+        let borrowed = self.borrow();
+        return borrowed.iter().map(f).collect();
+    }
+
+    /// Maps a closure to a single element in the LockVec, specified by
+    /// `index`. If there is no element at `index`, this returns None.
+    pub fn map_single<B, F>(&self, index: usize, f: F) -> Option<B>
+        where F: FnOnce(&T) -> B {
+
+        let borrowed = self.borrow();
+        return match borrowed.get(index) {
+            Some(item) => Some(f(item)),
+            None => return None,
+        };
+    }
+
+    /// Maps a closure to every element in the LockVec, in the same way
+    /// as the `filter_map()` does on an Iterator, both mapping and
+    /// filtering. However, to avoid issues with keeping the borrow
+    /// alive, the function returns a Vec of the collected results,
+    /// rather than an iterator.
+    pub fn filter_map<B, F>(&self, f: F) -> Vec<B>
+        where F: FnMut(&T) -> Option<B> {
+
+        let borrowed = self.borrow();
+        return borrowed.iter().filter_map(f).collect();
+    }
+
+    /// Implements the same functionality as the `fold()` method of an
+    /// Iterator, applying a function that accumulates a value over 
+    /// each element to produce a single, final value.
+    // pub fn fold<B, F>(&self, init: B, f: F) -> B
+    //     where F: FnMut(B, &T) -> B {
+
+    //     let borrowed = self.borrow();
+    //     return borrowed.iter().fold(init, f);
+    // }
 
     pub fn len(&self) -> usize {
         return self.borrow().len();
