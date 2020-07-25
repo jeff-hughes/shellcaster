@@ -9,6 +9,7 @@ mod ui;
 mod types;
 mod threadpool;
 mod feeds;
+mod sanitizer;
 mod downloads;
 mod play_file;
 
