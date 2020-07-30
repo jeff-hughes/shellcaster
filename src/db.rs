@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::collections::HashMap;
+// use std::collections::HashMap;
 
 use rusqlite::{Connection, params};
 use chrono::{NaiveDateTime, DateTime, Utc};
@@ -67,7 +67,7 @@ impl Database {
                 id INTEGER PRIMARY KEY NOT NULL,
                 podcast_id INTEGER NOT NULL,
                 title TEXT NOT NULL,
-                url TEXT NOT NULL UNIQUE,
+                url TEXT NOT NULL,
                 description TEXT,
                 pubdate INTEGER,
                 duration INTEGER,
@@ -257,45 +257,60 @@ impl Database {
         let conn = self.conn.as_ref().unwrap();
 
         let mut stmt = conn.prepare(
-            "SELECT id, title, pubdate FROM episodes
+            "SELECT id, title, url, pubdate FROM episodes
                 WHERE podcast_id = ?;").unwrap();
-        let episode_iter = stmt.query_map(params![podcast_id], |row| {
-            Ok((row.get("id")?, row.get("title")?, row.get("pubdate")?))
+        let old_episodes_iter = stmt.query_map(params![podcast_id], |row| {
+            Ok((row.get("id")?, row.get("title")?, row.get("url")?, row.get("pubdate")?))
         }).unwrap();
 
-        // create hashmap of all episodes, indexed by title and pub date
-        let mut ep_map: HashMap<(String, i64), i64> = HashMap::new();
-        for ep in episode_iter {
-            let epuw = ep.unwrap();
-            ep_map.insert((epuw.1, epuw.2), epuw.0);
+        let mut old_episodes: Vec<(i64, String, String, i64)> = Vec::new();
+        for ep in old_episodes_iter {
+            old_episodes.push(ep.unwrap());
         }
 
-        for ep in episodes.borrow().iter().rev() {
-            match ep_map.get(&(ep.title.clone(), ep.pubdate.unwrap().timestamp())) {
-                // update existing episode
+        for new_ep in episodes.borrow().iter().rev() {
+            let new_pd = match new_ep.pubdate {
+                Some(dt) => Some(dt.timestamp()),
+                None => None,
+            };
+
+            // for each existing episode, check the title, url, and
+            // pubdate -- if two of the three match, we count it as an
+            // existing episode; otherwise, we add it as a new episode
+            let mut existing_id = None;
+            for old_ep in old_episodes.iter().rev() {
+                let mut matching = 0;
+                matching += (new_ep.title == old_ep.1) as i32;
+                matching += (new_ep.url == old_ep.2) as i32;
+
+                if let Some(pd) = new_pd { 
+                    matching += (pd == old_ep.3) as i32;
+                }
+
+                if matching >= 2 {
+                    existing_id = Some(old_ep.0);
+                    break;
+                }
+            }
+
+            match existing_id {
                 Some(id) => {
-                    let pubdate = match ep.pubdate {
-                        Some(dt) => Some(dt.timestamp()),
-                        None => None,
-                    };
                     let _ = conn.execute(
                         "UPDATE episodes SET title = ?, url = ?,
                             description = ?, pubdate = ?, duration = ?
                             WHERE id = ?;",
                         params![
-                            ep.title,
-                            ep.url,
-                            ep.description,
-                            pubdate,
-                            ep.duration,
+                            new_ep.title,
+                            new_ep.url,
+                            new_ep.description,
+                            new_pd,
+                            new_ep.duration,
                             id,
                         ]
                     ).unwrap();
                 },
-
-                // insert new episode
                 None => {
-                    let _ = &self.insert_episode(podcast_id, &ep).unwrap();
+                    let _ = &self.insert_episode(podcast_id, &new_ep).unwrap();
                 }
             }
         }
