@@ -347,8 +347,6 @@ impl Database {
             let podcast_iter = stmt.query_map(params![], |row| {
                 let pod_id = row.get("id")?;
                 let episodes = self.get_episodes(pod_id);
-                let num_unplayed = episodes.iter()
-                    .fold(0, |acc, x| acc + (!x.is_played() as usize));
                 Ok(Podcast {
                     id: Some(pod_id),
                     title: row.get("title")?,
@@ -358,7 +356,6 @@ impl Database {
                     explicit: row.get("explicit")?,
                     last_checked: convert_date(row.get("last_checked")).unwrap(),
                     episodes: LockVec::new(episodes),
-                    num_unplayed: num_unplayed,
                 })
             }).unwrap();
             let mut podcasts = Vec::new();

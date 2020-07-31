@@ -26,7 +26,13 @@ pub struct Podcast {
     pub explicit: Option<bool>,
     pub last_checked: DateTime<Utc>,
     pub episodes: LockVec<Episode>,
-    pub num_unplayed: usize,
+}
+
+impl Podcast {
+    /// Counts and returns the number of unplayed episodes in the podcast.
+    fn num_unplayed(&self) -> usize {
+        return self.episodes.map(|ep| !ep.is_played() as usize).iter().sum();
+    }
 }
 
 impl Menuable for Podcast {
@@ -37,7 +43,7 @@ impl Menuable for Podcast {
         // to the end
         if length > crate::config::PODCAST_UNPLAYED_TOTALS_LENGTH {
             let meta_str = format!("({}/{})",
-                self.num_unplayed, self.episodes.len());
+                self.num_unplayed(), self.episodes.len());
             out = out.substring(0, length-meta_str.chars().count());
 
             return format!("{} {:>width$}", out, meta_str, 
@@ -49,7 +55,7 @@ impl Menuable for Podcast {
     }
 
     fn is_played(&self) -> bool {
-        return self.num_unplayed == 0;
+        return self.num_unplayed() == 0;
     }
 }
 

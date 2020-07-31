@@ -294,7 +294,7 @@ impl MainController {
     /// played/unplayed, sending this info to the database and updating
     /// in self.podcasts
     pub fn mark_played(&self, pod_index: usize, ep_index: usize, played: bool) {
-        let mut podcast = self.podcasts.clone_podcast(pod_index).unwrap();
+        let podcast = self.podcasts.clone_podcast(pod_index).unwrap();
 
         // TODO: Try to find a way to do this without having
         // to clone the episode...
@@ -304,11 +304,6 @@ impl MainController {
         self.db.set_played_status(episode.id.unwrap(), played);
         podcast.episodes.replace(ep_index, episode).unwrap();
 
-        if played {
-            podcast.num_unplayed -= 1;
-        } else {
-            podcast.num_unplayed += 1;
-        }
         self.podcasts.replace(pod_index, podcast).unwrap();
         self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
     }
@@ -317,25 +312,16 @@ impl MainController {
     /// played/unplayed, sending this info to the database and updating
     /// in self.podcasts
     pub fn mark_all_played(&self, pod_index: usize, played: bool) {
-        let mut podcast = self.podcasts.clone_podcast(pod_index).unwrap();
-        let n_eps;
+        let podcast = self.podcasts.clone_podcast(pod_index).unwrap();
         {
             let mut borrowed_ep_list = podcast
                 .episodes.borrow();
-            n_eps = borrowed_ep_list.len();
-
             for ep in borrowed_ep_list.iter() {
                 self.db.set_played_status(ep.id.unwrap(), played);
             }
-
             *borrowed_ep_list = self.db.get_episodes(podcast.id.unwrap());
         }
 
-        if played {
-            podcast.num_unplayed = 0;
-        } else {
-            podcast.num_unplayed = n_eps;
-        }
         self.podcasts.replace(pod_index, podcast).unwrap();
         self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
     }
@@ -553,7 +539,7 @@ impl MainController {
             self.delete_files(pod_index);
         }
 
-        let mut podcast = self.podcasts.clone_podcast(pod_index).unwrap();
+        let podcast = self.podcasts.clone_podcast(pod_index).unwrap();
         {
             let mut borrowed_ep_list = podcast.episodes.borrow();
             for ep in borrowed_ep_list.iter() {
@@ -561,7 +547,6 @@ impl MainController {
             }
             *borrowed_ep_list = Vec::new();
         }
-        podcast.num_unplayed = 0;
         self.podcasts.replace(pod_index, podcast).unwrap();
 
         self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();

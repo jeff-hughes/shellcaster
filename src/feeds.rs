@@ -125,8 +125,6 @@ fn parse_feed_data(channel: Channel, url: &str) -> Podcast {
         explicit: explicit,
         last_checked: last_checked,
         episodes: LockVec::new(episodes),
-        num_unplayed: 0,  // this will be set properly once it's inserted
-                          // into the database and then read back
     };
 }
 
