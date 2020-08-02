@@ -8,36 +8,90 @@ Note that shellcaster is not yet in stable format, and is still in active develo
 
 ## Installing shellcaster
 
-There are currently a few ways to install shellcaster.
+### On Arch Linux
 
-1. If you are running Linux or MacOS on x86_64 (i.e., 64-bit), you can find binaries for the latest release on the [Releases page](https://github.com/jeff-hughes/shellcaster/releases). Download the `.tar.gz` file appropriate for your system, and install it with the following commands in your terminal:
+There are packages available for shellcaster in the Arch User Repository (AUR). Use `makepkg -si` ([see further details](https://wiki.archlinux.org/index.php/Arch_User_Repository#Installing_and_upgrading_packages)) or your favourite AUR helper program to install one of the following packages:
+
+* [Stable source package](https://aur.archlinux.org/packages/shellcaster/)
+* [Stable binary package](https://aur.archlinux.org/packages/shellcaster-bin/)
+* [Latest development package](https://aur.archlinux.org/packages/shellcaster-git/)
+
+### On other Linux distributions and MacOS
+
+Currently the only option is to build from source.
+
+First, ensure you have installed the necessary dependencies:
+
+  * rust
+  * gcc
+  * libncurses-dev
+  * pkg-config
+  * libsqlite3-dev
+  * libssl-dev (not needed on MacOS)
+
+**Notes:**
+
+  * The names of these dependencies may be slightly different for your system. For `libncurses-dev`, `libssl-dev`, and `libsqlite3-dev`, you are looking for the development headers for ncurses, OpenSSL, and SQLite, which may be separate from the runtime package (e.g., with a `-dev` suffix).
+  * If you turn off the "native-tls" feature of shellcaster (enabled by default), `libssl-dev` is not necessary.
+  * If you select the "sqlite-bundled" feature of shellcaster (disabled by default), `pkg-config` and `libsqlite3-dev` are not necessary.
+
+Next, there are two options for compiling the program: 
+
+1. You can install the latest version of the binary directly from crates.io with one command:
 
 ```bash
-tar xzvf shellcaster-OS_NAME-x64_64-bundled.tar.gz
-cd shellcaster
-sudo cp shellcaster /usr/local/bin
-shellcaster  # to run
+cargo install shellcaster  # add or remove any features with --features
 ```
 
-Replacing *OS_NAME* with the filename you downloaded.
-
-2. If you have Rust + cargo installed, you can install the latest version of the binary directly from crates.io with one command:
-
-```bash
-cargo install shellcaster
-```
-
-3. If you have Rust + cargo installed, you can also clone the Github repo and compile it yourself:
+2. You can clone the Github repo and compile it yourself:
 
 ```bash
 git clone https://github.com/jeff-hughes/shellcaster.git
 cd shellcaster
-cargo build --release
+cargo build --release  # add or remove any features with --features
+
 sudo cp target/release/shellcaster /usr/local/bin/
-shellcaster  # to run
 ```
 
-If you want to change configuration settings:
+See below for the list of available features when compiling.
+
+### On Windows
+
+Shellcaster is **not currently supported on Windows**, although some work has been done to try to get it working. Unicode support is weak, however, and there are issues when resizing the screen. You *might* have better luck using the new Windows Terminal and building with the `win32` feature enabled, but this has not been tested. If you are a Windows user and want to help work out the bugs, pull requests are more than welcome!
+
+### List of compile features
+
+By default, `native-tls` and `wide` features are enabled. Here is the full list of features:
+
+* `sqlite_bundled`: When disabled, Rust will try to link shellcaster with SQLite header files already present on your system. If enabled, Rust will instead build SQLite from source and bundle the program with shellcaster. Bundling results in a larger application size, but may be suitable if you wish to use a different version of SQLite than the one on your system, or if you are on a system where installing SQLite is more difficult.
+
+* `native-tls`/`rustls`: The `native-tls` enables TLS (i.e., URLs with https) support through the [native-tls](https://crates.io/crates/native-tls) crate, which uses OpenSSL on Linux, Secure Transport on MacOS, and SChannel on Windows. If this causes issues for some podcast feeds, you can try building it with the `rustls` feature instead, which uses the [rustls](https://crates.io/crates/rustls) crate. Note that one of these two features *must* be selected, otherwise you will not be able to sync any feeds or download any episodes originating from an https URL!
+
+* `wide`: Enables support for "wide" characters (i.e., Unicode) on Linux/Mac systems. Generally preferable unless you have a terminal that does not have wide character support.
+
+* `win32`: For Windows systems, shellcaster uses [PDCurses](https://github.com/Bill-Gray/PDCurses), which has two different "flavours": win32, and win32a. win32a is the default as it generally has better support for colours and text effects, but enabling this feature will use the win32 flavour instead.
+
+To specify different features when compiling, here is the format:
+
+```bash
+cargo install --no-default-features --features "<feature1>,<feature2>"
+```
+
+The format is the same when using `cargo build` instead:
+
+```bash
+cargo build --release --no-default-features --features "<feature1>,<feature2>"
+```
+
+### Running shellcaster
+
+Easy peasy! In your terminal, run:
+
+```bash
+shellcaster
+```
+
+If you want to change configuration settings, the sample `config.toml` file can be copied from [here](https://raw.githubusercontent.com/jeff-hughes/shellcaster/master/config.toml). Download it, edit it to your fancy, and place it in the following location:
 
 ```bash
 # on Linux
@@ -49,21 +103,11 @@ mkdir -p ~/Library/Preferences/shellcaster
 cp config.toml ~/Library/Preferences/shellcaster/
 ```
 
-(If you installed directly with cargo, the sample `config.toml` file can be copied from [here](https://raw.githubusercontent.com/jeff-hughes/shellcaster/master/config.toml). Place it in the same location as noted above.)
-
 Or you can put `config.toml` in a place of your choosing, and specify the location at runtime:
 
 ```bash
 shellcaster -c /path/to/config.toml
 ```
-
-**Note:** Packages for various Linux distros are on their way -- stay tuned!
-
-## Platform support
-
-Shellcaster has currently only been tested extensively on Linux x86_64. Earlier versions were tested on MacOS, but not extensively. Unix systems in general, on x86_64 (64-bit), i686 (32-bit), and ARM, will be the primary targets for support for the app.
-
-Shellcaster is **not currently supported on Windows**, although some work has been done to try to get it working. Unicode support is weak, however, and there are issues when resizing the screen. You *might* have better luck using the new Windows Terminal and building with the `win32a` feature enabled, but this has not been tested. If you are a Windows user and want to help work out the bugs, pull requests are more than welcome!
 
 ## Default keybindings
 
@@ -84,7 +128,7 @@ Shellcaster is **not currently supported on Windows**, although some work has be
 | r       | Remove selected feed/episode from list |
 | Shift+R | Remove all feeds/episodes from list |
 
-Keybindings can be modified in the config.toml file. Actions can be
+Keybindings can be modified in the `config.toml` file. Actions can be
 mapped to more than one key, but a single key may not do more than one
 action.
 

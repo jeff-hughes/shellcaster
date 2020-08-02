@@ -35,7 +35,7 @@ default-features = false
 
 
 [features]
-default = ["sqlite_bundled", "native-tls"]
+default = ["wide", "native-tls"]
 
 # bundle sqlite library with app; recommended for Windows. This is
 # turned on by default, but if you are building this for a package
@@ -55,4 +55,3 @@ wide = ["pancurses/wide"]
 
 # specific to Windows; see pancurses docs for more details
 win32 = ["pancurses/win32"]
-win32a = ["pancurses/win32a"]
