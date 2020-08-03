@@ -22,7 +22,7 @@ lazy_static! {
 pub enum FeedMsg {
     NewData(Podcast),
     SyncData(Podcast),
-    Error,
+    Error(Option<i64>),
 }
 
 /// Spawns a new thread to check a feed and retrieve podcast data.
@@ -40,7 +40,7 @@ pub fn check_feed(url: String, pod_id: Option<i64>, max_retries: usize, threadpo
                         Message::Feed(FeedMsg::NewData(pod))).unwrap(),
                 }
             },
-            Err(_err) => tx_to_main.send(Message::Feed(FeedMsg::Error)).unwrap(),
+            Err(_err) => tx_to_main.send(Message::Feed(FeedMsg::Error(pod_id))).unwrap(),
         }
     });
 }

@@ -91,8 +91,19 @@ impl MainController {
                 Message::Feed(FeedMsg::NewData(pod)) =>
                     self.add_or_sync_data(pod, false),
     
-                Message::Feed(FeedMsg::Error) =>
-                    self.notif_to_ui("Error retrieving RSS feed.".to_string(), true),
+                Message::Feed(FeedMsg::Error(pod_id)) => {
+                    let mut title = None;
+                    if let Some(id) = pod_id {
+                        if let Some(idx) = self.podcasts.id_to_index(id) {
+                            title = self.podcasts.map_single(idx, |pod| pod.title.clone());
+                        }
+                    }
+
+                    match title {
+                        Some(t) => self.notif_to_ui(format!("Error retrieving RSS feed for {}.", t), true),
+                        None => self.notif_to_ui("Error retrieving RSS feed.".to_string(), true),
+                    }
+                },
     
                 Message::Ui(UiMsg::Sync(pod_index)) =>
                     self.sync(Some(pod_index)),
@@ -249,7 +260,7 @@ impl MainController {
                     self.sync_tracker -= 1;
                     self.update_tracker_notif();
                     if self.sync_tracker == 0 {
-                        self.notif_to_ui(format!("Synchronized {}.", title), false);
+                        self.notif_to_ui("Sync complete.".to_string(), false);
                     }
                 } else {
                     self.notif_to_ui(format!("Successfully added {} episodes.", num_ep), false);

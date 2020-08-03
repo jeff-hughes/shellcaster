@@ -19,6 +19,7 @@ readme = "README.md"
 pancurses = "0.16.1"
 rss = "1.9.0"
 rusqlite = "0.21.0"
+clap = "2.33.1"
 toml = "0.5.6"
 serde = { version = "1.0.106", features = ["derive"] }
 chrono = "0.4.11"
