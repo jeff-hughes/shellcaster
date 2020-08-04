@@ -1,6 +1,8 @@
 use std::process;
 use std::path::PathBuf;
 use std::sync::mpsc;
+use std::fs::File;
+use std::io::Write;
 
 use clap::{App, Arg, SubCommand};
 
@@ -15,6 +17,7 @@ mod feeds;
 mod sanitizer;
 mod downloads;
 mod play_file;
+mod opml;
 
 use crate::main_controller::{MainController, MainMessage};
 use crate::config::Config;
@@ -89,10 +92,11 @@ fn main() {
         .subcommand(SubCommand::with_name("export")
             .about("Exports podcasts to an OPML file")
             .arg(Arg::with_name("file")
-                .required(true)
+                .short("f")
+                .long("file")
                 .takes_value(true)
                 .value_name("FILE")
-                .help("Specifies the filepath for where the OPML file will be exported.")))
+                .help("If set, specifies the filepath for where the OPML file will be exported. If this flag is not set, the command will print to stdout.")))
         .get_matches();
 
     // figure out where config file is located -- either specified from
@@ -126,8 +130,8 @@ fn main() {
 
 
         // EXPORT SUBCOMMAND --------------------------------------------
-        ("export", Some(_sub_args)) => {
-            todo!();
+        ("export", Some(sub_args)) => {
+            export(&db_path, sub_args);
         },
 
 
@@ -244,5 +248,40 @@ fn sync_podcasts(db_path: &PathBuf, config: Config, args: &clap::ArgMatches) {
         } else if !args.is_present("quiet") {
             println!("Sync successful.");
         }
+    }
+}
+
+
+/// Exports all podcasts to OPML format, either printing to stdout or
+/// exporting to a file.
+fn export(db_path: &PathBuf, args: &clap::ArgMatches) {
+    let db_inst = Database::connect(&db_path);
+    let podcast_list = db_inst.get_podcasts();
+    let opml = opml::export(podcast_list);
+
+    let xml = opml.to_xml();
+    if let Err(err) = xml {
+        eprintln!("Error creating OPML format: {}", err);
+        process::exit(3);
+    }
+
+    match args.value_of("file") {
+        // export to file
+        Some(file) => {
+            match File::create(file) {
+                Err(err) => {
+                    eprintln!("Error creating output file: {}", err);
+                    process::exit(4);
+                },
+                Ok(mut dst) => {
+                    if let Err(err) = dst.write_all(xml.unwrap().as_bytes()) {
+                        eprintln!("Error copying OPML data to output file: {}", err);
+                        process::exit(4);
+                    }
+                },
+            }
+        },
+        // print to stdout
+        None => println!("{}", xml.unwrap()),
     }
 }

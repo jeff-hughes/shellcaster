@@ -231,6 +231,7 @@ impl<'a> UI<'a> {
     /// greater degree of abstraction; for example, input to add a new
     /// podcast feed spawns a UI window to capture the feed URL, and only
     /// then passes this data back to the main controller.
+    #[allow(clippy::cognitive_complexity)]
     pub fn getch(&mut self) -> UiMsg {
         match self.stdscr.getch() {
             Some(Input::KeyResize) => {
