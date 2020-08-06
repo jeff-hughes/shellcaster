@@ -22,15 +22,34 @@ lazy_static! {
 pub enum FeedMsg {
     NewData(Podcast),
     SyncData(Podcast),
-    Error(Option<i64>),
+    Error(PodcastFeed),
+}
+
+/// Struct holding data about a podcast feed (subset of info about a
+/// podcast) for the purpose of passing back and forth between threads.
+#[derive(Debug, Clone)]
+pub struct PodcastFeed {
+    pub id: Option<i64>,
+    pub url: String,
+    pub title: Option<String>,
+}
+
+impl PodcastFeed {
+    pub fn new(id: Option<i64>, url: String, title: Option<String>) -> Self {
+        return Self {
+            id: id,
+            url: url,
+            title: title
+        };
+    }
 }
 
 /// Spawns a new thread to check a feed and retrieve podcast data.
-pub fn check_feed(url: String, pod_id: Option<i64>, max_retries: usize, threadpool: &Threadpool, tx_to_main: mpsc::Sender<Message>) {
+pub fn check_feed(feed: PodcastFeed, max_retries: usize, threadpool: &Threadpool, tx_to_main: mpsc::Sender<Message>) {
     threadpool.execute(move || {
-        match get_feed_data(url, max_retries) {
+        match get_feed_data(feed.url.clone(), max_retries) {
             Ok(mut pod) => {
-                match pod_id {
+                match feed.id {
                     Some(id) => {
                         pod.id = Some(id);
                         tx_to_main.send(
@@ -40,7 +59,7 @@ pub fn check_feed(url: String, pod_id: Option<i64>, max_retries: usize, threadpo
                         Message::Feed(FeedMsg::NewData(pod))).unwrap(),
                 }
             },
-            Err(_err) => tx_to_main.send(Message::Feed(FeedMsg::Error(pod_id))).unwrap(),
+            Err(_err) => tx_to_main.send(Message::Feed(FeedMsg::Error(feed))).unwrap(),
         }
     });
 }

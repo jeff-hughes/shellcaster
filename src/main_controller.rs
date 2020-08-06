@@ -9,7 +9,7 @@ use crate::config::Config;
 use crate::ui::{UI, UiMsg};
 use crate::db::Database;
 use crate::threadpool::Threadpool;
-use crate::feeds::{self, FeedMsg};
+use crate::feeds::{self, FeedMsg, PodcastFeed};
 use crate::downloads::{self, EpData, DownloadMsg};
 use crate::play_file;
 
@@ -91,15 +91,8 @@ impl MainController {
                 Message::Feed(FeedMsg::NewData(pod)) =>
                     self.add_or_sync_data(pod, false),
     
-                Message::Feed(FeedMsg::Error(pod_id)) => {
-                    let mut title = None;
-                    if let Some(id) = pod_id {
-                        if let Some(idx) = self.podcasts.id_to_index(id) {
-                            title = self.podcasts.map_single(idx, |pod| pod.title.clone());
-                        }
-                    }
-
-                    match title {
+                Message::Feed(FeedMsg::Error(feed)) => {
+                    match feed.title {
                         Some(t) => self.notif_to_ui(format!("Error retrieving RSS feed for {}.", t), true),
                         None => self.notif_to_ui("Error retrieving RSS feed.".to_string(), true),
                     }
@@ -202,7 +195,8 @@ impl MainController {
 
     /// Add a new podcast by fetching the RSS feed data.
     pub fn add_podcast(&self, url: String) {
-        feeds::check_feed(url, None, self.config.max_retries,
+        let feed = PodcastFeed::new(None, url, None);
+        feeds::check_feed(feed, self.config.max_retries,
             &self.threadpool, self.tx_to_main.clone());
     } 
 
@@ -218,17 +212,15 @@ impl MainController {
             // just grab one podcast
             Some(idx) => pod_data.push(self.podcasts
                 .map_single(idx,
-                    |pod| (pod.url.clone(), pod.id))
+                    |pod| PodcastFeed::new(pod.id, pod.url.clone(), Some(pod.title.clone())))
                 .unwrap()),
             // get all of 'em!
             None => pod_data = self.podcasts
-                .map(|pod| (pod.url.clone(), pod.id)),
+                .map(|pod| PodcastFeed::new(pod.id, pod.url.clone(), Some(pod.title.clone()))),
         }
-        for data in pod_data.into_iter() {
-            let url = data.0;
-            let id = data.1;
+        for feed in pod_data.into_iter() {
             self.sync_tracker += 1;
-            feeds::check_feed(url, id, self.config.max_retries,
+            feeds::check_feed(feed, self.config.max_retries,
                 &self.threadpool, self.tx_to_main.clone())
         }
         self.update_tracker_notif();

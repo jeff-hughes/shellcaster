@@ -2,6 +2,26 @@ use opml::{OPML, Head, Body, Outline};
 use chrono::Utc;
 
 use crate::types::*;
+use crate::feeds::PodcastFeed;
+
+pub fn import(xml: String) -> Result<Vec<PodcastFeed>, String> {
+    return match OPML::new(&xml) {
+        Err(err) => Err(err),
+        Ok(opml) => {
+            let mut feeds = Vec::new();
+            for pod in opml.body.outlines.iter() {
+                if let Some(url) = pod.xml_url.clone() {
+                    let title = match &pod.title {
+                        Some(t) => Some(t.clone()),
+                        None => Some(pod.text.clone())
+                    };
+                    feeds.push(PodcastFeed::new(None, url, title));
+                }
+            }
+            Ok(feeds)
+        }
+    };
+}
 
 pub fn export(podcasts: Vec<Podcast>) -> OPML {
     let date = Utc::now();

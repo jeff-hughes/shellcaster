@@ -1,5 +1,4 @@
 use std::path::PathBuf;
-// use std::collections::HashMap;
 
 use rusqlite::{Connection, params};
 use chrono::{NaiveDateTime, DateTime, Utc};
