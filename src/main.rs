@@ -89,7 +89,11 @@ fn main() {
                 .short("r")
                 .long("replace")
                 .takes_value(false)
-                .help("If set, the contents of the OPML file will replace all existing data in the shellcaster database.")))
+                .help("If set, the contents of the OPML file will replace all existing data in the shellcaster database."))
+            .arg(Arg::with_name("quiet")
+                .short("q")
+                .long("quiet")
+                .help("Suppresses output messages to stdout.")))
         .subcommand(SubCommand::with_name("export")
             .about("Exports podcasts to an OPML file")
             .arg(Arg::with_name("file")
@@ -299,59 +303,65 @@ fn import(db_path: &PathBuf, config: Config, args: &clap::ArgMatches) {
             }).collect();
         }
 
-        println!("Importing {} podcasts...", podcast_list.len());
+        if podcast_list.is_empty() {
+            if !args.is_present("quiet") {
+                println!("No podcasts to import.");
+            }
+        } else {
+            println!("Importing {} podcasts...", podcast_list.len());
 
-        let threadpool = Threadpool::new(config.simultaneous_downloads);
-        let (tx_to_main, rx_to_main) = mpsc::channel();
+            let threadpool = Threadpool::new(config.simultaneous_downloads);
+            let (tx_to_main, rx_to_main) = mpsc::channel();
 
-        for pod in podcast_list.iter() {
-            feeds::check_feed(pod.clone(), config.max_retries, &threadpool, tx_to_main.clone());
-        }
-
-        let mut msg_counter: usize = 0;
-        let mut failure = false;
-        while let Some(message) = rx_to_main.iter().next() {
-            match message {
-                Message::Feed(FeedMsg::NewData(pod)) => {
-                    let title = pod.title.clone();
-                    let db_result;
-            
-                    db_result = db_inst.insert_podcast(pod);
-                    match db_result {
-                        Ok(_) => {
-                            if !args.is_present("quiet") {
-                                println!("Added {}", title);
-                            }
-                        },
-                        Err(_err) => {
-                            failure = true;
-                            eprintln!("Error adding {}", title);
-                        },
-                    }
-                }
-
-                Message::Feed(FeedMsg::Error(feed)) => {
-                    failure = true;
-                    if let Some(t) = feed.title {
-                        eprintln!("Error retrieving RSS feed: {}", t);
-                    } else {
-                        eprintln!("Error retrieving RSS feed");
-                    }
-                }
-                _ => (),
+            for pod in podcast_list.iter() {
+                feeds::check_feed(pod.clone(), config.max_retries, &threadpool, tx_to_main.clone());
             }
 
-            msg_counter += 1;
-            if msg_counter >= podcast_list.len() {
-                break;
-            }
-        }
+            let mut msg_counter: usize = 0;
+            let mut failure = false;
+            while let Some(message) = rx_to_main.iter().next() {
+                match message {
+                    Message::Feed(FeedMsg::NewData(pod)) => {
+                        let title = pod.title.clone();
+                        let db_result;
+                
+                        db_result = db_inst.insert_podcast(pod);
+                        match db_result {
+                            Ok(_) => {
+                                if !args.is_present("quiet") {
+                                    println!("Added {}", title);
+                                }
+                            },
+                            Err(_err) => {
+                                failure = true;
+                                eprintln!("Error adding {}", title);
+                            },
+                        }
+                    }
 
-        if failure {
-            eprintln!("Process finished with errors.");
-            process::exit(2);
-        } else if !args.is_present("quiet") {
-            println!("Import successful.");
+                    Message::Feed(FeedMsg::Error(feed)) => {
+                        failure = true;
+                        if let Some(t) = feed.title {
+                            eprintln!("Error retrieving RSS feed: {}", t);
+                        } else {
+                            eprintln!("Error retrieving RSS feed");
+                        }
+                    }
+                    _ => (),
+                }
+
+                msg_counter += 1;
+                if msg_counter >= podcast_list.len() {
+                    break;
+                }
+            }
+
+            if failure {
+                eprintln!("Process finished with errors.");
+                process::exit(2);
+            } else if !args.is_present("quiet") {
+                println!("Import successful.");
+            }
         }
     }
 }
