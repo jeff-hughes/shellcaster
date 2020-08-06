@@ -402,6 +402,15 @@ impl Database {
             return Vec::new();
         }
     }
+
+    /// Deletes all rows in all tables
+    pub fn clear_db(&self) -> Result<(), rusqlite::Error> {
+        let conn = self.conn.as_ref().unwrap();
+        conn.execute("DELETE FROM files;", params![])?;
+        conn.execute("DELETE FROM episodes;", params![])?;
+        conn.execute("DELETE FROM podcasts;", params![])?;
+        Ok(())
+    }
 }
 
 

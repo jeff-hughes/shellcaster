@@ -277,17 +277,15 @@ fn import(db_path: &PathBuf, config: Config, args: &clap::ArgMatches) {
             println!("No podcasts to import.");
         }
     } else {
-        let db_inst;
+        let db_inst = Database::connect(db_path);
 
         // delete database if we are replacing the data
-        if args.is_present("replace") && db_path.exists() {
-            std::fs::remove_file(db_path).unwrap_or_else(|_err| {
-                eprintln!("Error clearing database. Ensure you have the correct permissions to access the database at location: {}", db_path.to_string_lossy());
+        if args.is_present("replace") {
+            db_inst.clear_db().unwrap_or_else(|err| {
+                eprintln!("Error clearing database: {}", err);
                 process::exit(4);
             });
-            db_inst = Database::connect(db_path);
         } else {
-            db_inst = Database::connect(db_path);
             let old_podcasts = db_inst.get_podcasts();
 
             // if URL is already in database, remove it from import
@@ -332,9 +330,13 @@ fn import(db_path: &PathBuf, config: Config, args: &clap::ArgMatches) {
                     }
                 }
 
-                Message::Feed(FeedMsg::Error(_pod_id)) => {
+                Message::Feed(FeedMsg::Error(feed)) => {
                     failure = true;
-                    eprintln!("Error retrieving RSS feed.");
+                    if let Some(t) = feed.title {
+                        eprintln!("Error retrieving RSS feed: {}", t);
+                    } else {
+                        eprintln!("Error retrieving RSS feed");
+                    }
                 }
                 _ => (),
             }
