@@ -242,7 +242,7 @@ impl MainController {
             failure = "Error adding podcast to database.".to_string();
         }
         match db_result {
-            Ok(num_ep) => {
+            Ok(result) => {
                 {
                     *self.podcasts.borrow() = self.db.get_podcasts();
                 }
@@ -255,7 +255,7 @@ impl MainController {
                         self.notif_to_ui("Sync complete.".to_string(), false);
                     }
                 } else {
-                    self.notif_to_ui(format!("Successfully added {} episodes.", num_ep), false);
+                    self.notif_to_ui(format!("Successfully added {} episodes.", result.added.len()), false);
                 }
             },
             Err(_err) => self.notif_to_ui(failure, true),
