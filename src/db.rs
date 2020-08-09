@@ -102,7 +102,7 @@ impl Database {
 
     /// Inserts a new podcast and list of podcast episodes into the
     /// database.
-    pub fn insert_podcast(&self, podcast: Podcast) ->
+    pub fn insert_podcast(&self, podcast: PodcastNoId) ->
         Result<SyncResult, Box<dyn std::error::Error>> {
 
         let conn = self.conn.as_ref().unwrap();
@@ -126,13 +126,9 @@ impl Database {
             .query_row::<i64,_,_>(params![podcast.url], |row| row.get(0))
             .unwrap();
         let mut ep_ids = Vec::new();
-        {
-            let borrow = podcast.episodes.borrow();
-
-            for ep in borrow.iter().rev() {
-                let id = self.insert_episode(pod_id, &ep)?;
-                ep_ids.push(id);
-            }
+        for ep in podcast.episodes.iter().rev() {
+            let id = self.insert_episode(pod_id, &ep)?;
+            ep_ids.push(id);
         }
 
         return Ok(SyncResult {
@@ -142,7 +138,7 @@ impl Database {
     }
 
     /// Inserts a podcast episode into the database.
-    pub fn insert_episode(&self, podcast_id: i64, episode: &Episode) ->
+    pub fn insert_episode(&self, podcast_id: i64, episode: &EpisodeNoId) ->
         Result<i64, Box<dyn std::error::Error>> {
 
         let conn = self.conn.as_ref().unwrap();
@@ -229,7 +225,7 @@ impl Database {
     /// Updates an existing podcast in the database, where metadata is
     /// changed if necessary, and episodes are updated (modified episodes
     /// are updated, new episodes are inserted).
-    pub fn update_podcast(&self, podcast: Podcast) -> Result<SyncResult, Box<dyn std::error::Error>> {
+    pub fn update_podcast(&self, pod_id: i64, podcast: PodcastNoId) -> Result<SyncResult, Box<dyn std::error::Error>> {
         let conn = self.conn.as_ref().unwrap();
         let _ = conn.execute(
             "UPDATE podcasts SET title = ?, url = ?, description = ?,
@@ -242,11 +238,12 @@ impl Database {
                 podcast.author,
                 podcast.explicit,
                 podcast.last_checked.timestamp(),
-                podcast.id,
+                pod_id,
             ]
         )?;
 
-        let result = self.update_episodes(podcast.id.unwrap(), podcast.episodes);
+        let result = self.update_episodes(
+            pod_id, podcast.episodes);
         return Ok(result);
     }
 
@@ -258,14 +255,14 @@ impl Database {
     /// episode that has changed either of these fields will show up as
     /// a "new" episode. The old version will still remain in the
     /// database.
-    fn update_episodes(&self, podcast_id: i64, episodes: LockVec<Episode>) -> SyncResult {
+    fn update_episodes(&self, podcast_id: i64, episodes: Vec<EpisodeNoId>) -> SyncResult {
         let conn = self.conn.as_ref().unwrap();
 
         let old_episodes = self.get_episodes(podcast_id);
 
         let mut insert_ep = Vec::new();
         let mut update_ep = Vec::new();
-        for new_ep in episodes.borrow().iter().rev() {
+        for new_ep in episodes.iter().rev() {
             let new_pd = match new_ep.pubdate {
                 Some(dt) => Some(dt.timestamp()),
                 None => None,

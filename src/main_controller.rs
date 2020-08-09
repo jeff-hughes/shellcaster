@@ -89,7 +89,7 @@ impl MainController {
                     self.add_podcast(url),
     
                 Message::Feed(FeedMsg::NewData(pod)) =>
-                    self.add_or_sync_data(pod, false),
+                    self.add_or_sync_data(pod, None),
     
                 Message::Feed(FeedMsg::Error(feed)) => {
                     match feed.title {
@@ -101,8 +101,8 @@ impl MainController {
                 Message::Ui(UiMsg::Sync(pod_index)) =>
                     self.sync(Some(pod_index)),
     
-                Message::Feed(FeedMsg::SyncData(pod)) =>
-                    self.add_or_sync_data(pod, true),
+                Message::Feed(FeedMsg::SyncData((id, pod))) =>
+                    self.add_or_sync_data(pod, Some(id)),
     
                 Message::Ui(UiMsg::SyncAll) =>
                     self.sync(None),
@@ -228,14 +228,16 @@ impl MainController {
 
     /// Handles the application logic for adding a new podcast, or
     /// synchronizing data from the RSS feed of an existing podcast.
+    /// `pod_id` will be None if a new podcast is being added (i.e.,
+    /// the database has not given it an id yet).
     #[allow(clippy::useless_let_if_seq)]
-    pub fn add_or_sync_data(&mut self, pod: Podcast, update: bool) {
+    pub fn add_or_sync_data(&mut self, pod: PodcastNoId, pod_id: Option<i64>) {
         let title = pod.title.clone();
         let db_result;
         let failure;
 
-        if update {
-            db_result = self.db.update_podcast(pod);
+        if let Some(id) = pod_id {
+            db_result = self.db.update_podcast(id, pod);
             failure = format!("Error synchronizing {}.", title);
         } else {
             db_result = self.db.insert_podcast(pod);
@@ -248,7 +250,7 @@ impl MainController {
                 }
                 self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
 
-                if update {
+                if pod_id.is_some() {
                     self.sync_tracker -= 1;
                     self.update_tracker_notif();
                     if self.sync_tracker == 0 {

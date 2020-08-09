@@ -199,11 +199,11 @@ fn sync_podcasts(db_path: &PathBuf, config: Config, args: &clap::ArgMatches) {
         let mut failure = false;
         while let Some(message) = rx_to_main.iter().next() {
             match message {
-                Message::Feed(FeedMsg::SyncData(pod)) => {
+                Message::Feed(FeedMsg::SyncData((pod_id, pod))) => {
                     let title = pod.title.clone();
                     let db_result;
             
-                    db_result = db_inst.update_podcast(pod);
+                    db_result = db_inst.update_podcast(pod_id, pod);
                     match db_result {
                         Ok(_) => {
                             if !args.is_present("quiet") {

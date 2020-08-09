@@ -130,6 +130,32 @@ impl Menuable for Episode {
 }
 
 
+/// Struct holding data about an individual podcast feed, before it has
+/// been inserted into the database. This includes a
+/// (possibly empty) vector of episodes.
+#[derive(Debug, Clone)]
+pub struct PodcastNoId {
+    pub title: String,
+    pub url: String,
+    pub description: Option<String>,
+    pub author: Option<String>,
+    pub explicit: Option<bool>,
+    pub last_checked: DateTime<Utc>,
+    pub episodes: Vec<EpisodeNoId>,
+}
+
+/// Struct holding data about an individual podcast episode, before it
+/// has been inserted into the database.
+#[derive(Debug, Clone)]
+pub struct EpisodeNoId {
+    pub title: String,
+    pub url: String,
+    pub description: String,
+    pub pubdate: Option<DateTime<Utc>>,
+    pub duration: Option<i64>,
+}
+
+
 /// Struct used to hold a vector of data inside a reference-counted
 /// mutex, to allow for multiple owners of mutable data.
 /// Primarily, the LockVec is used to provide methods that abstract
