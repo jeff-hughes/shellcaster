@@ -212,11 +212,11 @@ impl MainController {
             // just grab one podcast
             Some(idx) => pod_data.push(self.podcasts
                 .map_single(idx,
-                    |pod| PodcastFeed::new(pod.id, pod.url.clone(), Some(pod.title.clone())))
+                    |pod| PodcastFeed::new(Some(pod.id), pod.url.clone(), Some(pod.title.clone())))
                 .unwrap()),
             // get all of 'em!
             None => pod_data = self.podcasts
-                .map(|pod| PodcastFeed::new(pod.id, pod.url.clone(), Some(pod.title.clone()))),
+                .map(|pod| PodcastFeed::new(Some(pod.id), pod.url.clone(), Some(pod.title.clone()))),
         }
         for feed in pod_data.into_iter() {
             self.sync_tracker += 1;
@@ -306,7 +306,7 @@ impl MainController {
         let mut episode = podcast.episodes.clone_episode(ep_index).unwrap();
         episode.played = played;
         
-        self.db.set_played_status(episode.id.unwrap(), played);
+        self.db.set_played_status(episode.id, played);
         podcast.episodes.replace(ep_index, episode).unwrap();
 
         self.podcasts.replace(pod_index, podcast).unwrap();
@@ -322,9 +322,9 @@ impl MainController {
             let mut borrowed_ep_list = podcast
                 .episodes.borrow();
             for ep in borrowed_ep_list.iter() {
-                self.db.set_played_status(ep.id.unwrap(), played);
+                self.db.set_played_status(ep.id, played);
             }
-            *borrowed_ep_list = self.db.get_episodes(podcast.id.unwrap());
+            *borrowed_ep_list = self.db.get_episodes(podcast.id);
         }
 
         self.podcasts.replace(pod_index, podcast).unwrap();
@@ -351,8 +351,8 @@ impl MainController {
                     // grab just the relevant data we need
                     let data = podcast.episodes.map_single(ep_idx,
                         |ep| (EpData {
-                            id: ep.id.unwrap(),
-                            pod_id: ep.pod_id.unwrap(),
+                            id: ep.id,
+                            pod_id: ep.pod_id,
                             title: ep.title.clone(),
                             url: ep.url.clone(),
                             file_path: None,
@@ -366,8 +366,8 @@ impl MainController {
                     ep_data = podcast.episodes
                         .filter_map(|ep| if ep.path.is_none() {
                             Some(EpData {
-                                id: ep.id.unwrap(),
-                                pod_id: ep.pod_id.unwrap(),
+                                id: ep.id,
+                                pod_id: ep.pod_id,
                                 title: ep.title.clone(),
                                 url: ep.url.clone(),
                                 file_path: None,
@@ -449,7 +449,7 @@ impl MainController {
             let title = episode.title.clone();
             match fs::remove_file(episode.path.unwrap()) {
                 Ok(_) => {
-                    self.db.remove_file(episode.id.unwrap());
+                    self.db.remove_file(episode.id);
                     episode.path = None;
                     borrowed_podcast.episodes.replace(ep_index, episode).unwrap();
 
@@ -479,7 +479,7 @@ impl MainController {
                     let mut episode = borrowed_ep_list[e].clone();
                     match fs::remove_file(episode.path.unwrap()) {
                         Ok(_) => {
-                            eps_to_remove.push(episode.id.unwrap());
+                            eps_to_remove.push(episode.id);
                             episode.path = None;
                             borrowed_ep_list[e] = episode;
                         },
@@ -510,7 +510,7 @@ impl MainController {
 
         let pod_id = self.podcasts
             .map_single(pod_index, |pod| pod.id).unwrap();
-        self.db.remove_podcast(pod_id.unwrap());
+        self.db.remove_podcast(pod_id);
         {
             *self.podcasts.borrow() = self.db.get_podcasts();
         }
@@ -530,9 +530,9 @@ impl MainController {
 
         let ep_id = borrowed_podcast.episodes
             .map_single(ep_index, |ep| ep.id).unwrap();
-        self.db.hide_episode(ep_id.unwrap(), true);
+        self.db.hide_episode(ep_id, true);
         {
-            *borrowed_podcast.episodes.borrow() = self.db.get_episodes(borrowed_podcast.id.unwrap());
+            *borrowed_podcast.episodes.borrow() = self.db.get_episodes(borrowed_podcast.id);
         }
         self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
     }
@@ -548,7 +548,7 @@ impl MainController {
         {
             let mut borrowed_ep_list = podcast.episodes.borrow();
             for ep in borrowed_ep_list.iter() {
-                self.db.hide_episode(ep.id.unwrap(), true);
+                self.db.hide_episode(ep.id, true);
             }
             *borrowed_ep_list = Vec::new();
         }

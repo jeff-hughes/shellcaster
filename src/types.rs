@@ -18,7 +18,7 @@ pub trait Menuable {
 /// (possibly empty) vector of episodes.
 #[derive(Debug, Clone)]
 pub struct Podcast {
-    pub id: Option<i64>,
+    pub id: i64,
     pub title: String,
     pub url: String,
     pub description: Option<String>,
@@ -65,8 +65,8 @@ impl Menuable for Podcast {
 /// whether the podcast has been marked as played or unplayed.
 #[derive(Debug, Clone)]
 pub struct Episode {
-    pub id: Option<i64>,
-    pub pod_id: Option<i64>,
+    pub id: i64,
+    pub pod_id: i64,
     pub title: String,
     pub url: String,
     pub description: String,
@@ -276,7 +276,7 @@ impl LockVec<Podcast> {
     /// index where that podcast is located.
     pub fn id_to_index(&self, id: i64) -> Option<usize> {
         let borrowed = self.borrow();
-        return borrowed.iter().position(|val| val.id == Some(id));
+        return borrowed.iter().position(|val| val.id == id);
     }
 }
 
@@ -296,7 +296,7 @@ impl LockVec<Episode> {
     /// index where that episode is located.
     pub fn id_to_index(&self, id: i64) -> Option<usize> {
         let borrowed = self.borrow();
-        return borrowed.iter().position(|val| val.id == Some(id));
+        return borrowed.iter().position(|val| val.id == id);
     }
 }
 

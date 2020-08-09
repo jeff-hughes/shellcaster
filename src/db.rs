@@ -287,7 +287,7 @@ impl Database {
                 }
 
                 if matching >= 2 {
-                    existing_id = Some(old_ep.id.unwrap());
+                    existing_id = Some(old_ep.id);
 
                     // if we have a matching episode, check whether there
                     // are details to update
@@ -365,7 +365,7 @@ impl Database {
                 let pod_id = row.get("id")?;
                 let episodes = self.get_episodes(pod_id);
                 Ok(Podcast {
-                    id: Some(pod_id),
+                    id: pod_id,
                     title: row.get("title")?,
                     url: row.get("url")?,
                     description: row.get("description")?,
@@ -400,8 +400,8 @@ impl Database {
                     Err(_) => None,
                 };
                 Ok(Episode {
-                    id: Some(row.get("id")?),
-                    pod_id: Some(row.get("podcast_id")?),
+                    id: row.get("id")?,
+                    pod_id: row.get("podcast_id")?,
                     title: row.get("title")?,
                     url: row.get("url")?,
                     description: row.get("description")?,

@@ -190,7 +190,7 @@ fn sync_podcasts(db_path: &PathBuf, config: Config, args: &clap::ArgMatches) {
         let (tx_to_main, rx_to_main) = mpsc::channel();
 
         for pod in podcast_list.iter() {
-            let feed = PodcastFeed::new(pod.id, pod.url.clone(), Some(pod.title.clone()));
+            let feed = PodcastFeed::new(Some(pod.id), pod.url.clone(), Some(pod.title.clone()));
             feeds::check_feed(feed, config.max_retries, &threadpool,
                 tx_to_main.clone());
         }
