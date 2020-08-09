@@ -697,11 +697,17 @@ impl<'a> UI<'a> {
                         let desc = if ep.description.is_empty() {
                             None
                         } else {
-                            // strip all HTML tags and excessive line breaks
+                            // strip all HTML tags
                             let stripped_tags = RE_HTML_TAGS.replace_all(&ep.description, "").to_string();
 
+                            // convert HTML entities (e.g., &amp;)
+                            let decoded = match escaper::decode_html_sloppy(&stripped_tags) {
+                                Err(_) => stripped_tags,
+                                Ok(s) => s
+                            };
+
                             // remove anything more than two line breaks (i.e., one blank line)
-                            let no_line_breaks = RE_MULT_LINE_BREAKS.replace_all(&stripped_tags, "\n\n");
+                            let no_line_breaks = RE_MULT_LINE_BREAKS.replace_all(&decoded, "\n\n");
 
                             Some(no_line_breaks.to_string())
                         };

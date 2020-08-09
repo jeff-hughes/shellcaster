@@ -30,6 +30,7 @@ shellexpand = "2.0.0"
 dirs = { package = "dirs-next", version = "1.0.1" }
 opml = "0.2.2"
 textwrap = "0.12.1"
+escaper = "0.1.0"
 
 [dependencies.ureq]
 version = "1.3.0"
