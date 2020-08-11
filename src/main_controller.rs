@@ -98,8 +98,8 @@ impl MainController {
                     }
                 },
     
-                Message::Ui(UiMsg::Sync(pod_index)) =>
-                    self.sync(Some(pod_index)),
+                Message::Ui(UiMsg::Sync(pod_id)) =>
+                    self.sync(Some(pod_id)),
     
                 Message::Feed(FeedMsg::SyncData((id, pod))) =>
                     self.add_or_sync_data(pod, Some(id)),
@@ -107,20 +107,20 @@ impl MainController {
                 Message::Ui(UiMsg::SyncAll) =>
                     self.sync(None),
     
-                Message::Ui(UiMsg::Play(pod_index, ep_index)) =>
-                    self.play_file(pod_index, ep_index),
+                Message::Ui(UiMsg::Play(pod_id, ep_id)) =>
+                    self.play_file(pod_id, ep_id),
     
-                Message::Ui(UiMsg::MarkPlayed(pod_index, ep_index, played)) =>
-                    self.mark_played(pod_index, ep_index, played),
+                Message::Ui(UiMsg::MarkPlayed(pod_id, ep_id, played)) =>
+                    self.mark_played(pod_id, ep_id, played),
     
-                Message::Ui(UiMsg::MarkAllPlayed(pod_index, played)) =>
-                    self.mark_all_played(pod_index, played),
+                Message::Ui(UiMsg::MarkAllPlayed(pod_id, played)) =>
+                    self.mark_all_played(pod_id, played),
     
-                Message::Ui(UiMsg::Download(pod_index, ep_index)) =>
-                    self.download(pod_index, Some(ep_index)),
+                Message::Ui(UiMsg::Download(pod_id, ep_id)) =>
+                    self.download(pod_id, Some(ep_id)),
     
-                Message::Ui(UiMsg::DownloadAll(pod_index)) =>
-                    self.download(pod_index, None),
+                Message::Ui(UiMsg::DownloadAll(pod_id)) =>
+                    self.download(pod_id, None),
     
                 // downloading can produce any one of these responses
                 Message::Dl(DownloadMsg::Complete(ep_data)) =>
@@ -132,20 +132,20 @@ impl MainController {
                 Message::Dl(DownloadMsg::FileWriteError(_)) =>
                     self.notif_to_ui("Error downloading episode.".to_string(), true),
     
-                Message::Ui(UiMsg::Delete(pod_index, ep_index)) =>
-                    self.delete_file(pod_index, ep_index),
+                Message::Ui(UiMsg::Delete(pod_id, ep_id)) =>
+                    self.delete_file(pod_id, ep_id),
     
-                Message::Ui(UiMsg::DeleteAll(pod_index)) =>
-                    self.delete_files(pod_index),
+                Message::Ui(UiMsg::DeleteAll(pod_id)) =>
+                    self.delete_files(pod_id),
     
-                Message::Ui(UiMsg::RemovePodcast(pod_index, delete_files)) =>
-                    self.remove_podcast(pod_index, delete_files),
+                Message::Ui(UiMsg::RemovePodcast(pod_id, delete_files)) =>
+                    self.remove_podcast(pod_id, delete_files),
     
-                Message::Ui(UiMsg::RemoveEpisode(pod_index, ep_index, delete_files)) =>
-                    self.remove_episode(pod_index, ep_index, delete_files),
+                Message::Ui(UiMsg::RemoveEpisode(pod_id, ep_id, delete_files)) =>
+                    self.remove_episode(pod_id, ep_id, delete_files),
     
-                Message::Ui(UiMsg::RemoveAllEpisodes(pod_index, delete_files)) =>
-                    self.remove_all_episodes(pod_index, delete_files),
+                Message::Ui(UiMsg::RemoveAllEpisodes(pod_id, delete_files)) =>
+                    self.remove_all_episodes(pod_id, delete_files),
                         
                 Message::Ui(UiMsg::Noop) => (),
             }
@@ -201,17 +201,17 @@ impl MainController {
     } 
 
     /// Synchronize RSS feed data for one or more podcasts.
-    pub fn sync(&mut self, pod_index: Option<usize>) {
+    pub fn sync(&mut self, pod_id: Option<i64>) {
         // We pull out the data we need here first, so we can
         // stop borrowing the podcast list as quickly as possible.
         // Slightly less efficient (two loops instead of
         // one), but then it won't block other tasks that
         // need to access the list.
         let mut pod_data = Vec::new();
-        match pod_index {
+        match pod_id {
             // just grab one podcast
-            Some(idx) => pod_data.push(self.podcasts
-                .map_single(idx,
+            Some(id) => pod_data.push(self.podcasts
+                .map_single(id,
                     |pod| PodcastFeed::new(Some(pod.id), pod.url.clone(), Some(pod.title.clone())))
                 .unwrap()),
             // get all of 'em!
@@ -246,7 +246,7 @@ impl MainController {
         match db_result {
             Ok(result) => {
                 {
-                    *self.podcasts.borrow() = self.db.get_podcasts();
+                    self.podcasts = LockVec::new(self.db.get_podcasts());
                 }
                 self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
 
@@ -266,10 +266,10 @@ impl MainController {
 
     /// Attempts to execute the play command on the given podcast
     /// episode.
-    pub fn play_file(&self, pod_index: usize, ep_index: usize) {
-        self.mark_played(pod_index, ep_index, true);
-        let episode = self.podcasts.clone_episode(
-            pod_index, ep_index).unwrap();
+    pub fn play_file(&self, pod_id: i64, ep_id: i64) {
+        self.mark_played(pod_id, ep_id, true);
+        let episode = self.podcasts
+            .clone_episode(pod_id, ep_id).unwrap();
 
         match episode.path {
             // if there is a local file, try to play that
@@ -298,36 +298,36 @@ impl MainController {
     /// Given a podcast and episode, it marks the given episode as
     /// played/unplayed, sending this info to the database and updating
     /// in self.podcasts
-    pub fn mark_played(&self, pod_index: usize, ep_index: usize, played: bool) {
-        let podcast = self.podcasts.clone_podcast(pod_index).unwrap();
+    pub fn mark_played(&self, pod_id: i64, ep_id: i64, played: bool) {
+        let podcast = self.podcasts.clone_podcast(pod_id).unwrap();
 
         // TODO: Try to find a way to do this without having
         // to clone the episode...
-        let mut episode = podcast.episodes.clone_episode(ep_index).unwrap();
+        let mut episode = podcast.episodes.clone_episode(ep_id).unwrap();
         episode.played = played;
         
         self.db.set_played_status(episode.id, played);
-        podcast.episodes.replace(ep_index, episode).unwrap();
+        podcast.episodes.replace(ep_id, episode);
 
-        self.podcasts.replace(pod_index, podcast).unwrap();
+        self.podcasts.replace(pod_id, podcast);
         self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
     }
 
     /// Given a podcast, it marks all episodes for that podcast as
     /// played/unplayed, sending this info to the database and updating
     /// in self.podcasts
-    pub fn mark_all_played(&self, pod_index: usize, played: bool) {
-        let podcast = self.podcasts.clone_podcast(pod_index).unwrap();
+    pub fn mark_all_played(&self, pod_id: i64, played: bool) {
+        let mut podcast = self.podcasts.clone_podcast(pod_id).unwrap();
         {
-            let mut borrowed_ep_list = podcast
-                .episodes.borrow();
+            let borrowed_ep_list = podcast
+                .episodes.borrow_order();
             for ep in borrowed_ep_list.iter() {
-                self.db.set_played_status(ep.id, played);
+                self.db.set_played_status(ep.clone(), played);
             }
-            *borrowed_ep_list = self.db.get_episodes(podcast.id);
         }
+        podcast.episodes = LockVec::new(self.db.get_episodes(podcast.id));
 
-        self.podcasts.replace(pod_index, podcast).unwrap();
+        self.podcasts.replace(pod_id, podcast);
         self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
     }
 
@@ -335,21 +335,20 @@ impl MainController {
     /// a vector of jobs to the threadpool to download all episodes in
     /// the podcast. If given an episode index as well, it will download
     /// just that episode.
-    pub fn download(&mut self, pod_index: usize, ep_index: Option<usize>) {
+    pub fn download(&mut self, pod_id: i64, ep_id: Option<i64>) {
         let pod_title;
         let mut ep_data = Vec::new();
         {
-            // TODO: Try to do this without cloning the podcast...
-            let podcast = self.podcasts
-                .clone_podcast(pod_index).unwrap();
+            let borrowed_map = self.podcasts.borrow_map();
+            let podcast = borrowed_map.get(&pod_id).unwrap();
             pod_title = podcast.title.clone();
 
             // if we are selecting one specific episode, just grab that
             // one; otherwise, loop through them all
-            match ep_index {
-                Some(ep_idx) => {
+            match ep_id {
+                Some(ep_id) => {
                     // grab just the relevant data we need
-                    let data = podcast.episodes.map_single(ep_idx,
+                    let data = podcast.episodes.map_single(ep_id,
                         |ep| (EpData {
                             id: ep.id,
                             pod_id: ep.pod_id,
@@ -405,17 +404,12 @@ impl MainController {
         let file_path = ep_data.file_path.unwrap();
         let _ = self.db.insert_file(ep_data.id, &file_path);
         {
-            let pod_index = self.podcasts
-                .id_to_index(ep_data.pod_id).unwrap();
             // TODO: Try to do this without cloning the podcast...
             let podcast = self.podcasts
-                .clone_podcast(pod_index).unwrap();
-
-            let ep_index = podcast.episodes
-                .id_to_index(ep_data.id).unwrap();
-            let mut episode = podcast.episodes.clone_episode(ep_index).unwrap();
+                .clone_podcast(ep_data.pod_id).unwrap();
+            let mut episode = podcast.episodes.clone_episode(ep_data.id).unwrap();
             episode.path = Some(file_path);
-            podcast.episodes.replace(ep_index, episode).unwrap();
+            podcast.episodes.replace(ep_data.id, episode);
         }
 
         self.download_tracker -= 1;
@@ -440,18 +434,18 @@ impl MainController {
 
     /// Deletes a downloaded file for an episode from the user's local
     /// system.
-    pub fn delete_file(&self, pod_index: usize, ep_index: usize) {
-        let borrowed_podcast_list = self.podcasts.borrow();
-        let borrowed_podcast = borrowed_podcast_list.get(pod_index).unwrap();
+    pub fn delete_file(&self, pod_id: i64, ep_id: i64) {
+        let borrowed_map = self.podcasts.borrow_map();
+        let podcast = borrowed_map.get(&pod_id).unwrap();
 
-        let mut episode = borrowed_podcast.episodes.clone_episode(ep_index).unwrap();
+        let mut episode = podcast.episodes.clone_episode(ep_id).unwrap();
         if episode.path.is_some() {
             let title = episode.title.clone();
             match fs::remove_file(episode.path.unwrap()) {
                 Ok(_) => {
                     self.db.remove_file(episode.id);
                     episode.path = None;
-                    borrowed_podcast.episodes.replace(ep_index, episode).unwrap();
+                    podcast.episodes.replace(ep_id, episode);
 
                     self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
                     self.notif_to_ui(
@@ -465,23 +459,22 @@ impl MainController {
 
     /// Deletes all downloaded files for a given podcast from the user's
     /// local system.
-    pub fn delete_files(&self, pod_index: usize) {
+    pub fn delete_files(&self, pod_id: i64) {
         let mut eps_to_remove = Vec::new();
         let mut success = true;
         {
-            let borrowed_podcast_list = self.podcasts.borrow();
-            let borrowed_podcast = borrowed_podcast_list.get(pod_index).unwrap();
-            let mut borrowed_ep_list = borrowed_podcast.episodes.borrow();
+            let borrowed_map = self.podcasts.borrow_map();
+            let podcast = borrowed_map.get(&pod_id).unwrap();
+            let mut borrowed_ep_map = podcast.episodes.borrow_map();
 
-            let n_eps = borrowed_ep_list.len();
-            for e in 0..n_eps {
-                if borrowed_ep_list[e].path.is_some() {
-                    let mut episode = borrowed_ep_list[e].clone();
+            for (_, ep) in borrowed_ep_map.iter_mut() {
+                if ep.path.is_some() {
+                    let mut episode = ep.clone();
                     match fs::remove_file(episode.path.unwrap()) {
                         Ok(_) => {
                             eps_to_remove.push(episode.id);
                             episode.path = None;
-                            borrowed_ep_list[e] = episode;
+                            *ep = episode;
                         },
                         Err(_) => success = false,
                     }
@@ -503,56 +496,49 @@ impl MainController {
 
     /// Removes a podcast from the list, optionally deleting local files
     /// first
-    pub fn remove_podcast(&self, pod_index: usize, delete_files: bool) {
+    pub fn remove_podcast(&mut self, pod_id: i64, delete_files: bool) {
         if delete_files {
-            self.delete_files(pod_index);
+            self.delete_files(pod_id);
         }
 
         let pod_id = self.podcasts
-            .map_single(pod_index, |pod| pod.id).unwrap();
+            .map_single(pod_id, |pod| pod.id).unwrap();
         self.db.remove_podcast(pod_id);
         {
-            *self.podcasts.borrow() = self.db.get_podcasts();
+            self.podcasts = LockVec::new(self.db.get_podcasts());
         }
         self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
     }
 
     /// Removes an episode from the list, optionally deleting local files
     /// first
-    pub fn remove_episode(&self, pod_index: usize, ep_index: usize, delete_files: bool) {
+    pub fn remove_episode(&self, pod_id: i64, ep_id: i64, delete_files: bool) {
         if delete_files {
-            self.delete_file(pod_index, ep_index);
+            self.delete_file(pod_id, ep_id);
         }
 
-        let borrowed_podcast_list = self.podcasts.borrow();
-        let borrowed_podcast = borrowed_podcast_list
-            .get(pod_index).unwrap();
-
-        let ep_id = borrowed_podcast.episodes
-            .map_single(ep_index, |ep| ep.id).unwrap();
         self.db.hide_episode(ep_id, true);
         {
-            *borrowed_podcast.episodes.borrow() = self.db.get_episodes(borrowed_podcast.id);
+            let mut borrowed_map = self.podcasts.borrow_map();
+            let podcast = borrowed_map.get_mut(&pod_id).unwrap();
+            podcast.episodes = LockVec::new(self.db.get_episodes(pod_id));
         }
         self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
     }
 
     /// Removes all episodes for a podcast from the list, optionally
     /// deleting local files first
-    pub fn remove_all_episodes(&self, pod_index: usize, delete_files: bool) {
+    pub fn remove_all_episodes(&self, pod_id: i64, delete_files: bool) {
         if delete_files {
-            self.delete_files(pod_index);
+            self.delete_files(pod_id);
         }
 
-        let podcast = self.podcasts.clone_podcast(pod_index).unwrap();
-        {
-            let mut borrowed_ep_list = podcast.episodes.borrow();
-            for ep in borrowed_ep_list.iter() {
-                self.db.hide_episode(ep.id, true);
-            }
-            *borrowed_ep_list = Vec::new();
-        }
-        self.podcasts.replace(pod_index, podcast).unwrap();
+        let mut podcast = self.podcasts.clone_podcast(pod_id).unwrap();
+        podcast.episodes.map(|ep| {
+            self.db.hide_episode(ep.id, true);
+        });
+        podcast.episodes = LockVec::new(Vec::new());
+        self.podcasts.replace(pod_id, podcast);
 
         self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
     }

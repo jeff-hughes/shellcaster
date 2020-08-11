@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::ops::{Bound, RangeBounds};
+use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 
 use crate::ui::UiMsg;
@@ -10,6 +11,7 @@ use crate::downloads::DownloadMsg;
 /// Defines interface used for both podcasts and episodes, to be
 /// used and displayed in menus.
 pub trait Menuable {
+    fn get_id(&self) -> i64;
     fn get_title(&self, length: usize) -> String;
     fn is_played(&self) -> bool;
 }
@@ -36,6 +38,11 @@ impl Podcast {
 }
 
 impl Menuable for Podcast {
+    /// Returns the database ID for the podcast.
+    fn get_id(&self) -> i64 {
+        return self.id;
+    }
+
     /// Returns the title for the podcast, up to length characters.
     fn get_title(&self, length: usize) -> String {
         let mut out = self.title.substring(0, length);
@@ -94,6 +101,11 @@ impl Episode {
 }
 
 impl Menuable for Episode {
+    /// Returns the database ID for the episode.
+    fn get_id(&self) -> i64 {
+        return self.id;
+    }
+
     /// Returns the title for the episode, up to length characters.
     fn get_title(&self, length: usize) -> String {
         let out = match self.path {
@@ -163,55 +175,82 @@ pub struct EpisodeNoId {
 /// Arc<Mutex<_>>.
 #[derive(Debug)]
 pub struct LockVec<T>
-    where T: Clone {
-    data: Arc<Mutex<Vec<T>>>,
+    where T: Clone + Menuable {
+    data: Arc<Mutex<HashMap<i64, T>>>,
+    order: Arc<Mutex<Vec<i64>>>,
 }
 
-impl<T: Clone> LockVec<T> {
+impl<T: Clone + Menuable> LockVec<T> {
     /// Create a new LockVec.
     pub fn new(data: Vec<T>) -> LockVec<T> {
+        let mut hm = HashMap::new();
+        let mut order = Vec::new();
+        for i in data.into_iter() {
+            let id = i.get_id();
+            hm.insert(i.get_id(), i);
+            order.push(id);
+        }
+
         return LockVec {
-            data: Arc::new(Mutex::new(data)),
+            data: Arc::new(Mutex::new(hm)),
+            order: Arc::new(Mutex::new(order)),
         }
     }
 
-    /// Lock the LockVec for reading/writing.
-    pub fn borrow(&self) -> MutexGuard<Vec<T>> {
+    /// Lock the LockVec hashmap for reading/writing.
+    pub fn borrow_map(&self) -> MutexGuard<HashMap<i64, T>> {
         return self.data.lock().unwrap();
+    }
+
+    /// Lock the LockVec order vector for reading/writing.
+    pub fn borrow_order(&self) -> MutexGuard<Vec<i64>> {
+        return self.order.lock().unwrap();
+    }
+
+    /// Lock the LockVec hashmap for reading/writing.
+    pub fn borrow(&self) -> (MutexGuard<HashMap<i64, T>>, MutexGuard<Vec<i64>>) {
+        return (self.data.lock().unwrap(), self.order.lock().unwrap());
     }
 
     /// Given an index in the vector, this takes a new T and replaces
     /// the old T at that position in the vector.
-    pub fn replace(&self, index: usize, t: T) -> Result<(), &'static str> {
-        let mut borrowed = self.borrow();
-        if index < borrowed.len() {
-            borrowed[index] = t;
-            return Ok(());
-        } else {
-            return Err("Invalid index");
-        }
+    pub fn replace(&self, id: i64, t: T) {
+        let mut borrowed = self.borrow_map();
+        borrowed.insert(id, t);
     }
 
     /// Maps a closure to every element in the LockVec, in the same way
     /// as an Iterator. However, to avoid issues with keeping the borrow
     /// alive, the function returns a Vec of the collected results,
     /// rather than an iterator.
-    pub fn map<B, F>(&self, f: F) -> Vec<B>
+    pub fn map<B, F>(&self, mut f: F) -> Vec<B>
         where F: FnMut(&T) -> B {
 
-        let borrowed = self.borrow();
-        return borrowed.iter().map(f).collect();
+        let (map, order) = self.borrow();
+        return order.iter().map(|id| {
+            f(map.get(id).unwrap())
+        }).collect();
     }
 
     /// Maps a closure to a single element in the LockVec, specified by
-    /// `index`. If there is no element at `index`, this returns None.
-    pub fn map_single<B, F>(&self, index: usize, f: F) -> Option<B>
+    /// `id`. If there is no element `id`, this returns None.
+    pub fn map_single<B, F>(&self, id: i64, f: F) -> Option<B>
         where F: FnOnce(&T) -> B {
 
-        let borrowed = self.borrow();
-        return match borrowed.get(index) {
+        let borrowed = self.borrow_map();
+        return match borrowed.get(&id) {
             Some(item) => Some(f(item)),
             None => return None,
+        };
+    }
+
+    pub fn map_single_by_index<B, F>(&self, index: usize, f: F) -> Option<B>
+        where F: FnOnce(&T) -> B {
+
+        let order = self.borrow_order();
+        return match order.get(index) {
+            Some(id) => self.map_single(id.clone(), f),
+            None => None,
         };
     }
 
@@ -220,83 +259,66 @@ impl<T: Clone> LockVec<T> {
     /// filtering. However, to avoid issues with keeping the borrow
     /// alive, the function returns a Vec of the collected results,
     /// rather than an iterator.
-    pub fn filter_map<B, F>(&self, f: F) -> Vec<B>
+    pub fn filter_map<B, F>(&self, mut f: F) -> Vec<B>
         where F: FnMut(&T) -> Option<B> {
 
-        let borrowed = self.borrow();
-        return borrowed.iter().filter_map(f).collect();
+        let (map, order) = self.borrow();
+        return order.iter().filter_map(|id| {
+            f(map.get(id).unwrap())
+        }).collect();
     }
 
-    /// Implements the same functionality as the `fold()` method of an
-    /// Iterator, applying a function that accumulates a value over 
-    /// each element to produce a single, final value.
-    // pub fn fold<B, F>(&self, init: B, f: F) -> B
-    //     where F: FnMut(B, &T) -> B {
-
-    //     let borrowed = self.borrow();
-    //     return borrowed.iter().fold(init, f);
-    // }
-
     pub fn len(&self) -> usize {
-        return self.borrow().len();
+        return self.borrow_order().len();
+    }
+
+    pub fn is_empty(&self) -> bool {
+        return self.borrow_order().is_empty();
     }
 }
 
-impl<T: Clone> Clone for LockVec<T> {
+impl<T: Clone + Menuable> Clone for LockVec<T> {
     fn clone(&self) -> Self {
         return LockVec {
             data: Arc::clone(&self.data),
+            order: Arc::clone(&self.order),
         }
     }
 }
 
 impl LockVec<Podcast> {
-    /// This clones the podcast at the given index.
-    pub fn clone_podcast(&self, index: usize) -> Option<Podcast> {
-        let pod_list = self.borrow();
-        return match pod_list.get(index) {
+    /// This clones the podcast with the given id.
+    pub fn clone_podcast(&self, id: i64) -> Option<Podcast> {
+        let pod_map = self.borrow_map();
+        return match pod_map.get(&id) {
             Some(pod) => Some(pod.clone()),
             None => None,
         };
     }
 
-    /// This clones the episode at the given index (`ep_index`), from
-    /// the podcast at the given index (`pod_index`). Note that if you
+    /// This clones the episode with the given id (`ep_id`), from
+    /// the podcast with the given id (`pod_id`). Note that if you
     /// are already borrowing the episode list for a podcast, you can
     /// also use `clone_episode()` directly on that list.
-    pub fn clone_episode(&self, pod_index: usize, ep_index: usize) -> Option<Episode> {
-        let pod_list = self.borrow();
-        if let Some(pod) = pod_list.get(pod_index) {
-            return pod.episodes.clone_episode(ep_index);
+    pub fn clone_episode(&self, pod_id: i64, ep_id: i64) -> Option<Episode> {
+        let pod_map = self.borrow_map();
+        if let Some(pod) = pod_map.get(&pod_id) {
+            return pod.episodes.clone_episode(ep_id);
         }
         return None;
-    }
-
-    /// Given a podcast ID (from the database), this provides the vector
-    /// index where that podcast is located.
-    pub fn id_to_index(&self, id: i64) -> Option<usize> {
-        let borrowed = self.borrow();
-        return borrowed.iter().position(|val| val.id == id);
     }
 }
 
 impl LockVec<Episode> {
-    /// This clones the episode at the given index (`ep_index`). Note
+    /// This clones the episode with the given id (`ep_id`). Note
     /// that `clone_episode()` is also implemented for LockVec<Podcast>,
-    /// and can be used at that level as well if given a podcast index.
-    pub fn clone_episode(&self, index: usize) -> Option<Episode> {
-        let ep_list = self.borrow();
-        return match ep_list.get(index) {
+    /// and can be used at that level as well if given a podcast id.
+    pub fn clone_episode(&self, ep_id: i64) -> Option<Episode> {
+        let ep_map = self.borrow_map();
+        return match ep_map.get(&ep_id) {
             Some(ep) => Some(ep.clone()),
             None => None,
         };
-    }
-
-    /// Given an episode ID (from the database), this provides the vector
-    /// index where that episode is located.
-    pub fn id_to_index(&self, id: i64) -> Option<usize> {
-        let borrowed = self.borrow();
-        return borrowed.iter().position(|val| val.id == id);
     }
 }
 
