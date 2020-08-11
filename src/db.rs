@@ -2,8 +2,17 @@ use std::path::PathBuf;
 
 use rusqlite::{Connection, params};
 use chrono::{NaiveDateTime, DateTime, Utc};
+use lazy_static::lazy_static;
+use regex::Regex;
 
 use crate::types::*;
+
+lazy_static! {
+    /// Regex for removing "A", "An", and "The" from the beginning of
+    /// podcast titles
+    static ref RE_ARTICLES: Regex = Regex::new(r"^(a|an|the) ").unwrap();
+}
+
 
 pub struct SyncResult {
     pub added: Vec<i64>,
@@ -360,13 +369,21 @@ impl Database {
     pub fn get_podcasts(&self) -> Vec<Podcast> {
         if let Some(conn) = &self.conn {
             let mut stmt = conn.prepare(
-                "SELECT * FROM podcasts ORDER BY title;").unwrap();
+                "SELECT * FROM podcasts;").unwrap();
             let podcast_iter = stmt.query_map(params![], |row| {
                 let pod_id = row.get("id")?;
                 let episodes = self.get_episodes(pod_id);
+
+                // create a sort title that is lowercased and removes
+                // articles from the beginning
+                let title: String = row.get("title")?;
+                let title_lower = title.to_lowercase();
+                let sort_title = RE_ARTICLES.replace(&title_lower, "").to_string();
+
                 Ok(Podcast {
                     id: pod_id,
-                    title: row.get("title")?,
+                    title: title,
+                    sort_title: sort_title,
                     url: row.get("url")?,
                     description: row.get("description")?,
                     author: row.get("author")?,
@@ -379,6 +396,8 @@ impl Database {
             for pc in podcast_iter {
                 podcasts.push(pc.unwrap());
             }
+            podcasts.sort_unstable();
+
             return podcasts;
         } else {
             return Vec::new();

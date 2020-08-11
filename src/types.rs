@@ -2,11 +2,21 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::ops::{Bound, RangeBounds};
 use std::collections::HashMap;
+use std::cmp::Ordering;
+
 use chrono::{DateTime, Utc};
+use lazy_static::lazy_static;
+use regex::Regex;
 
 use crate::ui::UiMsg;
 use crate::feeds::FeedMsg;
 use crate::downloads::DownloadMsg;
+
+lazy_static! {
+    /// Regex for removing "A", "An", and "The" from the beginning of
+    /// podcast titles
+    static ref RE_ARTICLES: Regex = Regex::new(r"^(a|an|the) ").unwrap();
+}
 
 /// Defines interface used for both podcasts and episodes, to be
 /// used and displayed in menus.
@@ -22,6 +32,7 @@ pub trait Menuable {
 pub struct Podcast {
     pub id: i64,
     pub title: String,
+    pub sort_title: String,
     pub url: String,
     pub description: Option<String>,
     pub author: Option<String>,
@@ -65,6 +76,26 @@ impl Menuable for Podcast {
         return self.num_unplayed() == 0;
     }
 }
+
+impl PartialEq for Podcast {
+    fn eq(&self, other: &Self) -> bool {
+        return self.sort_title == other.sort_title;
+    }
+}
+impl Eq for Podcast {}
+
+impl PartialOrd for Podcast {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        return Some(self.cmp(other));
+    }
+}
+
+impl Ord for Podcast {
+    fn cmp(&self, other: &Self) -> Ordering {
+        return self.sort_title.cmp(&other.sort_title);
+    }
+}
+
 
 /// Struct holding data about an individual podcast episode. Most of this
 /// is metadata, but if the episode has been downloaded to the local
