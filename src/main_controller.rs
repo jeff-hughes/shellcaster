@@ -7,7 +7,7 @@ use sanitize_filename::{sanitize_with_options, Options};
 use crate::types::*;
 use crate::config::Config;
 use crate::ui::{UI, UiMsg};
-use crate::db::Database;
+use crate::db::{Database, SyncResult};
 use crate::threadpool::Threadpool;
 use crate::feeds::{self, FeedMsg, PodcastFeed};
 use crate::downloads::{self, EpData, DownloadMsg};
@@ -30,8 +30,9 @@ pub struct MainController {
     db: Database,
     threadpool: Threadpool,
     podcasts: LockVec<Podcast>,
-    sync_tracker: usize,
-    download_tracker: usize,
+    sync_counter: usize,
+    sync_tracker: Vec<SyncResult>,
+    download_counter: usize,
     pub ui_thread: std::thread::JoinHandle<()>,
     pub tx_to_ui: mpsc::Sender<MainMessage>,
     pub tx_to_main: mpsc::Sender<Message>,
@@ -71,8 +72,9 @@ impl MainController {
             threadpool: threadpool,
             podcasts: podcast_list,
             ui_thread: ui_thread,
-            sync_tracker: 0,
-            download_tracker: 0,
+            sync_counter: 0,
+            sync_tracker: Vec::new(),
+            download_counter: 0,
             tx_to_ui: tx_to_ui,
             tx_to_main: tx_to_main,
             rx_to_main: rx_to_main,
@@ -174,8 +176,8 @@ impl MainController {
     /// Updates the persistent notification about syncing podcasts and
     /// downloading files.
     pub fn update_tracker_notif(&self) {
-        let sync_len = self.sync_tracker;
-        let dl_len = self.download_tracker;
+        let sync_len = self.sync_counter;
+        let dl_len = self.download_counter;
         let sync_plural = if sync_len > 1 { "s" } else { "" };
         let dl_plural = if dl_len > 1 { "s" } else { "" };
 
@@ -219,7 +221,7 @@ impl MainController {
                 .map(|pod| PodcastFeed::new(Some(pod.id), pod.url.clone(), Some(pod.title.clone()))),
         }
         for feed in pod_data.into_iter() {
-            self.sync_tracker += 1;
+            self.sync_counter += 1;
             feeds::check_feed(feed, self.config.max_retries,
                 &self.threadpool, self.tx_to_main.clone())
         }
@@ -246,15 +248,26 @@ impl MainController {
         match db_result {
             Ok(result) => {
                 {
-                    self.podcasts = LockVec::new(self.db.get_podcasts());
+                    self.podcasts.replace_all(self.db.get_podcasts());
                 }
                 self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
 
                 if pod_id.is_some() {
-                    self.sync_tracker -= 1;
+                    self.sync_tracker.push(result);
+                    self.sync_counter -= 1;
                     self.update_tracker_notif();
-                    if self.sync_tracker == 0 {
-                        self.notif_to_ui("Sync complete.".to_string(), false);
+
+                    if self.sync_counter == 0 {
+                        // count up total new episodes and updated
+                        // episodes when sync process is finished
+                        let mut added = 0;
+                        let mut updated = 0;
+                        for res in self.sync_tracker.iter() {
+                            added += res.added.len();
+                            updated += res.updated.len();
+                        }
+                        self.sync_tracker = Vec::new();
+                        self.notif_to_ui(format!("Sync complete: Added {}, updated {} episodes.", added, updated), false);
                     }
                 } else {
                     self.notif_to_ui(format!("Successfully added {} episodes.", result.added.len()), false);
@@ -317,7 +330,7 @@ impl MainController {
     /// played/unplayed, sending this info to the database and updating
     /// in self.podcasts
     pub fn mark_all_played(&self, pod_id: i64, played: bool) {
-        let mut podcast = self.podcasts.clone_podcast(pod_id).unwrap();
+        let podcast = self.podcasts.clone_podcast(pod_id).unwrap();
         {
             let borrowed_ep_list = podcast
                 .episodes.borrow_order();
@@ -325,7 +338,7 @@ impl MainController {
                 self.db.set_played_status(ep.clone(), played);
             }
         }
-        podcast.episodes = LockVec::new(self.db.get_episodes(podcast.id));
+        podcast.episodes.replace_all(self.db.get_episodes(podcast.id));
 
         self.podcasts.replace(pod_id, podcast);
         self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
@@ -387,7 +400,7 @@ impl MainController {
             });
             match self.create_podcast_dir(dir_name) {
                 Ok(path) => {
-                    self.download_tracker += ep_data.len();
+                    self.download_counter += ep_data.len();
                     downloads::download_list(
                     ep_data, &path, self.config.max_retries,
                     &self.threadpool, self.tx_to_main.clone());
@@ -412,9 +425,9 @@ impl MainController {
             podcast.episodes.replace(ep_data.id, episode);
         }
 
-        self.download_tracker -= 1;
+        self.download_counter -= 1;
         self.update_tracker_notif();
-        if self.download_tracker == 0 {
+        if self.download_counter == 0 {
             self.notif_to_ui("Downloads complete.".to_string(), false);
         }
 
@@ -505,7 +518,7 @@ impl MainController {
             .map_single(pod_id, |pod| pod.id).unwrap();
         self.db.remove_podcast(pod_id);
         {
-            self.podcasts = LockVec::new(self.db.get_podcasts());
+            self.podcasts.replace_all(self.db.get_podcasts());
         }
         self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
     }
@@ -521,7 +534,7 @@ impl MainController {
         {
             let mut borrowed_map = self.podcasts.borrow_map();
             let podcast = borrowed_map.get_mut(&pod_id).unwrap();
-            podcast.episodes = LockVec::new(self.db.get_episodes(pod_id));
+            podcast.episodes.replace_all(self.db.get_episodes(pod_id));
         }
         self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
     }

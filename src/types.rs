@@ -250,6 +250,18 @@ impl<T: Clone + Menuable> LockVec<T> {
         borrowed.insert(id, t);
     }
 
+    /// Empty out and replace all the data in the LockVec.
+    pub fn replace_all(&self, data: Vec<T>) {
+        let (mut map, mut order) = self.borrow();
+        map.clear();
+        order.clear();
+        for i in data.into_iter() {
+            let id = i.get_id();
+            map.insert(i.get_id(), i);
+            order.push(id);
+        }
+    }
+
     /// Maps a closure to every element in the LockVec, in the same way
     /// as an Iterator. However, to avoid issues with keeping the borrow
     /// alive, the function returns a Vec of the collected results,
@@ -275,6 +287,9 @@ impl<T: Clone + Menuable> LockVec<T> {
         };
     }
 
+    /// Maps a closure to a single element in the LockVec, specified by
+    /// `index` (position order). If there is no element at that index,
+    /// this returns None.
     pub fn map_single_by_index<B, F>(&self, index: usize, f: F) -> Option<B>
         where F: FnOnce(&T) -> B {
 
@@ -299,10 +314,12 @@ impl<T: Clone + Menuable> LockVec<T> {
         }).collect();
     }
 
+    /// Returns the number of items in the LockVec.
     pub fn len(&self) -> usize {
         return self.borrow_order().len();
     }
 
+    /// Returns whether or not there are any items in the LockVec.
     pub fn is_empty(&self) -> bool {
         return self.borrow_order().is_empty();
     }
