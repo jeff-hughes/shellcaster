@@ -42,11 +42,11 @@ impl<T: Clone + Menuable> Menu<T> {
     pub fn update_items(&mut self) {
         self.panel.erase();
 
-        let borrow = self.items.borrow();
-        if !borrow.is_empty() {
+        let (map, order) = self.items.borrow();
+        if !order.is_empty() {
             // update selected item if list has gotten shorter
             let current_selected = self.selected + self.top_row;
-            let list_len = borrow.len() as i32;
+            let list_len = order.len() as i32;
             if current_selected >= list_len {
                 self.selected = self.selected - (current_selected - list_len) - 1;
             }
@@ -54,7 +54,8 @@ impl<T: Clone + Menuable> Menu<T> {
             // for visible rows, print strings from list
             for i in 0..self.panel.get_rows() {
                 let item_idx = (self.top_row + i) as usize;
-                if let Some(elem) = borrow.get(item_idx) {
+                if let Some(elem_id) = order.get(item_idx) {
+                    let elem = map.get(&elem_id).unwrap();
                     self.panel.write_line(i,
                         elem.get_title(self.panel.get_cols() as usize));
 
@@ -87,63 +88,61 @@ impl<T: Clone + Menuable> Menu<T> {
         let old_played;
         let new_played;
         
-        {
-            let list_len = self.items.len();
-            if list_len == 0 {
-                return;
-            }
-
-            let n_row = self.panel.get_rows();
-
-            // TODO: currently only handles scroll value of 1; need to extend
-            // to be able to scroll multiple lines at a time
-            old_selected = self.selected;
-            self.selected += lines;
-
-            // don't allow scrolling past last item in list (if shorter
-            // than self.panel.get_rows())
-            let abs_bottom = min(self.panel.get_rows(),
-                (list_len - 1) as i32);
-            if self.selected > abs_bottom {
-                self.selected = abs_bottom;
-            }
-
-            // scroll list if necessary:
-            // scroll down
-            if self.selected > (n_row - 1) {
-                self.selected = n_row - 1;
-                if let Some(title) = self.items
-                    .map_single((self.top_row + n_row) as usize, 
-                        |el| el.get_title(self.panel.get_cols() as usize)) {
-
-                    self.top_row += 1;
-                    self.panel.delete_line(0);
-                    old_selected -= 1;
-
-                    self.panel.delete_line(n_row-1);
-                    self.panel.write_line(n_row-1, title);
-                }
-
-            // scroll up
-            } else if self.selected < 0 {
-                self.selected = 0;
-                if let Some(title) = self.items
-                    .map_single((self.top_row - 1) as usize,
-                        |el| el.get_title(self.panel.get_cols() as usize)) {
-
-                    self.top_row -= 1;
-                    self.panel.insert_line(0, title);
-                    old_selected += 1;
-                }
-            }
-
-            old_played = self.items
-                .map_single((self.top_row + old_selected) as usize, 
-                    |el| el.is_played()).unwrap();
-            new_played = self.items
-                .map_single((self.top_row + self.selected) as usize,
-                    |el| el.is_played()).unwrap();
+        let list_len = self.items.len();
+        if list_len == 0 {
+            return;
         }
+
+        let n_row = self.panel.get_rows();
+
+        // TODO: currently only handles scroll value of 1; need to extend
+        // to be able to scroll multiple lines at a time
+        old_selected = self.selected;
+        self.selected += lines;
+
+        // don't allow scrolling past last item in list (if shorter
+        // than self.panel.get_rows())
+        let abs_bottom = min(self.panel.get_rows(),
+            (list_len - 1) as i32);
+        if self.selected > abs_bottom {
+            self.selected = abs_bottom;
+        }
+
+        // scroll list if necessary:
+        // scroll down
+        if self.selected > (n_row - 1) {
+            self.selected = n_row - 1;
+            if let Some(title) = self.items
+                .map_single_by_index((self.top_row + n_row) as usize, 
+                    |el| el.get_title(self.panel.get_cols() as usize)) {
+
+                self.top_row += 1;
+                self.panel.delete_line(0);
+                old_selected -= 1;
+
+                self.panel.delete_line(n_row-1);
+                self.panel.write_line(n_row-1, title);
+            }
+
+        // scroll up
+        } else if self.selected < 0 {
+            self.selected = 0;
+            if let Some(title) = self.items
+                .map_single_by_index((self.top_row - 1) as usize,
+                    |el| el.get_title(self.panel.get_cols() as usize)) {
+
+                self.top_row -= 1;
+                self.panel.insert_line(0, title);
+                old_selected += 1;
+            }
+        }
+
+        old_played = self.items
+            .map_single_by_index((self.top_row + old_selected) as usize, 
+                |el| el.is_played()).unwrap();
+        new_played = self.items
+            .map_single_by_index((self.top_row + self.selected) as usize,
+                |el| el.is_played()).unwrap();
 
         self.set_attrs(old_selected, old_played, ColorType::Normal);
         self.set_attrs(self.selected, new_played, ColorType::HighlightedActive);
@@ -169,7 +168,7 @@ impl<T: Clone + Menuable> Menu<T> {
     /// whether the menu is currently active or not.
     pub fn highlight_selected(&mut self, active_menu: bool) {
         let is_played = self.items
-            .map_single((self.top_row + self.selected) as usize,
+            .map_single_by_index((self.top_row + self.selected) as usize,
             |el| el.is_played());
 
         if let Some(played) = is_played {
@@ -187,7 +186,7 @@ impl<T: Clone + Menuable> Menu<T> {
     pub fn activate(&mut self) {
         // if list is empty, will return None
         if let Some(played) = self.items
-            .map_single((self.top_row + self.selected) as usize,
+            .map_single_by_index((self.top_row + self.selected) as usize,
             |el| el.is_played()) {
 
             self.set_attrs(self.selected, played, ColorType::HighlightedActive);
@@ -215,8 +214,10 @@ impl Menu<Podcast> {
     /// currently selected podcast.
     pub fn get_episodes(&self) -> LockVec<Episode> {
         let index = self.selected + self.top_row;
-        return self.items.borrow()
-            .get(index as usize).unwrap().episodes.clone();
+        let pod_id = self.items.borrow_order()
+            .get(index as usize).copied().unwrap();
+        return self.items.borrow_map().get(&pod_id).unwrap()
+            .episodes.clone();
     }
 
     /// Controls how the window changes when it is inactive (i.e., not
@@ -224,7 +225,7 @@ impl Menu<Podcast> {
     pub fn deactivate(&mut self) {
         // if list is empty, will return None
         if let Some(played) = self.items
-            .map_single((self.top_row + self.selected) as usize,
+            .map_single_by_index((self.top_row + self.selected) as usize,
             |el| el.is_played()) {
 
             self.set_attrs(self.selected, played, ColorType::Highlighted);
@@ -239,7 +240,7 @@ impl Menu<Episode> {
     pub fn deactivate(&mut self) {
         // if list is empty, will return None
         if let Some(played) = self.items
-            .map_single((self.top_row + self.selected) as usize,
+            .map_single_by_index((self.top_row + self.selected) as usize,
             |el| el.is_played()) {
 
             self.set_attrs(self.selected, played, ColorType::Normal);
@@ -269,8 +270,8 @@ mod tests {
         for (i, t) in titles.iter().enumerate() {
             let played = i % 2 == 0;
             items.push(Episode {
-                id: None,
-                pod_id: None,
+                id: i as _,
+                pod_id: 1,
                 title: t.to_string(),
                 url: String::new(),
                 description: String::new(),
@@ -305,9 +306,10 @@ mod tests {
 
         menu.scroll(-1);
 
-        let borrow = menu.items.borrow();
-        let expected_top = borrow[1].get_title(real_cols as usize);
-        let expected_bot = borrow[5].get_title(real_cols as usize);
+        let expected_top = menu.items.map_single_by_index(1,
+            |ep| ep.get_title(real_cols as usize)).unwrap();
+        let expected_bot = menu.items.map_single_by_index(5,
+            |ep| ep.get_title(real_cols as usize)).unwrap();
 
         assert_eq!(menu.panel.get_row(0).0, expected_top);
         assert_eq!(menu.panel.get_row(4).0, expected_bot);
@@ -322,9 +324,10 @@ mod tests {
 
         menu.scroll(1);
 
-        let borrow = menu.items.borrow();
-        let expected_top = borrow[1].get_title(real_cols as usize);
-        let expected_bot = borrow[5].get_title(real_cols as usize);
+        let expected_top = menu.items.map_single_by_index(1,
+            |ep| ep.get_title(real_cols as usize)).unwrap();
+        let expected_bot = menu.items.map_single_by_index(5,
+            |ep| ep.get_title(real_cols as usize)).unwrap();
 
         assert_eq!(menu.panel.get_row(0).0, expected_top);
         assert_eq!(menu.panel.get_row(4).0, expected_bot);

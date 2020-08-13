@@ -1,10 +1,10 @@
+![shellcaster logo: Ferris the crab with headphones](https://raw.githubusercontent.com/jeff-hughes/shellcaster/master/img/shellcaster-logo_smol.png)
+
 # Shellcaster
 
 Shellcaster is a terminal-based podcast manager, built in Rust. It provides a terminal UI (i.e., ncurses) to allow users to subscribe to podcast feeds, and sync feeds to check for new episodes. Episodes may be downloaded locally, played (with an external media player, at least for now), and marked as played/unplayed. Keybindings and other options are configurable via a config file.
 
-Note that shellcaster is not yet in stable format, and is still in active development. However, the basic functionality is present, and it should generally be usable (with some bugs and irritations still to be worked out!).
-
-![shellcaster screenshot](https://raw.githubusercontent.com/jeff-hughes/shellcaster/master/img/screenshot.png)
+![screenshot of shellcaster](https://raw.githubusercontent.com/jeff-hughes/shellcaster/master/img/screenshot.png)
 
 ## Installing shellcaster
 
@@ -40,7 +40,7 @@ Next, there are two options for compiling the program:
 1. You can install the latest version of the binary directly from crates.io with one command:
 
 ```bash
-cargo install shellcaster  # add or remove any features with --features
+cargo install shellcaster --path "/usr/local"  # add or remove any features with --features
 ```
 
 2. You can clone the Github repo and compile it yourself:
@@ -74,22 +74,31 @@ By default, `native-tls` and `wide` features are enabled. Here is the full list 
 To specify different features when compiling, here is the format:
 
 ```bash
-cargo install --no-default-features --features "<feature1>,<feature2>"
+cargo install --no-default-features --features "<feature1>,<feature2>" --root "/usr/local"
 ```
 
 The format is the same when using `cargo build` instead:
 
 ```bash
 cargo build --release --no-default-features --features "<feature1>,<feature2>"
+sudo cp target/release/shellcaster /usr/local/bin/
 ```
 
-### Running shellcaster
+## Running shellcaster
 
 Easy peasy! In your terminal, run:
 
 ```bash
 shellcaster
 ```
+
+Note that if you installed shellcaster to a different location, ensure that this location has been added to your `$PATH`:
+
+```bash
+export PATH="/path/to/add:$PATH"
+```
+
+## Configuring shellcaster
 
 If you want to change configuration settings, the sample `config.toml` file can be copied from [here](https://raw.githubusercontent.com/jeff-hughes/shellcaster/master/config.toml). Download it, edit it to your fancy, and place it in the following location:
 
@@ -109,7 +118,30 @@ Or you can put `config.toml` in a place of your choosing, and specify the locati
 shellcaster -c /path/to/config.toml
 ```
 
-## Default keybindings
+The sample file above provides comments that should walk you through all the available options. If any field does not appear in the config file, it will be filled in with the default value specified in those comments. The defaults are also listed below, for convenience.
+
+### Configuration options
+
+**download_path**:
+* Specifies where podcast episodes that are downloaded will be stored.
+* Defaults:
+  * On Linux: $XDG_DATA_HOME/shellcaster/ or $HOME/.local/share/shellcaster/
+  * On Mac: $HOME/Library/Application Support/shellcaster/
+  * On Windows: C:\Users\\**username**\AppData\Local\shellcaster\
+
+**play_command**:
+* Command used to play episodes. Use "%s" to indicate where file/URL will be entered to the command. Note that shellcaster does *not* include a native media player, so it simply passes the file path/URL to the given command with no further checking as to its success or failure.
+* Default: "vlc %s"
+
+**simultaneous_downloads**:
+* Maximum number of files to download simultaneously. Setting this too high could result in network requests being denied. A good general guide would be to set this to the number of processor cores on your computer.
+* Default: 3
+
+**max_retries**:
+* Maximum number of times to retry connecting to a URL to sync a podcast or download an episode.
+* Default: 3
+
+#### Default keybindings
 
 | Key     | Action         |
 | ------- | -------------- |
@@ -128,9 +160,7 @@ shellcaster -c /path/to/config.toml
 | r       | Remove selected feed/episode from list |
 | Shift+R | Remove all feeds/episodes from list |
 
-Keybindings can be modified in the `config.toml` file. Actions can be
-mapped to more than one key, but a single key may not do more than one
-action.
+**Note:** Actions can be mapped to more than one key (e.g., "Enter" and "p" both play an episode), but a single key may not do more than one action (e.g., you can't set "d" to both download and delete episodes).
 
 ## Contributing
 

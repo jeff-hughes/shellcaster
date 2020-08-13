@@ -1,10 +1,23 @@
 use std::path::PathBuf;
-use std::collections::HashMap;
 
 use rusqlite::{Connection, params};
 use chrono::{NaiveDateTime, DateTime, Utc};
+use lazy_static::lazy_static;
+use regex::Regex;
 
 use crate::types::*;
+
+lazy_static! {
+    /// Regex for removing "A", "An", and "The" from the beginning of
+    /// podcast titles
+    static ref RE_ARTICLES: Regex = Regex::new(r"^(a|an|the) ").unwrap();
+}
+
+
+pub struct SyncResult {
+    pub added: Vec<i64>,
+    pub updated: Vec<i64>,
+}
 
 /// Struct holding a sqlite database connection, with methods to interact
 /// with this connection.
@@ -67,7 +80,7 @@ impl Database {
                 id INTEGER PRIMARY KEY NOT NULL,
                 podcast_id INTEGER NOT NULL,
                 title TEXT NOT NULL,
-                url TEXT NOT NULL UNIQUE,
+                url TEXT NOT NULL,
                 description TEXT,
                 pubdate INTEGER,
                 duration INTEGER,
@@ -98,8 +111,8 @@ impl Database {
 
     /// Inserts a new podcast and list of podcast episodes into the
     /// database.
-    pub fn insert_podcast(&self, podcast: Podcast) ->
-        Result<usize, Box<dyn std::error::Error>> {
+    pub fn insert_podcast(&self, podcast: PodcastNoId) ->
+        Result<SyncResult, Box<dyn std::error::Error>> {
 
         let conn = self.conn.as_ref().unwrap();
         let _ = conn.execute(
@@ -121,22 +134,21 @@ impl Database {
         let pod_id = stmt
             .query_row::<i64,_,_>(params![podcast.url], |row| row.get(0))
             .unwrap();
-        let num_episodes;
-        {
-            let borrow = podcast.episodes.borrow();
-            num_episodes = borrow.len();
-
-            for ep in borrow.iter().rev() {
-                let _ = &self.insert_episode(pod_id, &ep)?;
-            }
+        let mut ep_ids = Vec::new();
+        for ep in podcast.episodes.iter().rev() {
+            let id = self.insert_episode(pod_id, &ep)?;
+            ep_ids.push(id);
         }
 
-        return Ok(num_episodes);
+        return Ok(SyncResult {
+            added: ep_ids,
+            updated: Vec::new(),
+        });
     }
 
     /// Inserts a podcast episode into the database.
-    pub fn insert_episode(&self, podcast_id: i64, episode: &Episode) ->
-        Result<(), Box<dyn std::error::Error>> {
+    pub fn insert_episode(&self, podcast_id: i64, episode: &EpisodeNoId) ->
+        Result<i64, Box<dyn std::error::Error>> {
 
         let conn = self.conn.as_ref().unwrap();
 
@@ -160,7 +172,7 @@ impl Database {
                 false,
             ]
         )?;
-        return Ok(());
+        return Ok(conn.last_insert_rowid());
     }
 
     /// Inserts a filepath to a downloaded episode.
@@ -222,7 +234,7 @@ impl Database {
     /// Updates an existing podcast in the database, where metadata is
     /// changed if necessary, and episodes are updated (modified episodes
     /// are updated, new episodes are inserted).
-    pub fn update_podcast(&self, podcast: Podcast) -> Result<usize, Box<dyn std::error::Error>> {
+    pub fn update_podcast(&self, pod_id: i64, podcast: PodcastNoId) -> Result<SyncResult, Box<dyn std::error::Error>> {
         let conn = self.conn.as_ref().unwrap();
         let _ = conn.execute(
             "UPDATE podcasts SET title = ?, url = ?, description = ?,
@@ -235,14 +247,13 @@ impl Database {
                 podcast.author,
                 podcast.explicit,
                 podcast.last_checked.timestamp(),
-                podcast.id,
+                pod_id,
             ]
         )?;
 
-        let num_episodes = podcast.episodes.borrow().len();
-        self.update_episodes(podcast.id.unwrap(), podcast.episodes);
-
-        return Ok(num_episodes);
+        let result = self.update_episodes(
+            pod_id, podcast.episodes);
+        return Ok(result);
     }
 
     /// Updates metadata about episodes that already exist in database,
@@ -253,52 +264,82 @@ impl Database {
     /// episode that has changed either of these fields will show up as
     /// a "new" episode. The old version will still remain in the
     /// database.
-    fn update_episodes(&self, podcast_id: i64, episodes: LockVec<Episode>) {
+    fn update_episodes(&self, podcast_id: i64, episodes: Vec<EpisodeNoId>) -> SyncResult {
         let conn = self.conn.as_ref().unwrap();
 
-        let mut stmt = conn.prepare(
-            "SELECT id, title, pubdate FROM episodes
-                WHERE podcast_id = ?;").unwrap();
-        let episode_iter = stmt.query_map(params![podcast_id], |row| {
-            Ok((row.get("id")?, row.get("title")?, row.get("pubdate")?))
-        }).unwrap();
+        let old_episodes = self.get_episodes(podcast_id);
 
-        // create hashmap of all episodes, indexed by title and pub date
-        let mut ep_map: HashMap<(String, i64), i64> = HashMap::new();
-        for ep in episode_iter {
-            let epuw = ep.unwrap();
-            ep_map.insert((epuw.1, epuw.2), epuw.0);
-        }
+        let mut insert_ep = Vec::new();
+        let mut update_ep = Vec::new();
+        for new_ep in episodes.iter().rev() {
+            let new_pd = match new_ep.pubdate {
+                Some(dt) => Some(dt.timestamp()),
+                None => None,
+            };
 
-        for ep in episodes.borrow().iter().rev() {
-            match ep_map.get(&(ep.title.clone(), ep.pubdate.unwrap().timestamp())) {
-                // update existing episode
+            // for each existing episode, check the title, url, and
+            // pubdate -- if two of the three match, we count it as an
+            // existing episode; otherwise, we add it as a new episode
+            let mut existing_id = None;
+            let mut update = false;
+            for old_ep in old_episodes.iter().rev() {
+                let mut matching = 0;
+                matching += (new_ep.title == old_ep.title) as i32;
+                matching += (new_ep.url == old_ep.url) as i32;
+
+                let mut pd_match = false;
+                if let Some(pd) = new_pd { 
+                    if let Some(old_pd) = old_ep.pubdate {
+                        matching += (pd == old_pd.timestamp()) as i32;
+                        pd_match = true;
+                    }
+                }
+
+                if matching >= 2 {
+                    existing_id = Some(old_ep.id);
+
+                    // if we have a matching episode, check whether there
+                    // are details to update
+                    if !(new_ep.title == old_ep.title &&
+                         new_ep.url == old_ep.url &&
+                         new_ep.description == old_ep.description &&
+                         new_ep.duration == old_ep.duration &&
+                         pd_match) {
+                        update = true;
+                    }
+                    break;
+                }
+            }
+
+            match existing_id {
                 Some(id) => {
-                    let pubdate = match ep.pubdate {
-                        Some(dt) => Some(dt.timestamp()),
-                        None => None,
-                    };
-                    let _ = conn.execute(
-                        "UPDATE episodes SET title = ?, url = ?,
-                            description = ?, pubdate = ?, duration = ?
-                            WHERE id = ?;",
-                        params![
-                            ep.title,
-                            ep.url,
-                            ep.description,
-                            pubdate,
-                            ep.duration,
-                            id,
-                        ]
-                    ).unwrap();
+                    if update {
+                        let _ = conn.execute(
+                            "UPDATE episodes SET title = ?, url = ?,
+                                description = ?, pubdate = ?, duration = ?
+                                WHERE id = ?;",
+                            params![
+                                new_ep.title,
+                                new_ep.url,
+                                new_ep.description,
+                                new_pd,
+                                new_ep.duration,
+                                id,
+                            ]
+                        ).unwrap();
+                        update_ep.push(id);
+                    }
                 },
-
-                // insert new episode
                 None => {
-                    let _ = &self.insert_episode(podcast_id, &ep).unwrap();
+                    let id = self.insert_episode(podcast_id, &new_ep).unwrap();
+                    insert_ep.push(id);
                 }
             }
         }
+        return SyncResult {
+            added: insert_ep,
+            updated: update_ep
+        };
     }
 
     /// Updates an episode to mark it as played or unplayed.
@@ -328,28 +369,35 @@ impl Database {
     pub fn get_podcasts(&self) -> Vec<Podcast> {
         if let Some(conn) = &self.conn {
             let mut stmt = conn.prepare(
-                "SELECT * FROM podcasts ORDER BY title;").unwrap();
+                "SELECT * FROM podcasts;").unwrap();
             let podcast_iter = stmt.query_map(params![], |row| {
                 let pod_id = row.get("id")?;
                 let episodes = self.get_episodes(pod_id);
-                let num_unplayed = episodes.iter()
-                    .fold(0, |acc, x| acc + (!x.is_played() as usize));
+
+                // create a sort title that is lowercased and removes
+                // articles from the beginning
+                let title: String = row.get("title")?;
+                let title_lower = title.to_lowercase();
+                let sort_title = RE_ARTICLES.replace(&title_lower, "").to_string();
+
                 Ok(Podcast {
-                    id: Some(pod_id),
-                    title: row.get("title")?,
+                    id: pod_id,
+                    title: title,
+                    sort_title: sort_title,
                     url: row.get("url")?,
                     description: row.get("description")?,
                     author: row.get("author")?,
                     explicit: row.get("explicit")?,
                     last_checked: convert_date(row.get("last_checked")).unwrap(),
                     episodes: LockVec::new(episodes),
-                    num_unplayed: num_unplayed,
                 })
             }).unwrap();
             let mut podcasts = Vec::new();
             for pc in podcast_iter {
                 podcasts.push(pc.unwrap());
             }
+            podcasts.sort_unstable();
+
             return podcasts;
         } else {
             return Vec::new();
@@ -371,8 +419,8 @@ impl Database {
                     Err(_) => None,
                 };
                 Ok(Episode {
-                    id: Some(row.get("id")?),
-                    pod_id: Some(row.get("podcast_id")?),
+                    id: row.get("id")?,
+                    pod_id: row.get("podcast_id")?,
                     title: row.get("title")?,
                     url: row.get("url")?,
                     description: row.get("description")?,
@@ -390,6 +438,15 @@ impl Database {
         } else {
             return Vec::new();
         }
+    }
+
+    /// Deletes all rows in all tables
+    pub fn clear_db(&self) -> Result<(), rusqlite::Error> {
+        let conn = self.conn.as_ref().unwrap();
+        conn.execute("DELETE FROM files;", params![])?;
+        conn.execute("DELETE FROM episodes;", params![])?;
+        conn.execute("DELETE FROM podcasts;", params![])?;
+        Ok(())
     }
 }
 

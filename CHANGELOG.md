@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.0.0 (2020-08-13)
+- Adjusted the criteria for checking existing episodes when syncing, which results in a dramatic speedup in the syncing process
+- New command line options:
+    - `shellcaster sync` performs a full sync of all podcasts and then exits without starting the UI
+    - `shellcaster import` imports a list of podcasts from an OPML file
+    - `shellcaster export` exports the list of podcasts in the database to an OPML file for easy transfer to other podcast managers
+- Support for episodes that are not .mp3 files (e.g., video episodes)
+- Bug fixes:
+    - HTML entities (e.g., &amp;amp;) in episode descriptions are now decoded
+    - Podcasts/episodes referred to internally by ID rather than position in the list, which avoids errors when items are added/removed
+
 ## v0.8.2 (2020-07-24)
 - Adds details panel on the right-hand side when the screen is large enough, providing more information about the selected episode
 - Better notifications for syncing and downloading files

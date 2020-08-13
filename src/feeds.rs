@@ -7,7 +7,7 @@ use crate::sanitizer::parse_from_rfc2822_with_fallback;
 use lazy_static::lazy_static;
 use regex::{Regex, Match};
 
-use crate::types::{Podcast, Episode, Message, LockVec};
+use crate::types::*;
 use crate::threadpool::Threadpool;
 
 lazy_static! {
@@ -20,34 +20,52 @@ lazy_static! {
 /// been retrieved.
 #[derive(Debug)]
 pub enum FeedMsg {
-    NewData(Podcast),
-    SyncData(Podcast),
-    Error,
+    NewData(PodcastNoId),
+    SyncData((i64, PodcastNoId)),
+    Error(PodcastFeed),
+}
+
+/// Struct holding data about a podcast feed (subset of info about a
+/// podcast) for the purpose of passing back and forth between threads.
+#[derive(Debug, Clone)]
+pub struct PodcastFeed {
+    pub id: Option<i64>,
+    pub url: String,
+    pub title: Option<String>,
+}
+
+impl PodcastFeed {
+    pub fn new(id: Option<i64>, url: String, title: Option<String>) -> Self {
+        return Self {
+            id: id,
+            url: url,
+            title: title
+        };
+    }
 }
 
 /// Spawns a new thread to check a feed and retrieve podcast data.
-pub fn check_feed(url: String, pod_id: Option<i64>, max_retries: usize, threadpool: &Threadpool, tx_to_main: mpsc::Sender<Message>) {
+pub fn check_feed(feed: PodcastFeed, max_retries: usize, threadpool: &Threadpool, tx_to_main: mpsc::Sender<Message>) {
     threadpool.execute(move || {
-        match get_feed_data(url, max_retries) {
-            Ok(mut pod) => {
-                match pod_id {
+        match get_feed_data(feed.url.clone(), max_retries) {
+            Ok(pod) => {
+                match feed.id {
                     Some(id) => {
-                        pod.id = Some(id);
                         tx_to_main.send(
-                        Message::Feed(FeedMsg::SyncData(pod))).unwrap();
+                        Message::Feed(FeedMsg::SyncData((id, pod)))).unwrap();
                     },
                     None => tx_to_main.send(
                         Message::Feed(FeedMsg::NewData(pod))).unwrap(),
                 }
             },
-            Err(_err) => tx_to_main.send(Message::Feed(FeedMsg::Error)).unwrap(),
+            Err(_err) => tx_to_main.send(Message::Feed(FeedMsg::Error(feed))).unwrap(),
         }
     });
 }
 
 /// Given a URL, this attempts to pull the data about a podcast and its
 /// episodes from an RSS feed.
-fn get_feed_data(url: String, mut max_retries: usize) -> Result<Podcast, Box<dyn std::error::Error>> {
+fn get_feed_data(url: String, mut max_retries: usize) -> Result<PodcastNoId, Box<dyn std::error::Error>> {
     let request: Result<ureq::Response, Box<dyn std::error::Error>> = loop {
         let response = ureq::get(&url)
             .timeout_connect(5000)
@@ -82,7 +100,7 @@ fn get_feed_data(url: String, mut max_retries: usize) -> Result<Podcast, Box<dyn
 /// specifications for podcast RSS feeds that a feed should adhere to, but
 /// this does try to make some attempt to account for the possibility that
 /// a feed might not be valid according to the spec.
-fn parse_feed_data(channel: Channel, url: &str) -> Podcast {
+fn parse_feed_data(channel: Channel, url: &str) -> PodcastNoId {
     let title = channel.title().to_string();
     let url = url.to_string();
     let description = Some(channel.description().to_string());
@@ -116,17 +134,14 @@ fn parse_feed_data(channel: Channel, url: &str) -> Podcast {
         }
     }
 
-    return Podcast {
-        id: None,
+    return PodcastNoId {
         title: title,
         url: url,
         description: description,
         author: author,
         explicit: explicit,
         last_checked: last_checked,
-        episodes: LockVec::new(episodes),
-        num_unplayed: 0,  // this will be set properly once it's inserted
-                          // into the database and then read back
+        episodes: episodes,
     };
 }
 
@@ -135,7 +150,7 @@ fn parse_feed_data(channel: Channel, url: &str) -> Podcast {
 /// podcast RSS feeds that a feed should adhere to, but this does try to
 /// make some attempt to account for the possibility that a feed might
 /// not be valid according to the spec.
-fn parse_episode_data(item: &Item) -> Episode {
+fn parse_episode_data(item: &Item) -> EpisodeNoId {
     let title = match item.title() {
         Some(s) => s.to_string(),
         None => "".to_string(),
@@ -171,19 +186,12 @@ fn parse_episode_data(item: &Item) -> Episode {
         };
     }
 
-    let path = None;
-    let played = false;
-
-    return Episode {
-        id: None,
-        pod_id: None,
+    return EpisodeNoId {
         title: title,
         url: url,
         description: description,
         pubdate: pubdate,
         duration: duration,
-        path: path,
-        played: played,
     };
 }
 
@@ -299,7 +307,7 @@ mod tests {
         let path = "./tests/test_no_episodes.xml";
         let channel = Channel::read_from(open_file(path)).unwrap();
         let data = parse_feed_data(channel, "dummy_url");
-        assert_eq!(data.episodes.borrow().len(), 0);
+        assert_eq!(data.episodes.len(), 0);
     }
 
     #[test]
