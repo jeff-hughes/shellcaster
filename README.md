@@ -98,6 +98,28 @@ Note that if you installed shellcaster to a different location, ensure that this
 export PATH="/path/to/add:$PATH"
 ```
 
+## Importing/exporting podcasts
+
+Shellcaster supports importing OPML files from other podcast managers. If you can export to an OPML file from another podcast manager, you can import this file with:
+
+```bash
+shellcaster import -f /path/to/OPML/file.opml
+```
+
+If the `-r` flag is added to this command, it will overwrite any existing podcasts that are currently stored in shellcaster. You can also pipe in data to `shellcaster import` from stdin by not specifying the `-f <file>`.
+
+You can export an OPML file from shellcaster with the following command:
+
+```bash
+shellcaster export -f /path/to/output/file.opml
+```
+
+You can also export to stdout by not specifying the `-f <file>`; for example, this command is equivalent:
+
+```bash
+shellcaster export > /path/to/output/file.opml
+```
+
 ## Configuring shellcaster
 
 If you want to change configuration settings, the sample `config.toml` file can be copied from [here](https://raw.githubusercontent.com/jeff-hughes/shellcaster/master/config.toml). Download it, edit it to your fancy, and place it in the following location:
@@ -161,6 +183,10 @@ The sample file above provides comments that should walk you through all the ava
 | Shift+R | Remove all feeds/episodes from list |
 
 **Note:** Actions can be mapped to more than one key (e.g., "Enter" and "p" both play an episode), but a single key may not do more than one action (e.g., you can't set "d" to both download and delete episodes).
+
+## Syncing without the UI
+
+Some users may wish to sync their podcasts automatically on a regular basis, e.g., every morning. The `shellcaster sync` subcommand can be used to do this without opening up the UI, and does a full sync of all podcasts in the database. This could be used to set up a cron job or systemd timer, for example. Please refer to the relevant documentation for these systems for setting it up on the schedule of your choice.
 
 ## Contributing
 
