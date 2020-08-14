@@ -1,10 +1,10 @@
-![shellcaster logo: Ferris the crab with headphones](https://raw.githubusercontent.com/jeff-hughes/shellcaster/master/img/shellcaster-logo_smol.png)
+<div align="center"><img alt="shellcaster logo: Ferris the crab with headphones" src="https://raw.githubusercontent.com/jeff-hughes/shellcaster/master/img/shellcaster-logo_smol.png"/></div>
 
 # Shellcaster
 
 Shellcaster is a terminal-based podcast manager, built in Rust. It provides a terminal UI (i.e., ncurses) to allow users to subscribe to podcast feeds, and sync feeds to check for new episodes. Episodes may be downloaded locally, played (with an external media player, at least for now), and marked as played/unplayed. Keybindings and other options are configurable via a config file.
 
-![screenshot of shellcaster](https://raw.githubusercontent.com/jeff-hughes/shellcaster/master/img/screenshot.png)
+<div align="center"><img alt="screenshot of shellcaster" src="https://raw.githubusercontent.com/jeff-hughes/shellcaster/master/img/screenshot.png"/></div>
 
 ## Installing shellcaster
 
@@ -130,7 +130,7 @@ The sample file above provides comments that should walk you through all the ava
   * On Windows: C:\Users\\**username**\AppData\Local\shellcaster\
 
 **play_command**:
-* Command used to play episodes. Use "%s" to indicate where file/URL will be entered to the command. Note that shellcaster does *not* include a native media player, so it simply passes the file path/URL to the given command with no further checking as to its success or failure.
+* Command used to play episodes. Use "%s" to indicate where file/URL will be entered to the command. Note that shellcaster does *not* include a native media player -- it simply passes the file path/URL to the given command with no further checking as to its success or failure. This process is started *in the background*, so be sure to send it to a program that has GUI controls of some kind so you have control over the playback.
 * Default: "vlc %s"
 
 **simultaneous_downloads**:
