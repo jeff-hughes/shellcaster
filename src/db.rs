@@ -4,6 +4,7 @@ use rusqlite::{Connection, params};
 use chrono::{NaiveDateTime, DateTime, Utc};
 use lazy_static::lazy_static;
 use regex::Regex;
+use semver::Version;
 
 use crate::types::*;
 
@@ -42,8 +43,41 @@ impl Database {
                 };
                 db_conn.create();
 
-                // SQLite defaults to foreign key support off
-                db_conn.conn.as_ref().unwrap().execute("PRAGMA foreign_keys=ON;", params![]).unwrap();
+                {
+                    let conn = db_conn.conn.as_ref().unwrap();
+
+                    // SQLite defaults to foreign key support off
+                    conn.execute("PRAGMA foreign_keys=ON;", params![]).unwrap();
+
+                    // get version number stored in database
+                    let mut stmt = conn.prepare(
+                        "SELECT version FROM version WHERE id = 1;").unwrap();
+                    let db_version = stmt.query_row(params![], |row| {
+                        let vstr: String = row.get("version")?;
+                        Ok(Version::parse(&vstr).unwrap())
+                    });
+
+                    // compare to current app version
+                    let curr_ver = Version::parse(crate::VERSION).unwrap();
+                    // (db_version exists, needs update)
+                    let to_update = match db_version {
+                        Ok(dbv) => {
+                            if dbv < curr_ver {
+                                (true, true)  
+                            } else {
+                                (true, false)
+                            }
+                        },
+                        Err(_) => (false, true),
+                    };
+
+                    if to_update.1 {
+                        // any version checks for DB migrations should go
+                        // here first, before we update the version
+
+                        db_conn.update_version(curr_ver, to_update.0);
+                    }
+                }
 
                 return db_conn;
             },
@@ -106,6 +140,32 @@ impl Database {
         ) {
             Ok(_) => (),
             Err(err) => panic!("Could not create files database table: {}", err),
+        }
+
+        match conn.execute(
+            "CREATE TABLE IF NOT EXISTS version (
+                id INTEGER PRIMARY KEY NOT NULL,
+                version TEXT NOT NULL
+            );",
+            params![]
+        ) {
+            Ok(_) => (),
+            Err(err) => panic!("Could not create version database table: {}", err),
+        }
+    }
+
+    /// If version stored in database is less than the current version
+    /// of the app, this updates the value stored in the database to
+    /// match.
+    fn update_version(&self, current_version: Version, update: bool) {
+        let conn = self.conn.as_ref().unwrap();
+
+        if update {
+            let _ = conn.execute("UPDATE version SET version = ?
+                WHERE id = ?;", params![current_version.to_string(), 1]);
+        } else {
+            let _ = conn.execute("INSERT INTO version (id, version)
+                VALUES (?, ?)", params![1, current_version.to_string()]);
         }
     }
 
