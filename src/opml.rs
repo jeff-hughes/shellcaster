@@ -11,9 +11,28 @@ pub fn import(xml: String) -> Result<Vec<PodcastFeed>, String> {
             let mut feeds = Vec::new();
             for pod in opml.body.outlines.iter() {
                 if let Some(url) = pod.xml_url.clone() {
-                    let title = match &pod.title {
-                        Some(t) => Some(t.clone()),
-                        None => Some(pod.text.clone())
+                    // match against title attribute first -- if this is
+                    // not set or empty, then match against the text
+                    // attribute; this must be set, but can be empty
+                    let temp_title = match &pod.title {
+                        Some(t) => {
+                            if t.is_empty() {
+                                None
+                            } else {
+                                Some(t.clone())
+                            }
+                        },
+                        None => None,
+                    };
+                    let title = match temp_title {
+                        Some(t) => Some(t),
+                        None => {
+                            if pod.text.is_empty() {
+                                None
+                            } else {
+                                Some(pod.text.clone())
+                            }
+                        }
                     };
                     feeds.push(PodcastFeed::new(None, url, title));
                 }
