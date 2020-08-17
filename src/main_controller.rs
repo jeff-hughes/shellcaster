@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::fs;
+use std::collections::HashSet;
 
 use sanitize_filename::{sanitize_with_options, Options};
 
@@ -32,7 +33,7 @@ pub struct MainController {
     podcasts: LockVec<Podcast>,
     sync_counter: usize,
     sync_tracker: Vec<SyncResult>,
-    download_counter: usize,
+    download_tracker: HashSet<i64>,
     pub ui_thread: std::thread::JoinHandle<()>,
     pub tx_to_ui: mpsc::Sender<MainMessage>,
     pub tx_to_main: mpsc::Sender<Message>,
@@ -74,7 +75,7 @@ impl MainController {
             ui_thread: ui_thread,
             sync_counter: 0,
             sync_tracker: Vec::new(),
-            download_counter: 0,
+            download_tracker: HashSet::new(),
             tx_to_ui: tx_to_ui,
             tx_to_main: tx_to_main,
             rx_to_main: rx_to_main,
@@ -177,7 +178,7 @@ impl MainController {
     /// downloading files.
     pub fn update_tracker_notif(&self) {
         let sync_len = self.sync_counter;
-        let dl_len = self.download_counter;
+        let dl_len = self.download_tracker.len();
         let sync_plural = if sync_len > 1 { "s" } else { "" };
         let dl_plural = if dl_len > 1 { "s" } else { "" };
 
@@ -391,6 +392,12 @@ impl MainController {
             }
         }
 
+        // check against episodes currently being downloaded -- so we
+        // don't needlessly download them again
+        ep_data.retain(|ep| {
+            !self.download_tracker.contains(&ep.id)
+        });
+
         if !ep_data.is_empty() {
             // add directory for podcast, create if it does not exist
             let dir_name = sanitize_with_options(&pod_title, Options {
@@ -400,7 +407,9 @@ impl MainController {
             });
             match self.create_podcast_dir(dir_name) {
                 Ok(path) => {
-                    self.download_counter += ep_data.len();
+                    for ep in ep_data.iter() {
+                        self.download_tracker.insert(ep.id);
+                    }
                     downloads::download_list(
                     ep_data, &path, self.config.max_retries,
                     &self.threadpool, self.tx_to_main.clone());
@@ -425,9 +434,9 @@ impl MainController {
             podcast.episodes.replace(ep_data.id, episode);
         }
 
-        self.download_counter -= 1;
+        self.download_tracker.remove(&ep_data.id);
         self.update_tracker_notif();
-        if self.download_counter == 0 {
+        if self.download_tracker.is_empty() {
             self.notif_to_ui("Downloads complete.".to_string(), false);
         }
 
