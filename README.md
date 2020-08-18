@@ -40,7 +40,7 @@ Next, there are two options for compiling the program:
 1. You can install the latest version of the binary directly from crates.io with one command:
 
 ```bash
-cargo install shellcaster --path "/usr/local"  # add or remove any features with --features
+cargo install shellcaster --target-dir "/usr/local"  # add or remove any features with --features
 ```
 
 2. You can clone the Github repo and compile it yourself:
