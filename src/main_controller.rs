@@ -336,7 +336,7 @@ impl MainController {
             let borrowed_ep_list = podcast
                 .episodes.borrow_order();
             for ep in borrowed_ep_list.iter() {
-                self.db.set_played_status(ep.clone(), played);
+                self.db.set_played_status(*ep, played);
             }
         }
         podcast.episodes.replace_all(self.db.get_episodes(podcast.id));
