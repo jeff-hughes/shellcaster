@@ -40,7 +40,7 @@ Next, there are two options for compiling the program:
 1. You can install the latest version of the binary directly from crates.io with one command:
 
 ```bash
-cargo install shellcaster --path "/usr/local"  # add or remove any features with --features
+cargo install shellcaster --no-track --root "/usr/local"  # add or remove any features with --features
 ```
 
 2. You can clone the Github repo and compile it yourself:
@@ -74,7 +74,7 @@ By default, `native-tls` and `wide` features are enabled. Here is the full list 
 To specify different features when compiling, here is the format:
 
 ```bash
-cargo install --no-default-features --features "<feature1>,<feature2>" --root "/usr/local"
+cargo install --no-track --no-default-features --features "<feature1>,<feature2>" --root "/usr/local"
 ```
 
 The format is the same when using `cargo build` instead:
