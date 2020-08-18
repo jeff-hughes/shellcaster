@@ -25,6 +25,10 @@ use crate::types::*;
 use super::MainMessage;
 
 lazy_static! {
+    /// Regex for finding <br/> tags -- also captures any surrounding
+    /// line breaks
+    static ref RE_BR_TAGS: Regex = Regex::new(r"((\r\n)|\r|\n)*<br */?>((\r\n)|\r|\n)*").unwrap();
+
     /// Regex for finding HTML tags
     static ref RE_HTML_TAGS: Regex = Regex::new(r"<[^<>]*>").unwrap();
 
@@ -729,12 +733,15 @@ impl<'a> UI<'a> {
                         let desc = if ep.description.is_empty() {
                             None
                         } else {
+                            // convert <br/> tags to a single line break
+                            let br_to_lb = RE_BR_TAGS.replace_all(&ep.description, "\n");
+
                             // strip all HTML tags
-                            let stripped_tags = RE_HTML_TAGS.replace_all(&ep.description, "").to_string();
+                            let stripped_tags = RE_HTML_TAGS.replace_all(&br_to_lb, "");
 
                             // convert HTML entities (e.g., &amp;)
-                            let decoded = match escaper::decode_html_sloppy(&stripped_tags) {
-                                Err(_) => stripped_tags,
+                            let decoded = match escaper::decode_html(&stripped_tags) {
+                                Err(_) => stripped_tags.to_string(),
                                 Ok(s) => s
                             };
 

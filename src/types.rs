@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
-use std::ops::{Bound, RangeBounds};
 use std::collections::HashMap;
 use std::cmp::Ordering;
+use unicode_segmentation::UnicodeSegmentation;
 
 use chrono::{DateTime, Utc};
 use lazy_static::lazy_static;
@@ -56,19 +56,29 @@ impl Menuable for Podcast {
 
     /// Returns the title for the podcast, up to length characters.
     fn get_title(&self, length: usize) -> String {
-        let mut out = self.title.substring(0, length);
+        let mut title_length = length;
+
         // if the size available is big enough, we add the unplayed data
         // to the end
         if length > crate::config::PODCAST_UNPLAYED_TOTALS_LENGTH {
             let meta_str = format!("({}/{})",
                 self.num_unplayed(), self.episodes.len());
-            out = out.substring(0, length-meta_str.chars().count());
+            title_length = length - meta_str.chars().count();
+
+            let out = self.title
+                .graphemes(true)
+                .take(title_length)
+                .collect::<String>();
 
             return format!("{} {:>width$}", out, meta_str, 
-                width=length-out.chars().count());
+                width=length-out.graphemes(true).count());
                 // this pads spaces between title and totals
         } else {
-            return out.to_string();
+            let out = self.title
+                .graphemes(true)
+                .take(title_length)
+                .collect::<String>();
+            return out;
         }
     }
 
@@ -140,9 +150,21 @@ impl Menuable for Episode {
     /// Returns the title for the episode, up to length characters.
     fn get_title(&self, length: usize) -> String {
         let out = match self.path {
-            Some(_) => format!("[D] {}", self.title.substring(0, length-4)),
-            None => self.title.substring(0, length).to_string(),
+            Some(_) => {
+                let title = self.title
+                    .graphemes(true)
+                    .take(length-4)
+                    .collect::<String>();
+                format!("[D] {}", title)
+            },
+            None => {
+                self.title
+                    .graphemes(true)
+                    .take(length)
+                    .collect::<String>()
+            },
         };
+        let out_len = out.graphemes(true).count();
         if length > crate::config::EPISODE_PUBDATE_LENGTH {
             let dur = self.format_duration();
             let meta_dur = format!("[{}]", dur);
@@ -153,15 +175,31 @@ impl Menuable for Episode {
                     .to_string();
                 let meta_str = format!("({}) {}", pd, meta_dur);
                 let added_len = meta_str.chars().count();
-                return format!("{} {:>width$}", out.substring(0, length-added_len), meta_str, width=length-out.chars().count());
+
+                let out_added = out
+                    .graphemes(true)
+                    .take(length-added_len)
+                    .collect::<String>();
+                return format!("{} {:>width$}", out_added, meta_str,
+                    width=length-out_len);
             } else {
                 // just print duration
-                return format!("{} {:>width$}", out.substring(0, length-meta_dur.chars().count()), meta_dur, width=length-out.chars().count());
+                let out_added = out
+                    .graphemes(true)
+                    .take(length-meta_dur.chars().count())
+                    .collect::<String>();
+                return format!("{} {:>width$}", out_added, meta_dur,
+                    width=length-out_len);
             }
         } else if length > crate::config::EPISODE_DURATION_LENGTH {
             let dur = self.format_duration();
             let meta_dur = format!("[{}]", dur);
-            return format!("{} {:>width$}", out.substring(0, length-meta_dur.chars().count()), meta_dur, width=length-out.chars().count());
+            let out_added = out
+                .graphemes(true)
+                .take(length-meta_dur.chars().count())
+                .collect::<String>();
+            return format!("{} {:>width$}", out_added, meta_dur,
+                width=length-out_len);
         } else {
             return out;
         }
@@ -295,7 +333,7 @@ impl<T: Clone + Menuable> LockVec<T> {
 
         let order = self.borrow_order();
         return match order.get(index) {
-            Some(id) => self.map_single(id.clone(), f),
+            Some(id) => self.map_single(*id, f),
             None => None,
         };
     }
@@ -378,93 +416,4 @@ pub enum Message {
     Ui(UiMsg),
     Feed(FeedMsg),
     Dl(DownloadMsg),
-}
-
-
-// some utilities for dealing with UTF-8 substrings that split properly
-// on character boundaries. From:
-// https://users.rust-lang.org/t/how-to-get-a-substring-of-a-string/1351/11
-// Note that using UnicodeSegmentation::graphemes() from the
-// `unicode-segmentation` crate might still end up being preferable...
-pub trait StringUtils {
-    fn substring(&self, start: usize, len: usize) -> &str;
-    fn slice(&self, range: impl RangeBounds<usize>) -> &str;
-}
-
-impl StringUtils for str {
-    fn substring(&self, start: usize, len: usize) -> &str {
-        let mut char_pos = 0;
-        let mut byte_start = 0;
-        let mut it = self.chars();
-        loop {
-            if char_pos == start { break; }
-            if let Some(c) = it.next() {
-                char_pos += 1;
-                byte_start += c.len_utf8();
-            }
-            else { break; }
-        }
-        char_pos = 0;
-        let mut byte_end = byte_start;
-        loop {
-            if char_pos == len { break; }
-            if let Some(c) = it.next() {
-                char_pos += 1;
-                byte_end += c.len_utf8();
-            }
-            else { break; }
-        }
-        &self[byte_start..byte_end]
-    }
-    fn slice(&self, range: impl RangeBounds<usize>) -> &str {
-        let start = match range.start_bound() {
-            Bound::Included(bound) | Bound::Excluded(bound) => *bound,
-            Bound::Unbounded => 0,
-        };
-        let len = match range.end_bound() {
-            Bound::Included(bound) => *bound + 1,
-            Bound::Excluded(bound) => *bound,
-            Bound::Unbounded => self.len(),
-        } - start;
-        self.substring(start, len)
-    }
-}
-
-impl StringUtils for String {
-    fn substring(&self, start: usize, len: usize) -> &str {
-        let mut char_pos = 0;
-        let mut byte_start = 0;
-        let mut it = self.chars();
-        loop {
-            if char_pos == start { break; }
-            if let Some(c) = it.next() {
-                char_pos += 1;
-                byte_start += c.len_utf8();
-            }
-            else { break; }
-        }
-        char_pos = 0;
-        let mut byte_end = byte_start;
-        loop {
-            if char_pos == len { break; }
-            if let Some(c) = it.next() {
-                char_pos += 1;
-                byte_end += c.len_utf8();
-            }
-            else { break; }
-        }
-        &self[byte_start..byte_end]
-    }
-    fn slice(&self, range: impl RangeBounds<usize>) -> &str {
-        let start = match range.start_bound() {
-            Bound::Included(bound) | Bound::Excluded(bound) => *bound,
-            Bound::Unbounded => 0,
-        };
-        let len = match range.end_bound() {
-            Bound::Included(bound) => *bound + 1,
-            Bound::Excluded(bound) => *bound,
-            Bound::Unbounded => self.len(),
-        } - start;
-        self.substring(start, len)
-    }
 }

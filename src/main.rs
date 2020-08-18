@@ -26,6 +26,8 @@ use crate::threadpool::Threadpool;
 use crate::types::*;
 use crate::feeds::{FeedMsg, PodcastFeed};
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 /// Main controller for shellcaster program.
 /// 
 /// *Main command:*
