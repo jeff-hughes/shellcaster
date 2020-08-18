@@ -12,22 +12,22 @@ pub fn execute(command: &str, path: &str) -> Result<(), std::io::Error> {
 
     let mut args: Vec<String>;
     if cmd_string.contains("%s") {
-        args = args_iter.map(|a| {
-            if a == "%s" {
-                return a.replace("%s", path);
-            } else {
-                return a.to_string();
-            }
-        }).collect();
+        args = args_iter
+            .map(|a| {
+                if a == "%s" {
+                    return a.replace("%s", path);
+                } else {
+                    return a.to_string();
+                }
+            })
+            .collect();
     } else {
         args = args_iter.map(|a| a.to_string()).collect();
         args.push(path.to_string());
     }
 
     let mut cmd = Command::new(base_cmd);
-    cmd.args(args)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
+    cmd.args(args).stdout(Stdio::null()).stderr(Stdio::null());
     match cmd.spawn() {
         Ok(_) => Ok(()),
         Err(err) => Err(err),

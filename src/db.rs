@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
-use rusqlite::{Connection, params};
-use chrono::{NaiveDateTime, DateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use lazy_static::lazy_static;
 use regex::Regex;
+use rusqlite::{params, Connection};
 use semver::Version;
 
 use crate::types::*;
@@ -13,7 +13,6 @@ lazy_static! {
     /// podcast titles
     static ref RE_ARTICLES: Regex = Regex::new(r"^(a|an|the) ").unwrap();
 }
-
 
 pub struct SyncResult {
     pub added: Vec<i64>,
@@ -38,9 +37,7 @@ impl Database {
         db_path.push("data.db");
         match Connection::open(db_path) {
             Ok(conn) => {
-                let db_conn = Database {
-                    conn: Some(conn),
-                };
+                let db_conn = Database { conn: Some(conn) };
                 db_conn.create();
 
                 {
@@ -50,8 +47,9 @@ impl Database {
                     conn.execute("PRAGMA foreign_keys=ON;", params![]).unwrap();
 
                     // get version number stored in database
-                    let mut stmt = conn.prepare(
-                        "SELECT version FROM version WHERE id = 1;").unwrap();
+                    let mut stmt = conn
+                        .prepare("SELECT version FROM version WHERE id = 1;")
+                        .unwrap();
                     let db_version = stmt.query_row(params![], |row| {
                         let vstr: String = row.get("version")?;
                         Ok(Version::parse(&vstr).unwrap())
@@ -63,11 +61,11 @@ impl Database {
                     let to_update = match db_version {
                         Ok(dbv) => {
                             if dbv < curr_ver {
-                                (true, true)  
+                                (true, true)
                             } else {
                                 (true, false)
                             }
-                        },
+                        }
                         Err(_) => (false, true),
                     };
 
@@ -80,7 +78,7 @@ impl Database {
                 }
 
                 return db_conn;
-            },
+            }
             Err(err) => panic!("Could not open database: {}", err),
         };
     }
@@ -147,7 +145,7 @@ impl Database {
                 id INTEGER PRIMARY KEY NOT NULL,
                 version TEXT NOT NULL
             );",
-            params![]
+            params![],
         ) {
             Ok(_) => (),
             Err(err) => panic!("Could not create version database table: {}", err),
@@ -161,19 +159,26 @@ impl Database {
         let conn = self.conn.as_ref().unwrap();
 
         if update {
-            let _ = conn.execute("UPDATE version SET version = ?
-                WHERE id = ?;", params![current_version.to_string(), 1]);
+            let _ = conn.execute(
+                "UPDATE version SET version = ?
+                WHERE id = ?;",
+                params![current_version.to_string(), 1],
+            );
         } else {
-            let _ = conn.execute("INSERT INTO version (id, version)
-                VALUES (?, ?)", params![1, current_version.to_string()]);
+            let _ = conn.execute(
+                "INSERT INTO version (id, version)
+                VALUES (?, ?)",
+                params![1, current_version.to_string()],
+            );
         }
     }
 
     /// Inserts a new podcast and list of podcast episodes into the
     /// database.
-    pub fn insert_podcast(&self, podcast: PodcastNoId) ->
-        Result<SyncResult, Box<dyn std::error::Error>> {
-
+    pub fn insert_podcast(
+        &self,
+        podcast: PodcastNoId,
+    ) -> Result<SyncResult, Box<dyn std::error::Error>> {
         let conn = self.conn.as_ref().unwrap();
         let _ = conn.execute(
             "INSERT INTO podcasts (title, url, description, author,
@@ -186,13 +191,14 @@ impl Database {
                 podcast.author,
                 podcast.explicit,
                 podcast.last_checked.timestamp()
-            ]
+            ],
         )?;
 
-        let mut stmt = conn.prepare(
-            "SELECT id FROM podcasts WHERE url = ?").unwrap();
+        let mut stmt = conn
+            .prepare("SELECT id FROM podcasts WHERE url = ?")
+            .unwrap();
         let pod_id = stmt
-            .query_row::<i64,_,_>(params![podcast.url], |row| row.get(0))
+            .query_row::<i64, _, _>(params![podcast.url], |row| row.get(0))
             .unwrap();
         let mut ep_ids = Vec::new();
         for ep in podcast.episodes.iter().rev() {
@@ -207,9 +213,11 @@ impl Database {
     }
 
     /// Inserts a podcast episode into the database.
-    pub fn insert_episode(&self, podcast_id: i64, episode: &EpisodeNoId) ->
-        Result<i64, Box<dyn std::error::Error>> {
-
+    pub fn insert_episode(
+        &self,
+        podcast_id: i64,
+        episode: &EpisodeNoId,
+    ) -> Result<i64, Box<dyn std::error::Error>> {
         let conn = self.conn.as_ref().unwrap();
 
         let pubdate = match episode.pubdate {
@@ -230,24 +238,23 @@ impl Database {
                 episode.duration,
                 false,
                 false,
-            ]
+            ],
         )?;
         return Ok(conn.last_insert_rowid());
     }
 
     /// Inserts a filepath to a downloaded episode.
-    pub fn insert_file(&self, episode_id: i64, path: &PathBuf) -> 
-        Result<(), Box<dyn std::error::Error>> {
-
+    pub fn insert_file(
+        &self,
+        episode_id: i64,
+        path: &PathBuf,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let conn = self.conn.as_ref().unwrap();
 
         let _ = conn.execute(
             "INSERT INTO files (episode_id, path)
                 VALUES (?, ?);",
-            params![
-                episode_id,
-                path.to_str(),
-            ]
+            params![episode_id, path.to_str(),],
         )?;
         return Ok(());
     }
@@ -256,10 +263,12 @@ impl Database {
     /// user has chosen to delete the file.
     pub fn remove_file(&self, episode_id: i64) {
         let conn = self.conn.as_ref().unwrap();
-        let _ = conn.execute(
-            "DELETE FROM files WHERE episode_id = ?;",
-            params![episode_id]
-        ).unwrap();
+        let _ = conn
+            .execute(
+                "DELETE FROM files WHERE episode_id = ?;",
+                params![episode_id],
+            )
+            .unwrap();
     }
 
     /// Removes all file listings for the selected episode ids.
@@ -267,15 +276,15 @@ impl Database {
         let conn = self.conn.as_ref().unwrap();
 
         // convert list of episode ids into a comma-separated String
-        let episode_list: Vec<String> = episode_ids.iter()
-            .map(|x| x.to_string())
-            .collect();
+        let episode_list: Vec<String> = episode_ids.iter().map(|x| x.to_string()).collect();
         let episodes = episode_list.join(", ");
 
-        let _ = conn.execute(
-            "DELETE FROM files WHERE episode_id = (?);",
-            params![episodes]
-        ).unwrap();
+        let _ = conn
+            .execute(
+                "DELETE FROM files WHERE episode_id = (?);",
+                params![episodes],
+            )
+            .unwrap();
     }
 
     /// Removes a podcast, all episodes, and files from the database.
@@ -285,16 +294,19 @@ impl Database {
         // and `files` tables, all associated episodes for this podcast
         // will also be deleted, and all associated file entries for
         // those episodes as well.
-        let _ = conn.execute(
-            "DELETE FROM podcasts WHERE id = ?;",
-            params![podcast_id]
-        ).unwrap();
+        let _ = conn
+            .execute("DELETE FROM podcasts WHERE id = ?;", params![podcast_id])
+            .unwrap();
     }
 
     /// Updates an existing podcast in the database, where metadata is
     /// changed if necessary, and episodes are updated (modified episodes
     /// are updated, new episodes are inserted).
-    pub fn update_podcast(&self, pod_id: i64, podcast: PodcastNoId) -> Result<SyncResult, Box<dyn std::error::Error>> {
+    pub fn update_podcast(
+        &self,
+        pod_id: i64,
+        podcast: PodcastNoId,
+    ) -> Result<SyncResult, Box<dyn std::error::Error>> {
         let conn = self.conn.as_ref().unwrap();
         let _ = conn.execute(
             "UPDATE podcasts SET title = ?, url = ?, description = ?,
@@ -308,11 +320,10 @@ impl Database {
                 podcast.explicit,
                 podcast.last_checked.timestamp(),
                 pod_id,
-            ]
+            ],
         )?;
 
-        let result = self.update_episodes(
-            pod_id, podcast.episodes);
+        let result = self.update_episodes(pod_id, podcast.episodes);
         return Ok(result);
     }
 
@@ -348,7 +359,7 @@ impl Database {
                 matching += (new_ep.url == old_ep.url) as i32;
 
                 let mut pd_match = false;
-                if let Some(pd) = new_pd { 
+                if let Some(pd) = new_pd {
                     if let Some(old_pd) = old_ep.pubdate {
                         matching += (pd == old_pd.timestamp()) as i32;
                         pd_match = true;
@@ -360,11 +371,12 @@ impl Database {
 
                     // if we have a matching episode, check whether there
                     // are details to update
-                    if !(new_ep.title == old_ep.title &&
-                         new_ep.url == old_ep.url &&
-                         new_ep.description == old_ep.description &&
-                         new_ep.duration == old_ep.duration &&
-                         pd_match) {
+                    if !(new_ep.title == old_ep.title
+                        && new_ep.url == old_ep.url
+                        && new_ep.description == old_ep.description
+                        && new_ep.duration == old_ep.duration
+                        && pd_match)
+                    {
                         update = true;
                     }
                     break;
@@ -374,22 +386,24 @@ impl Database {
             match existing_id {
                 Some(id) => {
                     if update {
-                        let _ = conn.execute(
-                            "UPDATE episodes SET title = ?, url = ?,
+                        let _ = conn
+                            .execute(
+                                "UPDATE episodes SET title = ?, url = ?,
                                 description = ?, pubdate = ?, duration = ?
                                 WHERE id = ?;",
-                            params![
-                                new_ep.title,
-                                new_ep.url,
-                                new_ep.description,
-                                new_pd,
-                                new_ep.duration,
-                                id,
-                            ]
-                        ).unwrap();
+                                params![
+                                    new_ep.title,
+                                    new_ep.url,
+                                    new_ep.description,
+                                    new_pd,
+                                    new_ep.duration,
+                                    id,
+                                ],
+                            )
+                            .unwrap();
                         update_ep.push(id);
                     }
-                },
+                }
                 None => {
                     let id = self.insert_episode(podcast_id, &new_ep).unwrap();
                     insert_ep.push(id);
@@ -398,7 +412,7 @@ impl Database {
         }
         return SyncResult {
             added: insert_ep,
-            updated: update_ep
+            updated: update_ep,
         };
     }
 
@@ -406,10 +420,12 @@ impl Database {
     pub fn set_played_status(&self, episode_id: i64, played: bool) {
         let conn = self.conn.as_ref().unwrap();
 
-        let _ = conn.execute(
-            "UPDATE episodes SET played = ? WHERE id = ?;",
-            params![played, episode_id]
-        ).unwrap();
+        let _ = conn
+            .execute(
+                "UPDATE episodes SET played = ? WHERE id = ?;",
+                params![played, episode_id],
+            )
+            .unwrap();
     }
 
     /// Updates an episode to "remove" it by hiding it. "Removed"
@@ -418,40 +434,43 @@ impl Database {
     pub fn hide_episode(&self, episode_id: i64, hide: bool) {
         let conn = self.conn.as_ref().unwrap();
 
-        let _ = conn.execute(
-            "UPDATE episodes SET hidden = ? WHERE id = ?;",
-            params![hide, episode_id]
-        ).unwrap();
+        let _ = conn
+            .execute(
+                "UPDATE episodes SET hidden = ? WHERE id = ?;",
+                params![hide, episode_id],
+            )
+            .unwrap();
     }
 
     /// Generates list of all podcasts in database.
     /// TODO: This should probably use a JOIN statement instead.
     pub fn get_podcasts(&self) -> Vec<Podcast> {
         if let Some(conn) = &self.conn {
-            let mut stmt = conn.prepare(
-                "SELECT * FROM podcasts;").unwrap();
-            let podcast_iter = stmt.query_map(params![], |row| {
-                let pod_id = row.get("id")?;
-                let episodes = self.get_episodes(pod_id);
+            let mut stmt = conn.prepare("SELECT * FROM podcasts;").unwrap();
+            let podcast_iter = stmt
+                .query_map(params![], |row| {
+                    let pod_id = row.get("id")?;
+                    let episodes = self.get_episodes(pod_id);
 
-                // create a sort title that is lowercased and removes
-                // articles from the beginning
-                let title: String = row.get("title")?;
-                let title_lower = title.to_lowercase();
-                let sort_title = RE_ARTICLES.replace(&title_lower, "").to_string();
+                    // create a sort title that is lowercased and removes
+                    // articles from the beginning
+                    let title: String = row.get("title")?;
+                    let title_lower = title.to_lowercase();
+                    let sort_title = RE_ARTICLES.replace(&title_lower, "").to_string();
 
-                Ok(Podcast {
-                    id: pod_id,
-                    title: title,
-                    sort_title: sort_title,
-                    url: row.get("url")?,
-                    description: row.get("description")?,
-                    author: row.get("author")?,
-                    explicit: row.get("explicit")?,
-                    last_checked: convert_date(row.get("last_checked")).unwrap(),
-                    episodes: LockVec::new(episodes),
+                    Ok(Podcast {
+                        id: pod_id,
+                        title: title,
+                        sort_title: sort_title,
+                        url: row.get("url")?,
+                        description: row.get("description")?,
+                        author: row.get("author")?,
+                        explicit: row.get("explicit")?,
+                        last_checked: convert_date(row.get("last_checked")).unwrap(),
+                        episodes: LockVec::new(episodes),
+                    })
                 })
-            }).unwrap();
+                .unwrap();
             let mut podcasts = Vec::new();
             for pc in podcast_iter {
                 podcasts.push(pc.unwrap());
@@ -467,29 +486,34 @@ impl Database {
     /// Generates list of episodes for a given podcast.
     pub fn get_episodes(&self, pod_id: i64) -> Vec<Episode> {
         if let Some(conn) = &self.conn {
-            let mut stmt = conn.prepare(
-                "SELECT * FROM episodes
+            let mut stmt = conn
+                .prepare(
+                    "SELECT * FROM episodes
                     LEFT JOIN files ON episodes.id = files.episode_id
                     WHERE episodes.podcast_id = ?
                     AND episodes.hidden = 0
-                    ORDER BY pubdate DESC;").unwrap();
-            let episode_iter = stmt.query_map(params![pod_id], |row| {
-                let path = match row.get::<&str, String>("path") {
-                    Ok(val) => Some(PathBuf::from(val)),
-                    Err(_) => None,
-                };
-                Ok(Episode {
-                    id: row.get("id")?,
-                    pod_id: row.get("podcast_id")?,
-                    title: row.get("title")?,
-                    url: row.get("url")?,
-                    description: row.get("description")?,
-                    pubdate: convert_date(row.get("pubdate")),
-                    duration: row.get("duration")?,
-                    path: path,
-                    played: row.get("played")?,
+                    ORDER BY pubdate DESC;",
+                )
+                .unwrap();
+            let episode_iter = stmt
+                .query_map(params![pod_id], |row| {
+                    let path = match row.get::<&str, String>("path") {
+                        Ok(val) => Some(PathBuf::from(val)),
+                        Err(_) => None,
+                    };
+                    Ok(Episode {
+                        id: row.get("id")?,
+                        pod_id: row.get("podcast_id")?,
+                        title: row.get("title")?,
+                        url: row.get("url")?,
+                        description: row.get("description")?,
+                        pubdate: convert_date(row.get("pubdate")),
+                        duration: row.get("duration")?,
+                        path: path,
+                        played: row.get("played")?,
+                    })
                 })
-            }).unwrap();
+                .unwrap();
             let mut episodes = Vec::new();
             for ep in episode_iter {
                 episodes.push(ep.unwrap());
@@ -510,18 +534,13 @@ impl Database {
     }
 }
 
-
 /// Helper function converting an (optional) Unix timestamp to a
 /// DateTime<Utc> object
-fn convert_date(result: Result<i64, rusqlite::Error>) ->
-    Option<DateTime<Utc>> {
-
+fn convert_date(result: Result<i64, rusqlite::Error>) -> Option<DateTime<Utc>> {
     return match result {
-        Ok(timestamp) => {
-            match NaiveDateTime::from_timestamp_opt(timestamp, 0) {
-                Some(ndt) => Some(DateTime::from_utc(ndt, Utc)),
-                None => None,
-            }
+        Ok(timestamp) => match NaiveDateTime::from_timestamp_opt(timestamp, 0) {
+            Some(ndt) => Some(DateTime::from_utc(ndt, Utc)),
+            None => None,
         },
         Err(_) => None,
     };

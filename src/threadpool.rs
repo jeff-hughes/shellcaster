@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex, mpsc};
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
 // Much of the threadpool implementation here was taken directly from
@@ -6,7 +6,7 @@ use std::thread;
 // and https://doc.rust-lang.org/book/ch20-03-graceful-shutdown-and-cleanup.html
 
 /// Manages a threadpool of a given size, sending jobs to workers as
-/// necessary. Implements Drop trait to allow threads to complete 
+/// necessary. Implements Drop trait to allow threads to complete
 /// their current jobs before being stopped.
 pub struct Threadpool {
     workers: Vec<Worker>,
@@ -34,8 +34,9 @@ impl Threadpool {
     /// Adds a new job to the threadpool, passing closure to first
     /// available worker.
     pub fn execute<F>(&self, func: F)
-        where F: FnOnce() + Send + 'static {
-
+    where
+        F: FnOnce() + Send + 'static,
+    {
         let job = Box::new(func);
         self.sender.send(JobMessage::NewJob(job)).unwrap();
     }

@@ -1,6 +1,6 @@
+use serde::Deserialize;
 use std::fs::File;
 use std::io::Read;
-use serde::Deserialize;
 use std::path::PathBuf;
 
 use crate::keymap::{Keybindings, UserAction};
@@ -25,8 +25,7 @@ pub const EPISODE_PUBDATE_LENGTH: usize = 60;
 // display the details panel
 pub const DETAILS_PANEL_LENGTH: i32 = 135;
 
-
-/// Holds information about user configuration of program. 
+/// Holds information about user configuration of program.
 #[derive(Debug, Clone)]
 pub struct Config {
     pub download_path: PathBuf,
@@ -38,8 +37,7 @@ pub struct Config {
 
 /// A temporary struct used to deserialize data from the TOML configuration
 /// file. Will be converted into Config struct.
-#[derive(Debug)]
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct ConfigFromToml {
     download_path: Option<String>,
     play_command: Option<String>,
@@ -50,8 +48,7 @@ struct ConfigFromToml {
 
 /// A temporary struct used to deserialize keybinding data from the TOML
 /// configuration file.
-#[derive(Debug)]
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct KeybindingsFromToml {
     left: Option<Vec<String>>,
     right: Option<Vec<String>>,
@@ -72,7 +69,6 @@ struct KeybindingsFromToml {
     quit: Option<Vec<String>>,
 }
 
-
 impl Config {
     /// Given a file path, this reads a TOML config file and returns a
     /// Config struct with keybindings, etc. Inserts defaults if config
@@ -87,7 +83,7 @@ impl Config {
                     .expect("Error reading config.toml. Please ensure file is readable.");
                 config_toml = toml::from_str(&config_string)
                     .expect("Error parsing config.toml. Please check file syntax.");
-            },
+            }
             Err(_) => {
                 // if we can't find the file, set everything to empty
                 // so we it will use the defaults for everything
@@ -131,27 +127,91 @@ impl Config {
 fn config_with_defaults(config_toml: &ConfigFromToml) -> Config {
     // specify all default keybindings for actions
     let action_map: Vec<(&Option<Vec<String>>, UserAction, Vec<String>)> = vec![
-        (&config_toml.keybindings.left, UserAction::Left, vec!["Left".to_string(), "h".to_string()]),
-        (&config_toml.keybindings.right, UserAction::Right, vec!["Right".to_string(), "l".to_string()]),
-        (&config_toml.keybindings.up, UserAction::Up, vec!["Up".to_string(), "k".to_string()]),
-        (&config_toml.keybindings.down, UserAction::Down, vec!["Down".to_string(), "j".to_string()]),
-
-        (&config_toml.keybindings.add_feed, UserAction::AddFeed, vec!["a".to_string()]),
-        (&config_toml.keybindings.sync, UserAction::Sync, vec!["s".to_string()]),
-        (&config_toml.keybindings.sync_all, UserAction::SyncAll, vec!["S".to_string()]),
-
-        (&config_toml.keybindings.play, UserAction::Play, vec!["Enter".to_string(), "p".to_string()]),
-        (&config_toml.keybindings.mark_played, UserAction::MarkPlayed, vec!["m".to_string()]),
-        (&config_toml.keybindings.mark_all_played, UserAction::MarkAllPlayed, vec!["M".to_string()]),
-
-        (&config_toml.keybindings.download, UserAction::Download, vec!["d".to_string()]),
-        (&config_toml.keybindings.download_all, UserAction::DownloadAll, vec!["D".to_string()]),
-        (&config_toml.keybindings.delete, UserAction::Delete, vec!["x".to_string()]),
-        (&config_toml.keybindings.delete_all, UserAction::DeleteAll, vec!["X".to_string()]),
-        (&config_toml.keybindings.remove, UserAction::Remove, vec!["r".to_string()]),
-        (&config_toml.keybindings.remove_all, UserAction::RemoveAll, vec!["R".to_string()]),
-
-        (&config_toml.keybindings.quit, UserAction::Quit, vec!["q".to_string()]),
+        (
+            &config_toml.keybindings.left,
+            UserAction::Left,
+            vec!["Left".to_string(), "h".to_string()],
+        ),
+        (
+            &config_toml.keybindings.right,
+            UserAction::Right,
+            vec!["Right".to_string(), "l".to_string()],
+        ),
+        (
+            &config_toml.keybindings.up,
+            UserAction::Up,
+            vec!["Up".to_string(), "k".to_string()],
+        ),
+        (
+            &config_toml.keybindings.down,
+            UserAction::Down,
+            vec!["Down".to_string(), "j".to_string()],
+        ),
+        (
+            &config_toml.keybindings.add_feed,
+            UserAction::AddFeed,
+            vec!["a".to_string()],
+        ),
+        (
+            &config_toml.keybindings.sync,
+            UserAction::Sync,
+            vec!["s".to_string()],
+        ),
+        (
+            &config_toml.keybindings.sync_all,
+            UserAction::SyncAll,
+            vec!["S".to_string()],
+        ),
+        (
+            &config_toml.keybindings.play,
+            UserAction::Play,
+            vec!["Enter".to_string(), "p".to_string()],
+        ),
+        (
+            &config_toml.keybindings.mark_played,
+            UserAction::MarkPlayed,
+            vec!["m".to_string()],
+        ),
+        (
+            &config_toml.keybindings.mark_all_played,
+            UserAction::MarkAllPlayed,
+            vec!["M".to_string()],
+        ),
+        (
+            &config_toml.keybindings.download,
+            UserAction::Download,
+            vec!["d".to_string()],
+        ),
+        (
+            &config_toml.keybindings.download_all,
+            UserAction::DownloadAll,
+            vec!["D".to_string()],
+        ),
+        (
+            &config_toml.keybindings.delete,
+            UserAction::Delete,
+            vec!["x".to_string()],
+        ),
+        (
+            &config_toml.keybindings.delete_all,
+            UserAction::DeleteAll,
+            vec!["X".to_string()],
+        ),
+        (
+            &config_toml.keybindings.remove,
+            UserAction::Remove,
+            vec!["r".to_string()],
+        ),
+        (
+            &config_toml.keybindings.remove_all,
+            UserAction::RemoveAll,
+            vec!["R".to_string()],
+        ),
+        (
+            &config_toml.keybindings.quit,
+            UserAction::Quit,
+            vec!["q".to_string()],
+        ),
     ];
 
     // for each action, if user preference is set, use that, otherwise,
@@ -166,9 +226,8 @@ fn config_with_defaults(config_toml: &ConfigFromToml) -> Config {
 
     // paths are set by user, or they resolve to OS-specific path as
     // provided by dirs crate
-    let download_path = parse_create_dir(
-        config_toml.download_path.as_deref(),
-        dirs::data_local_dir());
+    let download_path =
+        parse_create_dir(config_toml.download_path.as_deref(), dirs::data_local_dir());
 
     let play_command = match config_toml.play_command.as_deref() {
         Some(cmd) => cmd.to_string(),
@@ -195,7 +254,6 @@ fn config_with_defaults(config_toml: &ConfigFromToml) -> Config {
         keybindings: keymap,
     };
 }
-
 
 /// Helper function that takes an (optionally specified) user directory
 /// and an (OS-dependent) default directory, expands any environment
