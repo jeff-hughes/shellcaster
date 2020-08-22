@@ -37,7 +37,9 @@ impl Database {
         db_path.push("data.db");
         match Connection::open(db_path) {
             Ok(conn) => {
-                let db_conn = Database { conn: Some(conn) };
+                let db_conn = Database {
+                    conn: Some(conn),
+                };
                 db_conn.create();
 
                 {
@@ -178,7 +180,8 @@ impl Database {
     pub fn insert_podcast(
         &self,
         podcast: PodcastNoId,
-    ) -> Result<SyncResult, Box<dyn std::error::Error>> {
+    ) -> Result<SyncResult, Box<dyn std::error::Error>>
+    {
         let conn = self.conn.as_ref().unwrap();
         let _ = conn.execute(
             "INSERT INTO podcasts (title, url, description, author,
@@ -217,7 +220,8 @@ impl Database {
         &self,
         podcast_id: i64,
         episode: &EpisodeNoId,
-    ) -> Result<i64, Box<dyn std::error::Error>> {
+    ) -> Result<i64, Box<dyn std::error::Error>>
+    {
         let conn = self.conn.as_ref().unwrap();
 
         let pubdate = match episode.pubdate {
@@ -248,7 +252,8 @@ impl Database {
         &self,
         episode_id: i64,
         path: &PathBuf,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Box<dyn std::error::Error>>
+    {
         let conn = self.conn.as_ref().unwrap();
 
         let _ = conn.execute(
@@ -264,10 +269,9 @@ impl Database {
     pub fn remove_file(&self, episode_id: i64) {
         let conn = self.conn.as_ref().unwrap();
         let _ = conn
-            .execute(
-                "DELETE FROM files WHERE episode_id = ?;",
-                params![episode_id],
-            )
+            .execute("DELETE FROM files WHERE episode_id = ?;", params![
+                episode_id
+            ])
             .unwrap();
     }
 
@@ -280,10 +284,9 @@ impl Database {
         let episodes = episode_list.join(", ");
 
         let _ = conn
-            .execute(
-                "DELETE FROM files WHERE episode_id = (?);",
-                params![episodes],
-            )
+            .execute("DELETE FROM files WHERE episode_id = (?);", params![
+                episodes
+            ])
             .unwrap();
     }
 
@@ -306,7 +309,8 @@ impl Database {
         &self,
         pod_id: i64,
         podcast: PodcastNoId,
-    ) -> Result<SyncResult, Box<dyn std::error::Error>> {
+    ) -> Result<SyncResult, Box<dyn std::error::Error>>
+    {
         let conn = self.conn.as_ref().unwrap();
         let _ = conn.execute(
             "UPDATE podcasts SET title = ?, url = ?, description = ?,
@@ -421,10 +425,9 @@ impl Database {
         let conn = self.conn.as_ref().unwrap();
 
         let _ = conn
-            .execute(
-                "UPDATE episodes SET played = ? WHERE id = ?;",
-                params![played, episode_id],
-            )
+            .execute("UPDATE episodes SET played = ? WHERE id = ?;", params![
+                played, episode_id
+            ])
             .unwrap();
     }
 
@@ -435,10 +438,9 @@ impl Database {
         let conn = self.conn.as_ref().unwrap();
 
         let _ = conn
-            .execute(
-                "UPDATE episodes SET hidden = ? WHERE id = ?;",
-                params![hide, episode_id],
-            )
+            .execute("UPDATE episodes SET hidden = ? WHERE id = ?;", params![
+                hide, episode_id
+            ])
             .unwrap();
     }
 

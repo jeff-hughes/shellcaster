@@ -64,6 +64,8 @@ pub fn export(podcasts: Vec<Podcast>) -> OPML {
         });
     }
 
-    opml.body = Body { outlines: outlines };
+    opml.body = Body {
+        outlines: outlines,
+    };
     return opml;
 }

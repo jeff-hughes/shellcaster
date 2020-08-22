@@ -257,8 +257,7 @@ pub struct EpisodeNoId {
 /// Arc<Mutex<_>>.
 #[derive(Debug)]
 pub struct LockVec<T>
-where
-    T: Clone + Menuable,
+where T: Clone + Menuable
 {
     data: Arc<Mutex<HashMap<i64, T>>>,
     order: Arc<Mutex<Vec<i64>>>,
@@ -320,9 +319,7 @@ impl<T: Clone + Menuable> LockVec<T> {
     /// alive, the function returns a Vec of the collected results,
     /// rather than an iterator.
     pub fn map<B, F>(&self, mut f: F) -> Vec<B>
-    where
-        F: FnMut(&T) -> B,
-    {
+    where F: FnMut(&T) -> B {
         let (map, order) = self.borrow();
         return order.iter().map(|id| f(map.get(id).unwrap())).collect();
     }
@@ -330,9 +327,7 @@ impl<T: Clone + Menuable> LockVec<T> {
     /// Maps a closure to a single element in the LockVec, specified by
     /// `id`. If there is no element `id`, this returns None.
     pub fn map_single<B, F>(&self, id: i64, f: F) -> Option<B>
-    where
-        F: FnOnce(&T) -> B,
-    {
+    where F: FnOnce(&T) -> B {
         let borrowed = self.borrow_map();
         return match borrowed.get(&id) {
             Some(item) => Some(f(item)),
@@ -344,9 +339,7 @@ impl<T: Clone + Menuable> LockVec<T> {
     /// `index` (position order). If there is no element at that index,
     /// this returns None.
     pub fn map_single_by_index<B, F>(&self, index: usize, f: F) -> Option<B>
-    where
-        F: FnOnce(&T) -> B,
-    {
+    where F: FnOnce(&T) -> B {
         let order = self.borrow_order();
         return match order.get(index) {
             Some(id) => self.map_single(*id, f),
@@ -360,9 +353,7 @@ impl<T: Clone + Menuable> LockVec<T> {
     /// alive, the function returns a Vec of the collected results,
     /// rather than an iterator.
     pub fn filter_map<B, F>(&self, mut f: F) -> Vec<B>
-    where
-        F: FnMut(&T) -> Option<B>,
-    {
+    where F: FnMut(&T) -> Option<B> {
         let (map, order) = self.borrow();
         return order
             .iter()

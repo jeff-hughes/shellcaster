@@ -34,9 +34,7 @@ impl Threadpool {
     /// Adds a new job to the threadpool, passing closure to first
     /// available worker.
     pub fn execute<F>(&self, func: F)
-    where
-        F: FnOnce() + Send + 'static,
-    {
+    where F: FnOnce() + Send + 'static {
         let job = Box::new(func);
         self.sender.send(JobMessage::NewJob(job)).unwrap();
     }

@@ -440,14 +440,11 @@ impl MainController {
 
         if !ep_data.is_empty() {
             // add directory for podcast, create if it does not exist
-            let dir_name = sanitize_with_options(
-                &pod_title,
-                Options {
-                    truncate: true,
-                    windows: true, // for simplicity, we'll just use Windows-friendly paths for everyone
-                    replacement: "",
-                },
-            );
+            let dir_name = sanitize_with_options(&pod_title, Options {
+                truncate: true,
+                windows: true, // for simplicity, we'll just use Windows-friendly paths for everyone
+                replacement: "",
+            });
             match self.create_podcast_dir(dir_name) {
                 Ok(path) => {
                     for ep in ep_data.iter() {

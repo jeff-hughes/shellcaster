@@ -92,7 +92,8 @@ impl<'a> UI<'a> {
         items: LockVec<Podcast>,
         rx_from_main: mpsc::Receiver<MainMessage>,
         tx_to_main: mpsc::Sender<Message>,
-    ) -> thread::JoinHandle<()> {
+    ) -> thread::JoinHandle<()>
+    {
         return thread::spawn(move || {
             let mut ui = UI::new(&config, &items);
             ui.init();
@@ -724,7 +725,8 @@ impl<'a> UI<'a> {
         n_col: i32,
         start_y: i32,
         start_x: i32,
-    ) -> Panel {
+    ) -> Panel
+    {
         return Panel::new(
             colors,
             "Details".to_string(),

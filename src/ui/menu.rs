@@ -21,8 +21,7 @@ use crate::types::*;
 ///   0 and (n_row - 1)
 #[derive(Debug)]
 pub struct Menu<T>
-where
-    T: Clone + Menuable,
+where T: Clone + Menuable
 {
     pub panel: Panel,
     pub items: LockVec<T>,
