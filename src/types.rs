@@ -349,7 +349,7 @@ impl<T: Clone + Menuable> LockVec<T> {
     {
         let order = self.borrow_order();
         return match order.get(index) {
-            Some(id) => self.map_single(id.clone(), f),
+            Some(id) => self.map_single(*id, f),
             None => None,
         };
     }

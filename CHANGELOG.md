@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.0.1 (2020-08-18)
+- This is a patch release to fix some minor bugs
+- Bug fixes:
+    - Better tracking of current downloads to avoid re-downloading the same episode twice
+    - Fix decoding of HTML entities in episode descriptions to avoid getting cut off in certain cases
+    - Properly import OPML v1.0 files
+    - Correctly segment titles with Unicode letters
+
 ## v1.0.0 (2020-08-13)
 - Adjusted the criteria for checking existing episodes when syncing, which results in a dramatic speedup in the syncing process
 - New command line options:
