@@ -104,6 +104,7 @@ fn get_feed_data(
     };
 }
 
+
 /// Given a Channel with the RSS feed data, this parses the data about a
 /// podcast and its episodes and returns a Podcast. There are existing
 /// specifications for podcast RSS feeds that a feed should adhere to, but
@@ -280,6 +281,7 @@ fn regex_to_int(re_match: Match) -> Result<i32, std::num::ParseIntError> {
     let mstr = re_match.as_str();
     mstr.parse::<i32>()
 }
+
 
 // TESTS -----------------------------------------------------------------
 #[cfg(test)]

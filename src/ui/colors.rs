@@ -32,6 +32,7 @@ impl Colors {
     }
 }
 
+
 /// Sets up hashmap for ColorTypes in app, initiates color palette, and
 /// sets up ncurses color pairs.
 pub fn set_colors() -> Colors {

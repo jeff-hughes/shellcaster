@@ -122,6 +122,7 @@ fn main() {
         process::exit(1);
     }
 
+
     match args.subcommand() {
         // SYNC SUBCOMMAND ----------------------------------------------
         ("sync", Some(sub_args)) => {
@@ -150,6 +151,7 @@ fn main() {
     }
 }
 
+
 /// Gets the path to the config file if one is specified in the command-
 /// line arguments, or else returns the default config path for the
 /// user's operating system.
@@ -174,6 +176,7 @@ fn get_config_path(config: Option<&str>) -> Option<PathBuf> {
         }
     };
 }
+
 
 /// Synchronizes RSS feed data for all podcasts, without setting up a UI.
 fn sync_podcasts(db_path: &PathBuf, config: Config, args: &clap::ArgMatches) {
@@ -239,6 +242,7 @@ fn sync_podcasts(db_path: &PathBuf, config: Config, args: &clap::ArgMatches) {
         }
     }
 }
+
 
 /// Imports a list of podcasts from OPML format, either reading from a
 /// file or from stdin. If the `replace` flag is set, this replaces all
@@ -372,6 +376,7 @@ fn import(db_path: &PathBuf, config: Config, args: &clap::ArgMatches) {
         }
     }
 }
+
 
 /// Exports all podcasts to OPML format, either printing to stdout or
 /// exporting to a file.

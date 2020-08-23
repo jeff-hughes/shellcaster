@@ -25,6 +25,7 @@ pub const EPISODE_PUBDATE_LENGTH: usize = 60;
 // display the details panel
 pub const DETAILS_PANEL_LENGTH: i32 = 135;
 
+
 /// Holds information about user configuration of program.
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -68,6 +69,7 @@ struct KeybindingsFromToml {
     remove_all: Option<Vec<String>>,
     quit: Option<Vec<String>>,
 }
+
 
 impl Config {
     /// Given a file path, this reads a TOML config file and returns a
@@ -126,79 +128,29 @@ impl Config {
 #[allow(clippy::type_complexity)]
 fn config_with_defaults(config_toml: &ConfigFromToml) -> Config {
     // specify all default keybindings for actions
+    #[rustfmt::skip]
     let action_map: Vec<(&Option<Vec<String>>, UserAction, Vec<String>)> = vec![
-        (&config_toml.keybindings.left, UserAction::Left, vec![
-            "Left".to_string(),
-            "h".to_string(),
-        ]),
-        (&config_toml.keybindings.right, UserAction::Right, vec![
-            "Right".to_string(),
-            "l".to_string(),
-        ]),
-        (&config_toml.keybindings.up, UserAction::Up, vec![
-            "Up".to_string(),
-            "k".to_string(),
-        ]),
-        (&config_toml.keybindings.down, UserAction::Down, vec![
-            "Down".to_string(),
-            "j".to_string(),
-        ]),
-        (
-            &config_toml.keybindings.add_feed,
-            UserAction::AddFeed,
-            vec!["a".to_string()],
-        ),
-        (&config_toml.keybindings.sync, UserAction::Sync, vec![
-            "s".to_string()
-        ]),
-        (
-            &config_toml.keybindings.sync_all,
-            UserAction::SyncAll,
-            vec!["S".to_string()],
-        ),
-        (&config_toml.keybindings.play, UserAction::Play, vec![
-            "Enter".to_string(),
-            "p".to_string(),
-        ]),
-        (
-            &config_toml.keybindings.mark_played,
-            UserAction::MarkPlayed,
-            vec!["m".to_string()],
-        ),
-        (
-            &config_toml.keybindings.mark_all_played,
-            UserAction::MarkAllPlayed,
-            vec!["M".to_string()],
-        ),
-        (
-            &config_toml.keybindings.download,
-            UserAction::Download,
-            vec!["d".to_string()],
-        ),
-        (
-            &config_toml.keybindings.download_all,
-            UserAction::DownloadAll,
-            vec!["D".to_string()],
-        ),
-        (&config_toml.keybindings.delete, UserAction::Delete, vec![
-            "x".to_string(),
-        ]),
-        (
-            &config_toml.keybindings.delete_all,
-            UserAction::DeleteAll,
-            vec!["X".to_string()],
-        ),
-        (&config_toml.keybindings.remove, UserAction::Remove, vec![
-            "r".to_string(),
-        ]),
-        (
-            &config_toml.keybindings.remove_all,
-            UserAction::RemoveAll,
-            vec!["R".to_string()],
-        ),
-        (&config_toml.keybindings.quit, UserAction::Quit, vec![
-            "q".to_string()
-        ]),
+        (&config_toml.keybindings.left, UserAction::Left, vec!["Left".to_string(), "h".to_string()]),
+        (&config_toml.keybindings.right, UserAction::Right, vec!["Right".to_string(), "l".to_string()]),
+        (&config_toml.keybindings.up, UserAction::Up, vec!["Up".to_string(), "k".to_string()]),
+        (&config_toml.keybindings.down, UserAction::Down, vec!["Down".to_string(), "j".to_string()]),
+
+        (&config_toml.keybindings.add_feed, UserAction::AddFeed, vec!["a".to_string()]),
+        (&config_toml.keybindings.sync, UserAction::Sync, vec!["s".to_string()]),
+        (&config_toml.keybindings.sync_all, UserAction::SyncAll, vec!["S".to_string()]),
+
+        (&config_toml.keybindings.play, UserAction::Play, vec!["Enter".to_string(), "p".to_string()]),
+        (&config_toml.keybindings.mark_played, UserAction::MarkPlayed, vec!["m".to_string()]),
+        (&config_toml.keybindings.mark_all_played, UserAction::MarkAllPlayed, vec!["M".to_string()]),
+
+        (&config_toml.keybindings.download, UserAction::Download, vec!["d".to_string()]),
+        (&config_toml.keybindings.download_all, UserAction::DownloadAll, vec!["D".to_string()]),
+        (&config_toml.keybindings.delete, UserAction::Delete, vec!["x".to_string()]),
+        (&config_toml.keybindings.delete_all, UserAction::DeleteAll, vec!["X".to_string()]),
+        (&config_toml.keybindings.remove, UserAction::Remove, vec!["r".to_string()]),
+        (&config_toml.keybindings.remove_all, UserAction::RemoveAll, vec!["R".to_string()]),
+
+        (&config_toml.keybindings.quit, UserAction::Quit, vec!["q".to_string()]),
     ];
 
     // for each action, if user preference is set, use that, otherwise,
@@ -241,6 +193,7 @@ fn config_with_defaults(config_toml: &ConfigFromToml) -> Config {
         keybindings: keymap,
     };
 }
+
 
 /// Helper function that takes an (optionally specified) user directory
 /// and an (OS-dependent) default directory, expands any environment

@@ -68,6 +68,8 @@ impl Keybindings {
         }
     }
 
+    /// Returns a Vec with all of the keys mapped to a particular user
+    /// action.
     pub fn keys_for_action(&self, action: UserAction) -> Vec<String> {
         return self
             .map
@@ -83,11 +85,11 @@ impl Keybindings {
     }
 }
 
-/// Helper function converting a pancurses Input object to a unique string
-/// representing that input.
-/// This function is a bit ridiculous, given that 95% of keyboards probably
-/// don't even have half these special keys, but at any rate...they're
-/// mapped, if anyone wants them.
+/// Helper function converting a pancurses Input object to a unique
+/// string representing that input.
+/// This function is a bit ridiculous, given that 95% of keyboards
+/// probably don't even have half these special keys, but at any rate...
+/// they're mapped, if anyone wants them.
 pub fn input_to_str(input: Input) -> Option<String> {
     let mut tmp = [0; 4];
     let code = match input {

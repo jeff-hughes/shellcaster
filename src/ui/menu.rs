@@ -218,6 +218,7 @@ impl<T: Clone + Menuable> Menu<T> {
     }
 }
 
+
 impl Menu<Podcast> {
     /// Returns a cloned reference to the list of episodes from the
     /// currently selected podcast.
@@ -267,7 +268,8 @@ impl Menu<Episode> {
     }
 }
 
-// TESTS -----------------------------------------------------------------
+
+// TESTS ----------------------------------------------------------------
 #[cfg(test)]
 mod tests {
     use super::*;

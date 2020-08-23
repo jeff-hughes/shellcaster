@@ -51,6 +51,7 @@ pub fn download_list(
     }
 }
 
+
 /// Downloads a file to a local filepath, returning DownloadMsg variant
 /// indicating success or failure.
 fn download_file(ep_data: EpData, dest: PathBuf, mut max_retries: usize) -> DownloadMsg {

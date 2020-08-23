@@ -36,6 +36,7 @@ lazy_static! {
     static ref RE_MULT_LINE_BREAKS: Regex = Regex::new(r"((\r\n)|\r|\n){3,}").unwrap();
 }
 
+
 /// Enum used for communicating back to the main controller after user
 /// input has been captured by the UI. usize values always represent the
 /// selected podcast, and (if applicable), the selected episode, in that
@@ -65,6 +66,7 @@ enum ActiveMenu {
     PodcastMenu,
     EpisodeMenu,
 }
+
 
 /// Struct containing all interface elements of the TUI. Functionally, it
 /// encapsulates the pancurses windows, and holds data about the size of

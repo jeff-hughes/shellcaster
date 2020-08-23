@@ -115,10 +115,11 @@ impl Ord for Podcast {
     }
 }
 
+
 /// Struct holding data about an individual podcast episode. Most of this
 /// is metadata, but if the episode has been downloaded to the local
-/// machine, the filepath will be included here as well. `played` indicates
-/// whether the podcast has been marked as played or unplayed.
+/// machine, the filepath will be included here as well. `played`
+/// indicates whether the podcast has been marked as played or unplayed.
 #[derive(Debug, Clone)]
 pub struct Episode {
     pub id: i64,
@@ -225,6 +226,7 @@ impl Menuable for Episode {
     }
 }
 
+
 /// Struct holding data about an individual podcast feed, before it has
 /// been inserted into the database. This includes a
 /// (possibly empty) vector of episodes.
@@ -249,6 +251,7 @@ pub struct EpisodeNoId {
     pub pubdate: Option<DateTime<Utc>>,
     pub duration: Option<i64>,
 }
+
 
 /// Struct used to hold a vector of data inside a reference-counted
 /// mutex, to allow for multiple owners of mutable data.
@@ -416,6 +419,7 @@ impl LockVec<Episode> {
         };
     }
 }
+
 
 /// Overarching Message enum that allows multiple threads to communicate
 /// back to the main thread with a single enum type.
