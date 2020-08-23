@@ -68,26 +68,12 @@ impl Menuable for Podcast {
             let meta_str = format!("({}/{})", self.num_unplayed(), self.episodes.len());
             title_length = length - meta_str.chars().count();
 
-            let out = self
-                .title
-                .graphemes(true)
-                .take(title_length)
-                .collect::<String>();
+            let out = self.title.substr(0, title_length);
 
-            return format!(
-                "{} {:>width$}",
-                out,
-                meta_str,
-                width = length - out.graphemes(true).count()
-            );
+            return format!("{} {:>width$}", out, meta_str, width = length - out.len());
         // this pads spaces between title and totals
         } else {
-            let out = self
-                .title
-                .graphemes(true)
-                .take(title_length)
-                .collect::<String>();
-            return out;
+            return self.title.substr(0, title_length);
         }
     }
 
@@ -160,16 +146,12 @@ impl Menuable for Episode {
     fn get_title(&self, length: usize) -> String {
         let out = match self.path {
             Some(_) => {
-                let title = self
-                    .title
-                    .graphemes(true)
-                    .take(length - 4)
-                    .collect::<String>();
+                let title = self.title.substr(0, length - 4);
                 format!("[D] {}", title)
             }
-            None => self.title.graphemes(true).take(length).collect::<String>(),
+            None => self.title.substr(0, length),
         };
-        let out_len = out.graphemes(true).count();
+        let out_len = out.len();
         if length > crate::config::EPISODE_PUBDATE_LENGTH {
             let dur = self.format_duration();
             let meta_dur = format!("[{}]", dur);
@@ -180,10 +162,7 @@ impl Menuable for Episode {
                 let meta_str = format!("({}) {}", pd, meta_dur);
                 let added_len = meta_str.chars().count();
 
-                let out_added = out
-                    .graphemes(true)
-                    .take(length - added_len)
-                    .collect::<String>();
+                let out_added = out.substr(0, length - added_len);
                 return format!(
                     "{} {:>width$}",
                     out_added,
@@ -192,10 +171,7 @@ impl Menuable for Episode {
                 );
             } else {
                 // just print duration
-                let out_added = out
-                    .graphemes(true)
-                    .take(length - meta_dur.chars().count())
-                    .collect::<String>();
+                let out_added = out.substr(0, length - meta_dur.chars().count());
                 return format!(
                     "{} {:>width$}",
                     out_added,
@@ -206,10 +182,7 @@ impl Menuable for Episode {
         } else if length > crate::config::EPISODE_DURATION_LENGTH {
             let dur = self.format_duration();
             let meta_dur = format!("[{}]", dur);
-            let out_added = out
-                .graphemes(true)
-                .take(length - meta_dur.chars().count())
-                .collect::<String>();
+            let out_added = out.substr(0, length - meta_dur.chars().count());
             return format!(
                 "{} {:>width$}",
                 out_added,
@@ -428,4 +401,28 @@ pub enum Message {
     Ui(UiMsg),
     Feed(FeedMsg),
     Dl(DownloadMsg),
+}
+
+
+/// Some helper functions for dealing with Unicode strings.
+pub trait StringUtils {
+    fn substr(&self, start: usize, length: usize) -> String;
+    fn len(&self) -> usize;
+}
+
+impl StringUtils for String {
+    /// Takes a slice of the String, properly separated at Unicode
+    /// grapheme boundaries. Returns a new String.
+    fn substr(&self, start: usize, length: usize) -> String {
+        return self
+            .graphemes(true)
+            .skip(start)
+            .take(length)
+            .collect::<String>();
+    }
+
+    /// Counts the total number of Unicode graphemes in the String.
+    fn len(&self) -> usize {
+        return self.graphemes(true).count();
+    }
 }
