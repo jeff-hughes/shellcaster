@@ -3,14 +3,13 @@
 /// which appears to be unmaintained and which has out-of-date
 /// dependencies. Given that the library is only ~150 lines of code, I
 /// opted to include it directly in my crate to update the dependencies.
-/// 
+///
 /// All credit goes to the original authors; see here for the GPLv3
 /// license: https://gitlab.com/alatiera/rfc822_sanitizer/-/blob/master/LICENSE
-
 use chrono::{DateTime, FixedOffset, ParseResult};
-use std::borrow::Cow;
 use lazy_static::lazy_static;
 use regex::Regex;
+use std::borrow::Cow;
 
 /// Tries to fix common ways date generators misshandle rfc822/rfc2822.
 ///
@@ -970,12 +969,10 @@ mod tests {
     fn test_pad_zeros() {
         // Would be nice If we had more test cases,
         // If you stumble(d) upon any online please consider opening a Pullrequest.
-        let foo = vec![
-            (
-                "Thu, 30 Aug 2017 1:30:00 PDT",
-                "Thu, 30 Aug 2017 01:30:00 PDT",
-            ),
-        ];
+        let foo = vec![(
+            "Thu, 30 Aug 2017 1:30:00 PDT",
+            "Thu, 30 Aug 2017 01:30:00 PDT",
+        )];
 
         foo.iter()
             .for_each(|&(bad, good)| assert_eq!(pad_zeros(bad.to_string()), good));

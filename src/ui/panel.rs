@@ -1,7 +1,7 @@
-use pancurses::{Window, Attribute};
 use chrono::{DateTime, Utc};
+use pancurses::{Attribute, Window};
 
-use super::{Colors, ColorType};
+use super::{ColorType, Colors};
 
 /// Struct holding the raw data used for building the details panel.
 pub struct Details {
@@ -31,14 +31,17 @@ pub struct Panel {
 
 impl Panel {
     /// Creates a new panel.
-    pub fn new(colors: Colors,
-        title: String, screen_pos: usize, n_row: i32, n_col: i32, start_y: i32, start_x: i32) -> Self {
-
-        let panel_win = pancurses::newwin(
-            n_row,
-            n_col,
-            start_y,
-            start_x);
+    pub fn new(
+        colors: Colors,
+        title: String,
+        screen_pos: usize,
+        n_row: i32,
+        n_col: i32,
+        start_y: i32,
+        start_x: i32,
+    ) -> Self
+    {
+        let panel_win = pancurses::newwin(n_row, n_col, start_y, start_x);
 
         return Panel {
             window: panel_win,
@@ -83,7 +86,8 @@ impl Panel {
             top_left,
             pancurses::ACS_URCORNER(),
             bot_left,
-            pancurses::ACS_LRCORNER());
+            pancurses::ACS_LRCORNER(),
+        );
 
         self.window.mvaddstr(0, 2, self.title.clone());
     }
@@ -127,88 +131,100 @@ impl Panel {
         let max_row = self.get_rows();
         let wrapper = textwrap::wrap_iter(&string, self.get_cols() as usize);
         for line in wrapper {
-            self.window.mvaddstr(self.abs_y(row), self.abs_x(0), line.clone());
+            self.window
+                .mvaddstr(self.abs_y(row), self.abs_x(0), line.clone());
             row += 1;
 
             if row >= max_row {
                 break;
             }
         }
-        return row-1;
+        return row - 1;
     }
 
     /// Write the specific template used for the details panel. This is
     /// not the most elegant code, but it works.
     pub fn details_template(&self, start_y: i32, details: Details) {
-        let mut row = start_y-1;
+        let mut row = start_y - 1;
 
         self.window.attron(Attribute::Bold);
         // podcast title
         match details.pod_title {
-            Some(t) => row = self.write_wrap_line(row+1, t),
-            None => row = self.write_wrap_line(row+1, "No title".to_string()),
+            Some(t) => row = self.write_wrap_line(row + 1, t),
+            None => row = self.write_wrap_line(row + 1, "No title".to_string()),
         }
 
         // episode title
         match details.ep_title {
-            Some(t) => row = self.write_wrap_line(row+1, t),
-            None => row = self.write_wrap_line(row+1, "No title".to_string()),
+            Some(t) => row = self.write_wrap_line(row + 1, t),
+            None => row = self.write_wrap_line(row + 1, "No title".to_string()),
         }
         self.window.attroff(Attribute::Bold);
 
-        row += 1;  // blank line
+        row += 1; // blank line
 
         // published date
         if let Some(date) = details.pubdate {
-            let new_row = self.write_wrap_line(row+1,
-                format!("Published: {}", date.format("%B %-d, %Y").to_string()));
-            self.change_attr(row+1, 0, 10,
-                pancurses::A_UNDERLINE, ColorType::Normal);
+            let new_row = self.write_wrap_line(
+                row + 1,
+                format!("Published: {}", date.format("%B %-d, %Y").to_string()),
+            );
+            self.change_attr(row + 1, 0, 10, pancurses::A_UNDERLINE, ColorType::Normal);
             row = new_row;
         }
 
         // duration
         if let Some(dur) = details.duration {
-            let new_row = self.write_wrap_line(row+1,
-                format!("Duration: {}", dur));
-            self.change_attr(row+1, 0, 9,
-                pancurses::A_UNDERLINE, ColorType::Normal);
+            let new_row = self.write_wrap_line(row + 1, format!("Duration: {}", dur));
+            self.change_attr(row + 1, 0, 9, pancurses::A_UNDERLINE, ColorType::Normal);
             row = new_row;
         }
 
         // explicit
         if let Some(exp) = details.explicit {
             let new_row = if exp {
-                self.write_wrap_line(row+1, "Explicit: Yes".to_string())
+                self.write_wrap_line(row + 1, "Explicit: Yes".to_string())
             } else {
-                self.write_wrap_line(row+1, "Explicit: No".to_string())
+                self.write_wrap_line(row + 1, "Explicit: No".to_string())
             };
-            self.change_attr(row+1, 0, 9,
-                pancurses::A_UNDERLINE, ColorType::Normal);
+            self.change_attr(row + 1, 0, 9, pancurses::A_UNDERLINE, ColorType::Normal);
             row = new_row;
         }
 
-        row += 1;  // blank line
+        row += 1; // blank line
 
         // description
         match details.description {
             Some(desc) => {
                 self.window.attron(Attribute::Bold);
-                row = self.write_wrap_line(row+1, "Description:".to_string());
+                row = self.write_wrap_line(row + 1, "Description:".to_string());
                 self.window.attroff(Attribute::Bold);
-                let _row = self.write_wrap_line(row+1, desc);
-            },
+                let _row = self.write_wrap_line(row + 1, desc);
+            }
             None => {
-                let _row = self.write_wrap_line(row+1, "No description.".to_string());
-            },
+                let _row = self.write_wrap_line(row + 1, "No description.".to_string());
+            }
         }
     }
 
     /// Changes the attributes (text style and color) for a line of
     /// text.
-    pub fn change_attr(&self, y: i32, x: i32, nchars: i32, attr: pancurses::chtype, color: ColorType) {
-        self.window.mvchgat(self.abs_y(y), self.abs_x(x), nchars,
-            attr, self.colors.get(color));
+    pub fn change_attr(
+        &self,
+        y: i32,
+        x: i32,
+        nchars: i32,
+        attr: pancurses::chtype,
+        color: ColorType,
+    )
+    {
+        self.window.mvchgat(
+            self.abs_y(y),
+            self.abs_x(x),
+            nchars,
+            attr,
+            self.colors.get(color),
+        );
     }
 
     /// Updates window size
@@ -222,21 +238,22 @@ impl Panel {
         // but c'est la vie
         let oldwin = std::mem::replace(
             &mut self.window,
-            pancurses::newwin(n_row, n_col, start_y, start_x));
+            pancurses::newwin(n_row, n_col, start_y, start_x),
+        );
         oldwin.delwin();
     }
 
     /// Returns the effective number of rows (accounting for borders
     /// and margins).
     pub fn get_rows(&self) -> i32 {
-        return self.n_row - 2;  // border on top and bottom
+        return self.n_row - 2; // border on top and bottom
     }
 
-    /// Returns the effective number of columns (accounting for 
+    /// Returns the effective number of columns (accounting for
     /// borders and margins).
     pub fn get_cols(&self) -> i32 {
-        return self.n_col - 5;  // 2 for border, 2 for margins, and 1
-                                // extra for some reason...
+        return self.n_col - 5; // 2 for border, 2 for margins, and 1
+                               // extra for some reason...
     }
 
     /// Calculates the y-value relative to the window rather than to the

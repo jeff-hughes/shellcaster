@@ -1,14 +1,14 @@
-use std::sync::mpsc;
 use std::io::Read;
+use std::sync::mpsc;
 
-use rss::{Channel, Item};
-use chrono::{DateTime, Utc};
 use crate::sanitizer::parse_from_rfc2822_with_fallback;
+use chrono::{DateTime, Utc};
 use lazy_static::lazy_static;
-use regex::{Regex, Match};
+use regex::{Match, Regex};
+use rss::{Channel, Item};
 
-use crate::types::*;
 use crate::threadpool::Threadpool;
+use crate::types::*;
 
 lazy_static! {
     /// Regex for parsing an episode "duration", which could take the form
@@ -39,33 +39,43 @@ impl PodcastFeed {
         return Self {
             id: id,
             url: url,
-            title: title
+            title: title,
         };
     }
 }
 
 /// Spawns a new thread to check a feed and retrieve podcast data.
-pub fn check_feed(feed: PodcastFeed, max_retries: usize, threadpool: &Threadpool, tx_to_main: mpsc::Sender<Message>) {
-    threadpool.execute(move || {
-        match get_feed_data(feed.url.clone(), max_retries) {
-            Ok(pod) => {
-                match feed.id {
-                    Some(id) => {
-                        tx_to_main.send(
-                        Message::Feed(FeedMsg::SyncData((id, pod)))).unwrap();
-                    },
-                    None => tx_to_main.send(
-                        Message::Feed(FeedMsg::NewData(pod))).unwrap(),
-                }
-            },
-            Err(_err) => tx_to_main.send(Message::Feed(FeedMsg::Error(feed))).unwrap(),
-        }
+pub fn check_feed(
+    feed: PodcastFeed,
+    max_retries: usize,
+    threadpool: &Threadpool,
+    tx_to_main: mpsc::Sender<Message>,
+)
+{
+    threadpool.execute(move || match get_feed_data(feed.url.clone(), max_retries) {
+        Ok(pod) => match feed.id {
+            Some(id) => {
+                tx_to_main
+                    .send(Message::Feed(FeedMsg::SyncData((id, pod))))
+                    .unwrap();
+            }
+            None => tx_to_main
+                .send(Message::Feed(FeedMsg::NewData(pod)))
+                .unwrap(),
+        },
+        Err(_err) => tx_to_main
+            .send(Message::Feed(FeedMsg::Error(feed)))
+            .unwrap(),
     });
 }
 
 /// Given a URL, this attempts to pull the data about a podcast and its
 /// episodes from an RSS feed.
-fn get_feed_data(url: String, mut max_retries: usize) -> Result<PodcastNoId, Box<dyn std::error::Error>> {
+fn get_feed_data(
+    url: String,
+    mut max_retries: usize,
+) -> Result<PodcastNoId, Box<dyn std::error::Error>>
+{
     let request: Result<ureq::Response, Box<dyn std::error::Error>> = loop {
         let response = ureq::get(&url)
             .timeout_connect(5000)
@@ -89,11 +99,10 @@ fn get_feed_data(url: String, mut max_retries: usize) -> Result<PodcastNoId, Box
 
             let channel = Channel::read_from(&resp_data[..])?;
             Ok(parse_feed_data(channel, &url))
-        },
+        }
         Err(err) => Err(err),
-    }
+    };
 }
-
 
 /// Given a Channel with the RSS feed data, this parses the data about a
 /// podcast and its episodes and returns a Podcast. There are existing
@@ -122,7 +131,7 @@ fn parse_feed_data(channel: Channel, url: &str) -> PodcastNoId {
                     "no" | "clean" | "false" => Some(false),
                     _ => None,
                 }
-            },
+            }
         };
     }
 
@@ -166,13 +175,13 @@ fn parse_episode_data(item: &Item) -> EpisodeNoId {
     let pubdate = match item.pub_date() {
         Some(pd) => match parse_from_rfc2822_with_fallback(pd) {
             Ok(date) => {
-                // this is a bit ridiculous, but it seems like 
+                // this is a bit ridiculous, but it seems like
                 // you have to convert from a DateTime<FixedOffset>
                 // to a NaiveDateTime, and then from there create
                 // a DateTime<Utc>; see
                 // https://github.com/chronotope/chrono/issues/169#issue-239433186
                 Some(DateTime::from_utc(date.naive_utc(), Utc))
-            },
+            }
             Err(_) => None,
         },
         None => None,
@@ -238,31 +247,29 @@ fn duration_to_int(duration: Option<&str>) -> Option<i32> {
                         3 => {
                             let result: Result<Vec<_>, _> = times.into_iter().collect();
                             match result {
-                                Ok(v) => Some(v[0]*60*60 + v[1]*60 + v[2]),
+                                Ok(v) => Some(v[0] * 60 * 60 + v[1] * 60 + v[2]),
                                 Err(_) => None,
                             }
-                        },
+                        }
                         // MM:SS
                         2 => {
                             let result: Result<Vec<_>, _> = times.into_iter().collect();
                             match result {
-                                Ok(v) => Some(v[0]*60 + v[1]),
+                                Ok(v) => Some(v[0] * 60 + v[1]),
                                 Err(_) => None,
                             }
-                        },
+                        }
                         // SS
-                        1 => {
-                            match times[0] {
-                                Ok(i) => Some(i),
-                                Err(_) => None,
-                            }
+                        1 => match times[0] {
+                            Ok(i) => Some(i),
+                            Err(_) => None,
                         },
                         _ => None,
                     }
-                },
+                }
                 None => None,
             }
-        },
+        }
         None => None,
     }
 }
@@ -273,7 +280,6 @@ fn regex_to_int(re_match: Match) -> Result<i32, std::num::ParseIntError> {
     let mstr = re_match.as_str();
     mstr.parse::<i32>()
 }
-
 
 // TESTS -----------------------------------------------------------------
 #[cfg(test)]
