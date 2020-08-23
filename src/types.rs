@@ -70,7 +70,12 @@ impl Menuable for Podcast {
 
             let out = self.title.substr(0, title_length);
 
-            return format!("{} {:>width$}", out, meta_str, width = length - out.len());
+            return format!(
+                "{} {:>width$}",
+                out,
+                meta_str,
+                width = length - out.grapheme_len()
+            );
         // this pads spaces between title and totals
         } else {
             return self.title.substr(0, title_length);
@@ -151,7 +156,7 @@ impl Menuable for Episode {
             }
             None => self.title.substr(0, length),
         };
-        let out_len = out.len();
+        let out_len = out.grapheme_len();
         if length > crate::config::EPISODE_PUBDATE_LENGTH {
             let dur = self.format_duration();
             let meta_dur = format!("[{}]", dur);
@@ -407,7 +412,7 @@ pub enum Message {
 /// Some helper functions for dealing with Unicode strings.
 pub trait StringUtils {
     fn substr(&self, start: usize, length: usize) -> String;
-    fn len(&self) -> usize;
+    fn grapheme_len(&self) -> usize;
 }
 
 impl StringUtils for String {
@@ -422,7 +427,7 @@ impl StringUtils for String {
     }
 
     /// Counts the total number of Unicode graphemes in the String.
-    fn len(&self) -> usize {
+    fn grapheme_len(&self) -> usize {
         return self.graphemes(true).count();
     }
 }
