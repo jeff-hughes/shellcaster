@@ -395,6 +395,7 @@ impl<'a> UI<'a> {
                                     self.episode_menu.deactivate();
                                 }
                             }
+                            self.update_details_panel();
                         }
                     }
 
@@ -408,6 +409,7 @@ impl<'a> UI<'a> {
                                 }
                                 ActiveMenu::EpisodeMenu => (),
                             }
+                            self.update_details_panel();
                         }
                     }
 
