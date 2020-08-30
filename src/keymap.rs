@@ -25,6 +25,7 @@ pub enum UserAction {
     Remove,
     RemoveAll,
 
+    Help,
     Quit,
 }
 

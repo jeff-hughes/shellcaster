@@ -67,6 +67,7 @@ struct KeybindingsFromToml {
     delete_all: Option<Vec<String>>,
     remove: Option<Vec<String>>,
     remove_all: Option<Vec<String>>,
+    help: Option<Vec<String>>,
     quit: Option<Vec<String>>,
 }
 
@@ -106,6 +107,7 @@ impl Config {
                     delete_all: None,
                     remove: None,
                     remove_all: None,
+                    help: None,
                     quit: None,
                 };
                 config_toml = ConfigFromToml {
@@ -150,6 +152,7 @@ fn config_with_defaults(config_toml: &ConfigFromToml) -> Config {
         (&config_toml.keybindings.remove, UserAction::Remove, vec!["r".to_string()]),
         (&config_toml.keybindings.remove_all, UserAction::RemoveAll, vec!["R".to_string()]),
 
+        (&config_toml.keybindings.help, UserAction::Help, vec!["?".to_string()]),
         (&config_toml.keybindings.quit, UserAction::Quit, vec!["q".to_string()]),
     ];
 
