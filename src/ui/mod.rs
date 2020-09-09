@@ -387,6 +387,9 @@ impl<'a> UI<'a> {
                                     }
                                 }
                             }
+                            if let Some(det) = &self.details_panel {
+                                det.refresh();
+                            }
                         }
 
                         Some(UserAction::Right) => {
@@ -399,6 +402,9 @@ impl<'a> UI<'a> {
                                     }
                                     ActiveMenu::EpisodeMenu => (),
                                 }
+                            }
+                            if let Some(det) = &self.details_panel {
+                                det.refresh();
                             }
                         }
 
