@@ -387,6 +387,7 @@ impl<'a> UI<'a> {
                                     }
                                 }
                             }
+                            self.update_details_panel();
                         }
 
                         Some(UserAction::Right) => {
@@ -400,6 +401,7 @@ impl<'a> UI<'a> {
                                     ActiveMenu::EpisodeMenu => (),
                                 }
                             }
+                            self.update_details_panel();
                         }
 
                         Some(UserAction::AddFeed) => {
