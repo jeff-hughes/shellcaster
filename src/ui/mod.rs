@@ -387,7 +387,9 @@ impl<'a> UI<'a> {
                                     }
                                 }
                             }
-                            self.update_details_panel();
+                            if let Some(det) = &self.details_panel {
+                                det.refresh();
+                            }
                         }
 
                         Some(UserAction::Right) => {
@@ -401,7 +403,9 @@ impl<'a> UI<'a> {
                                     ActiveMenu::EpisodeMenu => (),
                                 }
                             }
-                            self.update_details_panel();
+                            if let Some(det) = &self.details_panel {
+                                det.refresh();
+                            }
                         }
 
                         Some(UserAction::AddFeed) => {
