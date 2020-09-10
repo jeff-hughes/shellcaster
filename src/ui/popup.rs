@@ -153,22 +153,22 @@ impl<'a> PopupWin<'a> {
             (Some(UserAction::Right), "Right:"),
             (Some(UserAction::Up), "Up:"),
             (Some(UserAction::Down), "Down:"),
-            (None, ""),
+            // (None, ""),
             (Some(UserAction::AddFeed), "Add feed:"),
             (Some(UserAction::Sync), "Sync:"),
             (Some(UserAction::SyncAll), "Sync all:"),
-            (None, ""),
+            // (None, ""),
             (Some(UserAction::Play), "Play:"),
             (Some(UserAction::MarkPlayed), "Mark as played:"),
             (Some(UserAction::MarkAllPlayed), "Mark all as played:"),
-            (None, ""),
+            // (None, ""),
             (Some(UserAction::Download), "Download:"),
             (Some(UserAction::DownloadAll), "Download all:"),
             (Some(UserAction::Delete), "Delete file:"),
             (Some(UserAction::DeleteAll), "Delete all files:"),
             (Some(UserAction::Remove), "Remove from list:"),
             (Some(UserAction::RemoveAll), "Remove all from list:"),
-            (None, ""),
+            // (None, ""),
             (Some(UserAction::Help), "Help:"),
             (Some(UserAction::Quit), "Quit:"),
         ];
@@ -207,8 +207,39 @@ impl<'a> PopupWin<'a> {
         help_win.change_attr(row, 0, 22, pancurses::A_UNDERLINE, ColorType::Normal);
         row += 1;
 
-        for key in key_strs {
-            row = help_win.write_wrap_line(row + 1, key);
+        // check how long our strings are, and map to two columns
+        // if possible; `col_spacing` is the space to leave in between
+        // the two columns
+        let longest_line = key_strs.iter().map(|x| x.chars().count()).max().unwrap();
+        let col_spacing = 5;
+        let n_cols = if help_win.get_cols() > (longest_line * 2 + col_spacing) as i32 {
+            2
+        } else {
+            1
+        };
+        let keys_per_row = key_strs.len() as i32 / n_cols;
+
+        // write each line of keys -- the list will be presented "down"
+        // rather than "across", but we print to the screen a line at a
+        // time, so the offset jumps down in the list if we have more
+        // than one column
+        for i in 0..keys_per_row {
+            let mut line = String::new();
+            for j in 0..n_cols {
+                let offset = j * keys_per_row;
+                if let Some(val) = key_strs.get((i + offset) as usize) {
+                    // apply `col_spacing` to the right side of the
+                    // first column
+                    let width = if n_cols > 1 && offset == 0 {
+                        longest_line + col_spacing
+                    } else {
+                        longest_line
+                    };
+                    line += &format!("{:<width$}", val, width = width);
+                }
+            }
+            help_win.write_line(row + 1, line);
+            row += 1;
         }
 
         let _ = help_win.write_wrap_line(row + 2, "Press \"q\" to close this window.".to_string());
