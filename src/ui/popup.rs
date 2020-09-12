@@ -59,20 +59,24 @@ impl<'a> PopupWin<'a> {
     pub fn resize(&mut self, total_rows: i32, total_cols: i32) {
         self.total_rows = total_rows;
         self.total_cols = total_cols;
+        self.panel = None;
         match self.active {
             ActivePopup::WelcomeWin => {
                 let welcome_win = self.make_welcome_win();
                 welcome_win.refresh();
-                let _ = std::mem::replace(&mut self.panel, Some(welcome_win));
+                self.panel = Some(welcome_win);
             }
             ActivePopup::HelpWin => {
                 let help_win = self.make_help_win();
                 help_win.refresh();
-                let _ = std::mem::replace(&mut self.panel, Some(help_win));
+                self.panel = Some(help_win);
             }
             ActivePopup::DownloadWin => (), // not yet implemented
             ActivePopup::None => (),
         }
+        // if let Some(panel) = &self.panel {
+        //     panel.refresh();
+        // }
     }
 
     /// Create a welcome window and draw it to the screen.
@@ -297,17 +301,16 @@ impl<'a> PopupWin<'a> {
 
     /// When a popup window is active, this handles the user's keyboard
     /// input that is relevant for that window.
-    pub fn handle_input(&mut self, input: Option<Input>) {
+    pub fn handle_input(&mut self, input: Input) {
         if self.active == ActivePopup::HelpWin {
             match input {
-                Some(Input::KeyExit)
-                | Some(Input::Character('\u{1b}')) // Esc
-                | Some(Input::Character('q'))
-                | Some(Input::Character('Q')) => {
+                Input::KeyExit
+                | Input::Character('\u{1b}') // Esc
+                | Input::Character('q')
+                | Input::Character('Q') => {
                     self.turn_off_help_win();
                 }
-                Some(_) => (),
-                None => (),
+                _ => (),
             }
         }
     }

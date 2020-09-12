@@ -254,79 +254,81 @@ impl<'a> UI<'a> {
     /// then passes this data back to the main controller.
     #[allow(clippy::cognitive_complexity)]
     pub fn getch(&mut self) -> UiMsg {
-        // if there is a popup window active (apart from the welcome
-        // window which takes no input), then redirect user input there
-        if self.popup_win.is_non_welcome_popup_active() {
-            self.popup_win.handle_input(self.stdscr.getch());
+        match self.stdscr.getch() {
+            Some(Input::KeyResize) => {
+                pancurses::resize_term(0, 0);
+                let (n_row, n_col) = self.stdscr.get_max_yx();
+                self.n_row = n_row;
+                self.n_col = n_col;
 
-            // need to check if popup window is still active, as handling
-            // character input above may involve closing the popup window
-            if !self.popup_win.is_popup_active() {
+                let (pod_col, ep_col, det_col) = Self::calculate_sizes(n_col);
+
+                self.podcast_menu.resize(n_row - 1, pod_col, 0, 0);
+                self.episode_menu.resize(n_row - 1, ep_col, 0, pod_col - 1);
+
+                if self.details_panel.is_some() {
+                    if det_col > 0 {
+                        let det = self.details_panel.as_mut().unwrap();
+                        det.resize(n_row - 1, det_col, 0, pod_col + ep_col - 2);
+                    } else {
+                        self.details_panel = None;
+                    }
+                } else if det_col > 0 {
+                    self.details_panel = Some(Self::make_details_panel(
+                        self.colors.clone(),
+                        n_row - 1,
+                        det_col,
+                        0,
+                        pod_col + ep_col - 2,
+                    ));
+                }
+
                 self.stdscr.refresh();
                 self.update_menus();
+
+                match self.active_menu {
+                    ActiveMenu::PodcastMenu => self.podcast_menu.activate(),
+                    ActiveMenu::EpisodeMenu => {
+                        self.podcast_menu.activate();
+                        self.episode_menu.activate();
+                    }
+                }
+
                 if self.details_panel.is_some() {
                     self.update_details_panel();
                 }
+
+                self.popup_win.resize(n_row, n_col);
+                self.notif_win.resize(n_row, n_col);
+                self.stdscr.refresh();
             }
-        } else {
-            match self.stdscr.getch() {
-                Some(Input::KeyResize) => {
-                    pancurses::resize_term(0, 0);
-                    let (n_row, n_col) = self.stdscr.get_max_yx();
-                    self.n_row = n_row;
-                    self.n_col = n_col;
 
-                    let (pod_col, ep_col, det_col) = Self::calculate_sizes(n_col);
+            Some(input) => {
+                let (curr_pod_id, curr_ep_id) = self.get_current_ids();
 
-                    self.podcast_menu.resize(n_row - 1, pod_col, 0, 0);
-                    self.episode_menu.resize(n_row - 1, ep_col, 0, pod_col - 1);
-
-                    if self.details_panel.is_some() {
-                        if det_col > 0 {
-                            let det = self.details_panel.as_mut().unwrap();
-                            det.resize(n_row - 1, det_col, 0, pod_col + ep_col - 2);
-                        } else {
-                            self.details_panel = None;
-                        }
-                    } else if det_col > 0 {
-                        self.details_panel = Some(Self::make_details_panel(
-                            self.colors.clone(),
-                            n_row - 1,
-                            det_col,
-                            0,
-                            pod_col + ep_col - 2,
-                        ));
-                    }
-
-                    self.stdscr.refresh();
-                    self.update_menus();
-
-                    match self.active_menu {
-                        ActiveMenu::PodcastMenu => self.podcast_menu.activate(),
-                        ActiveMenu::EpisodeMenu => {
-                            self.podcast_menu.activate();
-                            self.episode_menu.activate();
-                        }
-                    }
-
-                    if self.details_panel.is_some() {
-                        self.update_details_panel();
-                    }
-
-                    self.popup_win.resize(n_row, n_col);
-                    self.notif_win.resize(n_row, n_col);
-                    self.stdscr.refresh();
+                // get rid of the "welcome" window once the podcast list
+                // is no longer empty
+                if self.popup_win.welcome_win && !self.podcast_menu.items.is_empty() {
+                    self.popup_win.turn_off_welcome_win();
                 }
 
-                Some(input) => {
-                    let (curr_pod_id, curr_ep_id) = self.get_current_ids();
+                // if there is a popup window active (apart from the
+                // welcome window which takes no input), then
+                // redirect user input there
+                if self.popup_win.is_non_welcome_popup_active() {
+                    self.popup_win.handle_input(input);
 
-                    // get rid of the "welcome" window once the podcast list
-                    // is no longer empty
-                    if self.popup_win.welcome_win && !self.podcast_menu.items.is_empty() {
-                        self.popup_win.turn_off_welcome_win();
+                    // need to check if popup window is still active, as
+                    // handling character input above may involve
+                    // closing the popup window
+                    if !self.popup_win.is_popup_active() {
+                        self.stdscr.refresh();
+                        self.update_menus();
+                        if self.details_panel.is_some() {
+                            self.update_details_panel();
+                        }
                     }
-
+                } else {
                     match self.keymap.get_from_input(input) {
                         Some(UserAction::Down) => {
                             match self.active_menu {
@@ -598,9 +600,9 @@ impl<'a> UI<'a> {
                         None => (),
                     } // end of input match
                 }
-                None => (),
-            }; // end of getch() match
-        }
+            }
+            None => (),
+        }; // end of getch() match
         return UiMsg::Noop;
     }
 
@@ -810,118 +812,4 @@ impl<'a> UI<'a> {
             }
         }
     }
-
-    // /// Creates a pancurses window with a welcome message for when users
-    // /// start the program for the first time. Responsibility for managing
-    // /// the window is given back to the main UI object.
-    // pub fn make_welcome_win(colors: Colors, keymap: &Keybindings, n_row: i32, n_col: i32) -> Panel {
-    //     let actions = vec![UserAction::AddFeed, UserAction::Quit, UserAction::Help];
-    //     let mut key_strs = Vec::new();
-    //     for action in actions {
-    //         let keys = keymap.keys_for_action(action);
-    //         let key_str = match keys.len() {
-    //             0 => "<missing>".to_string(),
-    //             1 => format!("\"{}\"", &keys[0]),
-    //             2 => format!("\"{}\" or \"{}\"", &keys[0], &keys[1]),
-    //             _ => {
-    //                 let mut s = "".to_string();
-    //                 for i in 0..keys.len() {
-    //                     if i == keys.len() - 1 {
-    //                         s = format!("{}, \"{}\"", s, keys[i]);
-    //                     } else {
-    //                         s = format!("{}, or \"{}\"", s, keys[i]);
-    //                     }
-    //                 }
-    //                 s
-    //             }
-    //         };
-    //         key_strs.push(key_str);
-    //     }
-
-    //     // the warning on the unused mut is a function of Rust getting
-    //     // confused between panel.rs and mock_panel.rs
-    //     #[allow(unused_mut)]
-    //     let mut welcome_win = Panel::new(colors, "Shellcaster".to_string(), 0, n_row, n_col, 0, 0);
-
-    //     let mut row = 0;
-    //     row = welcome_win.write_wrap_line(row + 1, "Welcome to shellcaster!".to_string());
-
-    //     row = welcome_win.write_wrap_line(row+2,
-    //         format!("Your podcast list is currently empty. Press {} to add a new podcast feed, {} to quit, or see all available commands by typing {} to get help.", key_strs[0], key_strs[1], key_strs[2]));
-
-    //     row = welcome_win.write_wrap_line(
-    //         row + 2,
-    //         "More details of how to customize shellcaster can be found on the Github repo readme:"
-    //             .to_string(),
-    //     );
-    //     let _ = welcome_win.write_wrap_line(
-    //         row + 1,
-    //         "https://github.com/jeff-hughes/shellcaster".to_string(),
-    //     );
-
-    //     return welcome_win;
-    // }
-
-    // /// Creates a pancurses window showing the keybindings.
-    // /// Responsibility for managing the window is given back to the
-    // /// main UI object.
-    // pub fn make_help_win(colors: Colors, keymap: &Keybindings, n_row: i32, n_col: i32) -> Panel {
-    //     let actions = vec![
-    //         (Some(UserAction::Left), "Left:"),
-    //         (Some(UserAction::Right), "Right:"),
-    //         (Some(UserAction::Up), "Up:"),
-    //         (Some(UserAction::Down), "Down:"),
-    //         (None, ""),
-    //         (Some(UserAction::AddFeed), "Add feed:"),
-    //         (Some(UserAction::Sync), "Sync:"),
-    //         (Some(UserAction::SyncAll), "Sync all:"),
-    //         (None, ""),
-    //         (Some(UserAction::Play), "Play:"),
-    //         (Some(UserAction::MarkPlayed), "Mark as played:"),
-    //         (Some(UserAction::MarkAllPlayed), "Mark all as played:"),
-    //         (None, ""),
-    //         (Some(UserAction::Download), "Download:"),
-    //         (Some(UserAction::DownloadAll), "Download all:"),
-    //         (Some(UserAction::Delete), "Delete file:"),
-    //         (Some(UserAction::DeleteAll), "Delete all files:"),
-    //         (Some(UserAction::Remove), "Remove from list:"),
-    //         (Some(UserAction::RemoveAll), "Remove all from list:"),
-    //         (None, ""),
-    //         (Some(UserAction::Help), "Help:"),
-    //         (Some(UserAction::Quit), "Quit:"),
-    //     ];
-    //     let mut key_strs = Vec::new();
-    //     for (action, action_str) in actions {
-    //         match action {
-    //             Some(action) => {
-    //                 let keys = keymap.keys_for_action(action);
-    //                 // longest prefix is 21 chars long
-    //                 let key_str = match keys.len() {
-    //                     0 => format!("{:>21} <missing>", action_str),
-    //                     1 => format!("{:>21} \"{}\"", action_str, &keys[0]),
-    //                     _ => format!("{:>21} \"{}\" or \"{}\"", action_str, &keys[0], &keys[1]),
-    //                 };
-    //                 key_strs.push(key_str);
-    //             }
-    //             None => key_strs.push(" ".to_string()),
-    //         }
-    //     }
-
-    //     // the warning on the unused mut is a function of Rust getting
-    //     // confused between panel.rs and mock_panel.rs
-    //     #[allow(unused_mut)]
-    //     let mut help_win = Panel::new(colors, "Help".to_string(), 0, n_row, n_col, 0, 0);
-
-    //     let mut row = 0;
-    //     row = help_win.write_wrap_line(row + 1, "Available keybindings:".to_string());
-    //     help_win.change_attr(row, 0, 22, pancurses::A_UNDERLINE, ColorType::Normal);
-    //     row += 1;
-
-    //     for key in key_strs {
-    //         row = help_win.write_wrap_line(row + 1, key);
-    //     }
-
-    //     let _ = help_win.write_wrap_line(row + 2, "Press \"q\" to close this window.".to_string());
-    //     return help_win;
-    // }
 }

@@ -251,5 +251,6 @@ impl NotifWin {
         if let Some(curr) = &self.current_msg {
             self.display_notif(curr.clone());
         }
+        self.window.refresh();
     }
 }
