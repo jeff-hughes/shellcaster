@@ -244,64 +244,17 @@ impl<'a> UI<'a> {
         }
     }
 
-    /// Waits for user input and, where necessary, provides UiMessages
+    /// Waits for user input and, where necessary, provides UiMsgs
     /// back to the main controller.
     ///
     /// Anything UI-related (e.g., scrolling up and down menus) is handled
-    /// internally, producing an empty UiMessage. This allows for some
+    /// internally, producing an empty UiMsg. This allows for some
     /// greater degree of abstraction; for example, input to add a new
     /// podcast feed spawns a UI window to capture the feed URL, and only
     /// then passes this data back to the main controller.
-    #[allow(clippy::cognitive_complexity)]
     pub fn getch(&mut self) -> UiMsg {
         match self.stdscr.getch() {
-            Some(Input::KeyResize) => {
-                pancurses::resize_term(0, 0);
-                let (n_row, n_col) = self.stdscr.get_max_yx();
-                self.n_row = n_row;
-                self.n_col = n_col;
-
-                let (pod_col, ep_col, det_col) = Self::calculate_sizes(n_col);
-
-                self.podcast_menu.resize(n_row - 1, pod_col, 0, 0);
-                self.episode_menu.resize(n_row - 1, ep_col, 0, pod_col - 1);
-
-                if self.details_panel.is_some() {
-                    if det_col > 0 {
-                        let det = self.details_panel.as_mut().unwrap();
-                        det.resize(n_row - 1, det_col, 0, pod_col + ep_col - 2);
-                    } else {
-                        self.details_panel = None;
-                    }
-                } else if det_col > 0 {
-                    self.details_panel = Some(Self::make_details_panel(
-                        self.colors.clone(),
-                        n_row - 1,
-                        det_col,
-                        0,
-                        pod_col + ep_col - 2,
-                    ));
-                }
-
-                self.stdscr.refresh();
-                self.update_menus();
-
-                match self.active_menu {
-                    ActiveMenu::PodcastMenu => self.podcast_menu.activate(),
-                    ActiveMenu::EpisodeMenu => {
-                        self.podcast_menu.activate();
-                        self.episode_menu.activate();
-                    }
-                }
-
-                if self.details_panel.is_some() {
-                    self.update_details_panel();
-                }
-
-                self.popup_win.resize(n_row, n_col);
-                self.notif_win.resize(n_row, n_col);
-                self.stdscr.refresh();
-            }
+            Some(Input::KeyResize) => self.resize(),
 
             Some(input) => {
                 let (curr_pod_id, curr_ep_id) = self.get_current_ids();
@@ -330,84 +283,11 @@ impl<'a> UI<'a> {
                     }
                 } else {
                     match self.keymap.get_from_input(input) {
-                        Some(UserAction::Down) => {
-                            match self.active_menu {
-                                ActiveMenu::PodcastMenu => {
-                                    if curr_pod_id.is_some() {
-                                        self.podcast_menu.scroll(1);
-
-                                        self.episode_menu.top_row = 0;
-                                        self.episode_menu.selected = 0;
-
-                                        // update episodes menu with new list
-                                        self.episode_menu.items = self.podcast_menu.get_episodes();
-                                        self.episode_menu.update_items();
-                                        self.update_details_panel();
-                                    }
-                                }
-                                ActiveMenu::EpisodeMenu => {
-                                    if curr_ep_id.is_some() {
-                                        self.episode_menu.scroll(1);
-                                        self.update_details_panel();
-                                    }
-                                }
-                            }
-                        }
-
-                        Some(UserAction::Up) => {
-                            match self.active_menu {
-                                ActiveMenu::PodcastMenu => {
-                                    if curr_pod_id.is_some() {
-                                        self.podcast_menu.scroll(-1);
-
-                                        self.episode_menu.top_row = 0;
-                                        self.episode_menu.selected = 0;
-
-                                        // update episodes menu with new list
-                                        self.episode_menu.items = self.podcast_menu.get_episodes();
-                                        self.episode_menu.update_items();
-                                        self.update_details_panel();
-                                    }
-                                }
-                                ActiveMenu::EpisodeMenu => {
-                                    if curr_pod_id.is_some() {
-                                        self.episode_menu.scroll(-1);
-                                        self.update_details_panel();
-                                    }
-                                }
-                            }
-                        }
-
-                        Some(UserAction::Left) => {
-                            if curr_pod_id.is_some() {
-                                match self.active_menu {
-                                    ActiveMenu::PodcastMenu => (),
-                                    ActiveMenu::EpisodeMenu => {
-                                        self.active_menu = ActiveMenu::PodcastMenu;
-                                        self.podcast_menu.activate();
-                                        self.episode_menu.deactivate();
-                                    }
-                                }
-                            }
-                            if let Some(det) = &self.details_panel {
-                                det.refresh();
-                            }
-                        }
-
-                        Some(UserAction::Right) => {
-                            if curr_pod_id.is_some() && curr_ep_id.is_some() {
-                                match self.active_menu {
-                                    ActiveMenu::PodcastMenu => {
-                                        self.active_menu = ActiveMenu::EpisodeMenu;
-                                        self.podcast_menu.deactivate();
-                                        self.episode_menu.activate();
-                                    }
-                                    ActiveMenu::EpisodeMenu => (),
-                                }
-                            }
-                            if let Some(det) = &self.details_panel {
-                                det.refresh();
-                            }
+                        Some(a @ UserAction::Down)
+                        | Some(a @ UserAction::Up)
+                        | Some(a @ UserAction::Left)
+                        | Some(a @ UserAction::Right) => {
+                            self.move_cursor(a, curr_pod_id, curr_ep_id)
                         }
 
                         Some(UserAction::AddFeed) => {
@@ -427,6 +307,7 @@ impl<'a> UI<'a> {
                                 return UiMsg::SyncAll;
                             }
                         }
+
                         Some(UserAction::Play) => {
                             if let Some(pod_id) = curr_pod_id {
                                 if let Some(ep_id) = curr_ep_id {
@@ -437,31 +318,14 @@ impl<'a> UI<'a> {
                         Some(UserAction::MarkPlayed) => match self.active_menu {
                             ActiveMenu::PodcastMenu => (),
                             ActiveMenu::EpisodeMenu => {
-                                if let Some(pod_id) = curr_pod_id {
-                                    if let Some(ep_id) = curr_ep_id {
-                                        if let Some(played) = self
-                                            .episode_menu
-                                            .items
-                                            .map_single(ep_id, |ep| ep.is_played())
-                                        {
-                                            return UiMsg::MarkPlayed(pod_id, ep_id, !played);
-                                        }
-                                    }
+                                if let Some(ui_msg) = self.mark_played(curr_pod_id, curr_ep_id) {
+                                    return ui_msg;
                                 }
                             }
                         },
                         Some(UserAction::MarkAllPlayed) => {
-                            // if there are any unplayed episodes, MarkAllPlayed
-                            // will convert all to played; if all are played
-                            // already, only then will it convert all to unplayed
-                            if let Some(pod_id) = curr_pod_id {
-                                if let Some(played) = self
-                                    .podcast_menu
-                                    .items
-                                    .map_single(pod_id, |pod| pod.is_played())
-                                {
-                                    return UiMsg::MarkAllPlayed(pod_id, !played);
-                                }
+                            if let Some(ui_msg) = self.mark_all_played(curr_pod_id) {
+                                return ui_msg;
                             }
                         }
 
@@ -472,7 +336,6 @@ impl<'a> UI<'a> {
                                 }
                             }
                         }
-
                         Some(UserAction::DownloadAll) => {
                             if let Some(pod_id) = curr_pod_id {
                                 return UiMsg::DownloadAll(pod_id);
@@ -489,106 +352,31 @@ impl<'a> UI<'a> {
                                 }
                             }
                         },
-
                         Some(UserAction::DeleteAll) => {
                             if let Some(pod_id) = curr_pod_id {
                                 return UiMsg::DeleteAll(pod_id);
                             }
                         }
 
-                        Some(UserAction::Remove) => {
-                            let mut delete = false;
-
-                            match self.active_menu {
-                                ActiveMenu::PodcastMenu => {
-                                    if let Some(pod_id) = curr_pod_id {
-                                        // check if we have local files first
-                                        let mut any_downloaded = false;
-                                        {
-                                            let borrowed_map = self.podcast_menu.items.borrow_map();
-                                            let borrowed_pod = borrowed_map.get(&pod_id).unwrap();
-
-                                            let borrowed_ep_list =
-                                                borrowed_pod.episodes.borrow_map();
-
-                                            for (_ep_id, ep) in borrowed_ep_list.iter() {
-                                                if ep.path.is_some() {
-                                                    any_downloaded = true;
-                                                    break;
-                                                }
-                                            }
-                                        }
-
-                                        if any_downloaded {
-                                            let ask_delete =
-                                                self.spawn_yes_no_notif("Delete local files too?");
-                                            delete = match ask_delete {
-                                                Some(val) => val,
-                                                None => false, // default not to delete
-                                            };
-                                        }
-
-                                        return UiMsg::RemovePodcast(pod_id, delete);
-                                    }
-                                }
-                                ActiveMenu::EpisodeMenu => {
-                                    if let Some(pod_id) = curr_pod_id {
-                                        if let Some(ep_id) = curr_ep_id {
-                                            // check if we have local files first
-                                            let is_downloaded = self
-                                                .episode_menu
-                                                .items
-                                                .map_single(ep_id, |ep| ep.path.is_some())
-                                                .unwrap();
-                                            if is_downloaded {
-                                                let ask_delete = self
-                                                    .spawn_yes_no_notif("Delete local file too?");
-                                                delete = match ask_delete {
-                                                    Some(val) => val,
-                                                    None => false, // default not to delete
-                                                };
-                                            }
-
-                                            return UiMsg::RemoveEpisode(pod_id, ep_id, delete);
-                                        }
-                                    }
+                        Some(UserAction::Remove) => match self.active_menu {
+                            ActiveMenu::PodcastMenu => {
+                                if let Some(ui_msg) = self.remove_podcast(curr_pod_id) {
+                                    return ui_msg;
                                 }
                             }
-                        }
+                            ActiveMenu::EpisodeMenu => {
+                                if let Some(ui_msg) = self.remove_episode(curr_pod_id, curr_ep_id) {
+                                    return ui_msg;
+                                }
+                            }
+                        },
                         Some(UserAction::RemoveAll) => {
-                            if let Some(pod_id) = curr_pod_id {
-                                let mut delete = false;
-
-                                // check if we have local files first
-                                let mut any_downloaded = false;
-                                {
-                                    let borrowed_map = self.podcast_menu.items.borrow_map();
-                                    let borrowed_pod = borrowed_map.get(&pod_id).unwrap();
-
-                                    let borrowed_ep_list = borrowed_pod.episodes.borrow_map();
-
-                                    for (_ep_id, ep) in borrowed_ep_list.iter() {
-                                        if ep.path.is_some() {
-                                            any_downloaded = true;
-                                            break;
-                                        }
-                                    }
-                                }
-
-                                if any_downloaded {
-                                    let ask_delete =
-                                        self.spawn_yes_no_notif("Delete local files too?");
-                                    delete = match ask_delete {
-                                        Some(val) => val,
-                                        None => false, // default not to delete
-                                    };
-                                }
-                                return match self.active_menu {
-                                    ActiveMenu::PodcastMenu => UiMsg::RemovePodcast(pod_id, delete),
-                                    ActiveMenu::EpisodeMenu => {
-                                        UiMsg::RemoveAllEpisodes(pod_id, delete)
-                                    }
-                                };
+                            let ui_msg = match self.active_menu {
+                                ActiveMenu::PodcastMenu => self.remove_podcast(curr_pod_id),
+                                ActiveMenu::EpisodeMenu => self.remove_all_episodes(curr_pod_id),
+                            };
+                            if let Some(ui_msg) = ui_msg {
+                                return ui_msg;
                             }
                         }
 
@@ -605,6 +393,259 @@ impl<'a> UI<'a> {
         }; // end of getch() match
         return UiMsg::Noop;
     }
+
+    /// Resize all the windows on the screen and refresh.
+    pub fn resize(&mut self) {
+        pancurses::resize_term(0, 0);
+        let (n_row, n_col) = self.stdscr.get_max_yx();
+        self.n_row = n_row;
+        self.n_col = n_col;
+
+        let (pod_col, ep_col, det_col) = Self::calculate_sizes(n_col);
+
+        self.podcast_menu.resize(n_row - 1, pod_col, 0, 0);
+        self.episode_menu.resize(n_row - 1, ep_col, 0, pod_col - 1);
+
+        if self.details_panel.is_some() {
+            if det_col > 0 {
+                let det = self.details_panel.as_mut().unwrap();
+                det.resize(n_row - 1, det_col, 0, pod_col + ep_col - 2);
+            } else {
+                self.details_panel = None;
+            }
+        } else if det_col > 0 {
+            self.details_panel = Some(Self::make_details_panel(
+                self.colors.clone(),
+                n_row - 1,
+                det_col,
+                0,
+                pod_col + ep_col - 2,
+            ));
+        }
+
+        self.stdscr.refresh();
+        self.update_menus();
+
+        match self.active_menu {
+            ActiveMenu::PodcastMenu => self.podcast_menu.activate(),
+            ActiveMenu::EpisodeMenu => {
+                self.podcast_menu.activate();
+                self.episode_menu.activate();
+            }
+        }
+
+        if self.details_panel.is_some() {
+            self.update_details_panel();
+        }
+
+        self.popup_win.resize(n_row, n_col);
+        self.notif_win.resize(n_row, n_col);
+        self.stdscr.refresh();
+    }
+
+    /// Move the menu cursor around and refresh menus when necessary.
+    pub fn move_cursor(
+        &mut self,
+        action: &UserAction,
+        curr_pod_id: Option<i64>,
+        curr_ep_id: Option<i64>,
+    )
+    {
+        match action {
+            UserAction::Down => {
+                match self.active_menu {
+                    ActiveMenu::PodcastMenu => {
+                        if curr_pod_id.is_some() {
+                            self.podcast_menu.scroll(1);
+
+                            self.episode_menu.top_row = 0;
+                            self.episode_menu.selected = 0;
+
+                            // update episodes menu with new list
+                            self.episode_menu.items = self.podcast_menu.get_episodes();
+                            self.episode_menu.update_items();
+                            self.update_details_panel();
+                        }
+                    }
+                    ActiveMenu::EpisodeMenu => {
+                        if curr_ep_id.is_some() {
+                            self.episode_menu.scroll(1);
+                            self.update_details_panel();
+                        }
+                    }
+                }
+            }
+
+            UserAction::Up => {
+                match self.active_menu {
+                    ActiveMenu::PodcastMenu => {
+                        if curr_pod_id.is_some() {
+                            self.podcast_menu.scroll(-1);
+
+                            self.episode_menu.top_row = 0;
+                            self.episode_menu.selected = 0;
+
+                            // update episodes menu with new list
+                            self.episode_menu.items = self.podcast_menu.get_episodes();
+                            self.episode_menu.update_items();
+                            self.update_details_panel();
+                        }
+                    }
+                    ActiveMenu::EpisodeMenu => {
+                        if curr_pod_id.is_some() {
+                            self.episode_menu.scroll(-1);
+                            self.update_details_panel();
+                        }
+                    }
+                }
+            }
+
+            UserAction::Left => {
+                if curr_pod_id.is_some() {
+                    match self.active_menu {
+                        ActiveMenu::PodcastMenu => (),
+                        ActiveMenu::EpisodeMenu => {
+                            self.active_menu = ActiveMenu::PodcastMenu;
+                            self.podcast_menu.activate();
+                            self.episode_menu.deactivate();
+                        }
+                    }
+                }
+                if let Some(det) = &self.details_panel {
+                    det.refresh();
+                }
+            }
+
+            UserAction::Right => {
+                if curr_pod_id.is_some() && curr_ep_id.is_some() {
+                    match self.active_menu {
+                        ActiveMenu::PodcastMenu => {
+                            self.active_menu = ActiveMenu::EpisodeMenu;
+                            self.podcast_menu.deactivate();
+                            self.episode_menu.activate();
+                        }
+                        ActiveMenu::EpisodeMenu => (),
+                    }
+                }
+                if let Some(det) = &self.details_panel {
+                    det.refresh();
+                }
+            }
+
+            // this shouldn't occur because we only trigger this
+            // function when the UserAction is Up, Down, Left, or Right.
+            _ => (),
+        }
+    }
+
+    /// Mark an episode as played or unplayed (opposite of its current
+    /// status).
+    pub fn mark_played(
+        &mut self,
+        curr_pod_id: Option<i64>,
+        curr_ep_id: Option<i64>,
+    ) -> Option<UiMsg>
+    {
+        if let Some(pod_id) = curr_pod_id {
+            if let Some(ep_id) = curr_ep_id {
+                if let Some(played) = self
+                    .episode_menu
+                    .items
+                    .map_single(ep_id, |ep| ep.is_played())
+                {
+                    return Some(UiMsg::MarkPlayed(pod_id, ep_id, !played));
+                }
+            }
+        }
+        return None;
+    }
+
+    /// Mark all episodes for a given podcast as played or unplayed. If
+    /// there are any unplayed episodes, this will convert all episodes
+    /// to played; if all are played already, only then will it convert
+    /// all to unplayed.
+    pub fn mark_all_played(&mut self, curr_pod_id: Option<i64>) -> Option<UiMsg> {
+        if let Some(pod_id) = curr_pod_id {
+            if let Some(played) = self
+                .podcast_menu
+                .items
+                .map_single(pod_id, |pod| pod.is_played())
+            {
+                return Some(UiMsg::MarkAllPlayed(pod_id, !played));
+            }
+        }
+        return None;
+    }
+
+    /// Remove a podcast from the list.
+    pub fn remove_podcast(&mut self, curr_pod_id: Option<i64>) -> Option<UiMsg> {
+        let mut delete = false;
+
+        if let Some(pod_id) = curr_pod_id {
+            // check if we have local files first and if so, ask whether
+            // to delete those too
+            if self.check_for_local_files(pod_id) {
+                let ask_delete = self.spawn_yes_no_notif("Delete local files too?");
+                delete = match ask_delete {
+                    Some(val) => val,
+                    None => false, // default not to delete
+                };
+            }
+
+            return Some(UiMsg::RemovePodcast(pod_id, delete));
+        }
+        return None;
+    }
+
+    /// Remove an episode from the list for the current podcast.
+    fn remove_episode(
+        &mut self,
+        curr_pod_id: Option<i64>,
+        curr_ep_id: Option<i64>,
+    ) -> Option<UiMsg>
+    {
+        let mut delete = false;
+        if let Some(pod_id) = curr_pod_id {
+            if let Some(ep_id) = curr_ep_id {
+                // check if we have local files first
+                let is_downloaded = self
+                    .episode_menu
+                    .items
+                    .map_single(ep_id, |ep| ep.path.is_some())
+                    .unwrap();
+                if is_downloaded {
+                    let ask_delete = self.spawn_yes_no_notif("Delete local file too?");
+                    delete = match ask_delete {
+                        Some(val) => val,
+                        None => false, // default not to delete
+                    };
+                }
+
+                return Some(UiMsg::RemoveEpisode(pod_id, ep_id, delete));
+            }
+        }
+        return None;
+    }
+
+    /// Remove all episodes from the list for the current podcast.
+    fn remove_all_episodes(&mut self, curr_pod_id: Option<i64>) -> Option<UiMsg> {
+        if let Some(pod_id) = curr_pod_id {
+            let mut delete = false;
+
+            // check if we have local files first and if so, ask whether
+            // to delete those too
+            if self.check_for_local_files(pod_id) {
+                let ask_delete = self.spawn_yes_no_notif("Delete local files too?");
+                delete = match ask_delete {
+                    Some(val) => val,
+                    None => false, // default not to delete
+                };
+            }
+            return Some(UiMsg::RemoveAllEpisodes(pod_id, delete));
+        }
+        return None;
+    }
+
 
     /// Based on the current selected value of the podcast and episode
     /// menus, returns the IDs of the current podcast and episode (if
@@ -647,6 +688,24 @@ impl<'a> UI<'a> {
             det_col = 0;
         }
         return (pod_col, ep_col, det_col);
+    }
+
+    /// Checks whether the user has downloaded any episodes for the
+    /// given podcast to their local system.
+    pub fn check_for_local_files(&self, pod_id: i64) -> bool {
+        let mut any_downloaded = false;
+        let borrowed_map = self.podcast_menu.items.borrow_map();
+        let borrowed_pod = borrowed_map.get(&pod_id).unwrap();
+
+        let borrowed_ep_list = borrowed_pod.episodes.borrow_map();
+
+        for (_ep_id, ep) in borrowed_ep_list.iter() {
+            if ep.path.is_some() {
+                any_downloaded = true;
+                break;
+            }
+        }
+        return any_downloaded;
     }
 
     /// Adds a notification to the bottom of the screen that solicits
