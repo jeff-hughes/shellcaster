@@ -1,27 +1,58 @@
 use pancurses::Input;
 
-use super::Panel;
 use super::{ColorType, Colors};
+use super::{Menu, Panel};
 use crate::keymap::{Keybindings, UserAction};
+use crate::types::*;
 
 /// Enum indicating the type of the currently active popup window.
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub enum ActivePopup {
-    WelcomeWin,
-    HelpWin,
-    DownloadWin,
+    WelcomeWin(Panel),
+    HelpWin(Panel),
+    DownloadWin(Menu<NewEpisode>),
     None,
+}
+
+impl ActivePopup {
+    pub fn is_welcome_win(&self) -> bool {
+        match self {
+            ActivePopup::WelcomeWin(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_help_win(&self) -> bool {
+        match self {
+            ActivePopup::HelpWin(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_download_win(&self) -> bool {
+        match self {
+            ActivePopup::DownloadWin(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_none(&self) -> bool {
+        match self {
+            ActivePopup::None => true,
+            _ => false,
+        }
+    }
 }
 
 /// Holds all state relevant for handling popup windows.
 #[derive(Debug)]
 pub struct PopupWin<'a> {
-    panel: Option<Panel>,
+    popup: ActivePopup,
+    new_episodes: Vec<NewEpisode>,
     colors: Colors,
     keymap: &'a Keybindings,
     total_rows: i32,
     total_cols: i32,
-    pub active: ActivePopup,
     pub welcome_win: bool,
     pub help_win: bool,
     pub download_win: bool,
@@ -31,12 +62,12 @@ impl<'a> PopupWin<'a> {
     /// Set up struct for handling popup windows.
     pub fn new(colors: Colors, keymap: &'a Keybindings, total_rows: i32, total_cols: i32) -> Self {
         return Self {
-            panel: None,
+            popup: ActivePopup::None,
+            new_episodes: Vec::new(),
             colors: colors,
             keymap: keymap,
             total_rows: total_rows,
             total_cols: total_cols,
-            active: ActivePopup::None,
             welcome_win: false,
             help_win: false,
             download_win: false,
@@ -59,19 +90,18 @@ impl<'a> PopupWin<'a> {
     pub fn resize(&mut self, total_rows: i32, total_cols: i32) {
         self.total_rows = total_rows;
         self.total_cols = total_cols;
-        self.panel = None;
-        match self.active {
-            ActivePopup::WelcomeWin => {
+        match &self.popup {
+            ActivePopup::WelcomeWin(_win) => {
                 let welcome_win = self.make_welcome_win();
                 welcome_win.refresh();
-                self.panel = Some(welcome_win);
+                self.popup = ActivePopup::WelcomeWin(welcome_win);
             }
-            ActivePopup::HelpWin => {
+            ActivePopup::HelpWin(_win) => {
                 let help_win = self.make_help_win();
                 help_win.refresh();
-                self.panel = Some(help_win);
+                self.popup = ActivePopup::HelpWin(help_win);
             }
-            ActivePopup::DownloadWin => (), // not yet implemented
+            ActivePopup::DownloadWin(_win) => (), // not yet implemented
             ActivePopup::None => (),
         }
         // if let Some(panel) = &self.panel {
@@ -250,6 +280,58 @@ impl<'a> PopupWin<'a> {
         return help_win;
     }
 
+    /// Create a new download window and draw it to the screen.
+    pub fn spawn_download_win(&mut self) {
+        // TODO: This will be moved to main controller
+        let ep_titles = vec![
+            "Episode title",
+            "Here's another episode",
+            "This one is a great episode",
+        ];
+        for (i, title) in ep_titles.iter().enumerate() {
+            self.new_episodes.push(NewEpisode {
+                id: i as i64,
+                pod_id: 0,
+                title: title.to_string(),
+                pod_title: "This is a podcast".to_string(),
+                selected: i == 0,
+            });
+        }
+
+        self.download_win = true;
+        self.change_win();
+    }
+
+    /// Create a new Panel holding a download window.
+    pub fn make_download_win(&self) -> Menu<NewEpisode> {
+        // the warning on the unused mut is a function of Rust getting
+        // confused between panel.rs and mock_panel.rs
+        #[allow(unused_mut)]
+        let mut download_panel = Panel::new(
+            self.colors.clone(),
+            "Downloads".to_string(),
+            0,
+            self.total_rows - 1,
+            self.total_cols,
+            0,
+            0,
+        );
+
+        let mut download_win = Menu::<NewEpisode> {
+            panel: download_panel,
+            items: LockVec::new(self.new_episodes.clone()),
+            top_row: 0,
+            selected: 0,
+        };
+        download_win.init();
+
+        return download_win;
+    }
+
+    pub fn add_episodes(&mut self, mut episodes: Vec<NewEpisode>) {
+        self.new_episodes.append(&mut episodes);
+    }
+
     /// Gets rid of the welcome window.
     pub fn turn_off_welcome_win(&mut self) {
         self.welcome_win = false;
@@ -262,6 +344,12 @@ impl<'a> PopupWin<'a> {
         self.change_win();
     }
 
+    /// Gets rid of the download window.
+    pub fn turn_off_download_win(&mut self) {
+        self.download_win = false;
+        self.change_win();
+    }
+
     /// When there is a change to the active popup window, this should
     /// be called to check for other popup windows that are "in the
     /// queue" -- this lets one popup window appear over top of another
@@ -269,49 +357,61 @@ impl<'a> PopupWin<'a> {
     /// check for other popup windows to appear and change the active
     /// window accordingly.
     fn change_win(&mut self) {
-        let mut win = None;
-        let mut new_active = ActivePopup::None;
-
         // The help window takes precedence over all other popup windows;
         // the welcome window is lowest priority and only appears if all
         // other windows are inactive
-        if self.help_win && self.active != ActivePopup::HelpWin {
-            win = Some(self.make_help_win());
-            new_active = ActivePopup::HelpWin;
-        } else if self.download_win && self.active != ActivePopup::DownloadWin {
-            // TODO: Not yet implemented
-        } else if self.welcome_win && self.active != ActivePopup::WelcomeWin {
-            win = Some(self.make_welcome_win());
-            new_active = ActivePopup::WelcomeWin;
-        } else if !self.help_win
-            && !self.download_win
-            && !self.welcome_win
-            && self.active != ActivePopup::None
+        if self.help_win && !self.popup.is_help_win() {
+            let win = self.make_help_win();
+            win.refresh();
+            self.popup = ActivePopup::HelpWin(win);
+        } else if self.download_win && !self.popup.is_download_win() {
+            let mut win = self.make_download_win();
+            win.update_items();
+            win.highlight_selected(true);
+            self.popup = ActivePopup::DownloadWin(win);
+        } else if self.welcome_win && !self.popup.is_welcome_win() {
+            let win = self.make_welcome_win();
+            win.refresh();
+            self.popup = ActivePopup::WelcomeWin(win);
+        } else if !self.help_win && !self.download_win && !self.welcome_win && !self.popup.is_none()
         {
-            self.panel = None;
-            self.active = ActivePopup::None;
-        }
-
-        if let Some(newwin) = win {
-            newwin.refresh();
-            self.panel = Some(newwin);
-            self.active = new_active;
+            self.popup = ActivePopup::None;
         }
     }
 
     /// When a popup window is active, this handles the user's keyboard
     /// input that is relevant for that window.
     pub fn handle_input(&mut self, input: Input) {
-        if self.active == ActivePopup::HelpWin {
-            match input {
-                Input::KeyExit
-                | Input::Character('\u{1b}') // Esc
-                | Input::Character('q')
-                | Input::Character('Q') => {
-                    self.turn_off_help_win();
+        match self.popup {
+            ActivePopup::HelpWin(ref mut _win) => {
+                match input {
+                    Input::KeyExit
+                    | Input::Character('\u{1b}') // Esc
+                    | Input::Character('q')
+                    | Input::Character('Q') => {
+                        self.turn_off_help_win();
+                    }
+                    _ => (),
                 }
-                _ => (),
             }
+            ActivePopup::DownloadWin(ref mut win) => {
+                match self.keymap.get_from_input(input) {
+                    Some(UserAction::Down) => win.scroll(1),
+                    Some(UserAction::Up) => win.scroll(-1),
+                    Some(_) | None => {
+                        match input {
+                            Input::KeyExit
+                            | Input::Character('\u{1b}') // Esc
+                            | Input::Character('q')
+                            | Input::Character('Q') => {
+                                self.turn_off_download_win();
+                            }
+                            _ => (),
+                        }
+                    }
+                }
+            }
+            _ => (),
         }
     }
 }

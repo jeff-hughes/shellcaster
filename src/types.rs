@@ -230,6 +230,39 @@ pub struct EpisodeNoId {
     pub duration: Option<i64>,
 }
 
+/// Struct holding data about an individual podcast episode, specifically
+/// for the popup window that asks users which new episodes they wish to
+/// download.
+#[derive(Debug, Clone)]
+pub struct NewEpisode {
+    pub id: i64,
+    pub pod_id: i64,
+    pub title: String,
+    pub pod_title: String,
+    pub selected: bool,
+}
+
+impl Menuable for NewEpisode {
+    /// Returns the database ID for the episode.
+    fn get_id(&self) -> i64 {
+        return self.id;
+    }
+
+    /// Returns the title for the episode, up to length characters.
+    fn get_title(&self, length: usize) -> String {
+        let selected = if self.selected {
+            "✓".to_string()
+        } else {
+            " ".to_string()
+        };
+        let full_string = format!("[{}] {} ({})", selected, self.title, self.pod_title);
+        return full_string.substr(0, length);
+    }
+
+    fn is_played(&self) -> bool {
+        return false;
+    }
+}
 
 /// Struct used to hold a vector of data inside a reference-counted
 /// mutex, to allow for multiple owners of mutable data.

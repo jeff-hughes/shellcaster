@@ -268,6 +268,8 @@ impl Menu<Episode> {
     }
 }
 
+impl Menu<NewEpisode> {}
+
 
 // TESTS ----------------------------------------------------------------
 #[cfg(test)]
