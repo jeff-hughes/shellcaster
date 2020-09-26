@@ -1,4 +1,5 @@
 use std::cmp::min;
+use std::collections::hash_map::Entry;
 
 use super::ColorType;
 use super::Panel;
@@ -268,7 +269,58 @@ impl Menu<Episode> {
     }
 }
 
-impl Menu<NewEpisode> {}
+impl Menu<NewEpisode> {
+    /// Changes the status of the currently highlighted episode -- if it
+    /// was selected to be downloaded, it will be unselected, and vice
+    /// versa.
+    pub fn select_item(&mut self) {
+        let changed =
+            self.change_item_selections(vec![(self.top_row + self.selected) as usize], None);
+        if changed {
+            self.update_items();
+            self.highlight_selected(true);
+        }
+    }
+
+    /// Changes the status of all items in the list. If there are any
+    /// unselected episodes, this will convert all episodes to be
+    /// selected; if all are selected already, only then will it convert
+    /// all to unselected.
+    pub fn select_all_items(&mut self) {
+        let all_selected = self.items.map(|ep| ep.selected).iter().all(|x| *x);
+        let changed =
+            self.change_item_selections((0..self.items.len()).collect(), Some(!all_selected));
+        if changed {
+            self.update_items();
+            self.highlight_selected(true);
+        }
+    }
+
+    /// Given a list of index values in the menu, this changes the status
+    /// of these episode -- if they were selected to be downloaded, they
+    /// will be unselected, and vice versa. If `selection` is a boolean,
+    /// however, it will be set to this value explicitly rather than just
+    /// being reversed.
+    fn change_item_selections(&mut self, indexes: Vec<usize>, selection: Option<bool>) -> bool {
+        let mut changed = false;
+        {
+            let (mut borrowed_map, borrowed_order) = self.items.borrow();
+            for idx in indexes {
+                if let Some(ep_id) = borrowed_order.get(idx) {
+                    if let Entry::Occupied(mut ep) = borrowed_map.entry(*ep_id) {
+                        let ep = ep.get_mut();
+                        match selection {
+                            Some(sel) => ep.selected = sel,
+                            None => ep.selected = !ep.selected,
+                        }
+                        changed = true;
+                    }
+                }
+            }
+        }
+        return changed;
+    }
+}
 
 
 // TESTS ----------------------------------------------------------------

@@ -328,7 +328,7 @@ impl<'a> PopupWin<'a> {
         return download_win;
     }
 
-    pub fn add_episodes(&mut self, mut episodes: Vec<NewEpisode>) {
+    pub fn _add_episodes(&mut self, mut episodes: Vec<NewEpisode>) {
         self.new_episodes.append(&mut episodes);
     }
 
@@ -394,10 +394,21 @@ impl<'a> PopupWin<'a> {
                     _ => (),
                 }
             }
-            ActivePopup::DownloadWin(ref mut win) => {
+            ActivePopup::DownloadWin(ref mut menu) => {
                 match self.keymap.get_from_input(input) {
-                    Some(UserAction::Down) => win.scroll(1),
-                    Some(UserAction::Up) => win.scroll(-1),
+                    Some(UserAction::Down) => menu.scroll(1),
+                    Some(UserAction::Up) => menu.scroll(-1),
+
+                    Some(UserAction::Download)
+                    | Some(UserAction::MarkPlayed)
+                    | Some(UserAction::Play) => {
+                        menu.select_item();
+                    }
+
+                    Some(UserAction::DownloadAll) | Some(UserAction::MarkAllPlayed) => {
+                        menu.select_all_items();
+                    }
+
                     Some(_) | None => {
                         match input {
                             Input::KeyExit

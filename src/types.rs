@@ -309,8 +309,8 @@ impl<T: Clone + Menuable> LockVec<T> {
         return (self.data.lock().unwrap(), self.order.lock().unwrap());
     }
 
-    /// Given an index in the vector, this takes a new T and replaces
-    /// the old T at that position in the vector.
+    /// Given an id, this takes a new T and replaces the old T with that
+    /// id.
     pub fn replace(&self, id: i64, t: T) {
         let mut borrowed = self.borrow_map();
         borrowed.insert(id, t);
