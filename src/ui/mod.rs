@@ -579,6 +579,11 @@ impl<'a> UI<'a> {
 
     /// Remove a podcast from the list.
     pub fn remove_podcast(&mut self, curr_pod_id: Option<i64>) -> Option<UiMsg> {
+        let confirm = self.ask_for_confirmation("Are you sure you want to remove the podcast?");
+        // If we don't get a confirmation to delete, then don't remove
+        if !confirm {
+            return None;
+        }
         let mut delete = false;
 
         if let Some(pod_id) = curr_pod_id {
@@ -604,6 +609,11 @@ impl<'a> UI<'a> {
         curr_ep_id: Option<i64>,
     ) -> Option<UiMsg>
     {
+        let confirm = self.ask_for_confirmation("Are you sure you want to remove the episode?");
+        // If we don't get a confirmation to delete, then don't remove
+        if !confirm {
+            return None;
+        }
         let mut delete = false;
         if let Some(pod_id) = curr_pod_id {
             if let Some(ep_id) = curr_ep_id {
@@ -706,6 +716,17 @@ impl<'a> UI<'a> {
             }
         }
         return any_downloaded;
+    }
+
+    /// Spawns a "(y/n)" notification with the specified input `message`
+    /// using `spawn_input_notif`. If the the user types 'y', then the 
+    /// function returns `true`, and 'n' returns `false`. Cancelling the
+    /// action returns `false` as well.
+    pub fn ask_for_confirmation(&self, message: &str) -> bool {
+        match self.spawn_yes_no_notif(message) {
+            Some(val) => val,
+            None => false
+        }
     }
 
     /// Adds a notification to the bottom of the screen that solicits
