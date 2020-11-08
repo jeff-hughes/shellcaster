@@ -308,8 +308,7 @@ impl Menu<NewEpisode> {
     /// was selected to be downloaded, it will be unselected, and vice
     /// versa.
     pub fn select_item(&mut self) {
-        let changed =
-            self.change_item_selections(vec![(self.top_row + self.selected) as usize], None);
+        let changed = self.change_item_selections(vec![self.get_menu_idx(self.selected)], None);
         if changed {
             self.update_items();
             self.highlight_selected(true);

@@ -260,7 +260,7 @@ impl Menuable for NewEpisode {
     }
 
     fn is_played(&self) -> bool {
-        return false;
+        return true;
     }
 }
 
