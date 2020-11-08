@@ -2,7 +2,7 @@ use pancurses::Input;
 use std::cmp::min;
 
 use super::{ColorType, Colors};
-use super::{Menu, Panel};
+use super::{Menu, Panel, UiMsg};
 use crate::keymap::{Keybindings, UserAction};
 use crate::types::*;
 
@@ -257,23 +257,10 @@ impl<'a> PopupWin<'a> {
     }
 
     /// Create a new download window and draw it to the screen.
-    pub fn spawn_download_win(&mut self) {
-        // TODO: This will be moved to main controller
-        let ep_titles = vec![
-            "Episode title",
-            "Here's another episode",
-            "This one is a great episode",
-        ];
-        for (i, title) in ep_titles.iter().enumerate() {
-            self.new_episodes.push(NewEpisode {
-                id: i as i64,
-                pod_id: 0,
-                title: title.to_string(),
-                pod_title: "This is a podcast".to_string(),
-                selected: i == 0,
-            });
+    pub fn spawn_download_win(&mut self, episodes: Vec<NewEpisode>) {
+        for ep in episodes {
+            self.new_episodes.push(ep);
         }
-
         self.download_win = true;
         self.change_win();
     }
@@ -361,7 +348,8 @@ impl<'a> PopupWin<'a> {
 
     /// When a popup window is active, this handles the user's keyboard
     /// input that is relevant for that window.
-    pub fn handle_input(&mut self, input: Input) {
+    pub fn handle_input(&mut self, input: Input) -> UiMsg {
+        let mut msg = UiMsg::Noop;
         match self.popup {
             ActivePopup::HelpWin(ref mut _win) => {
                 match input {
@@ -387,6 +375,18 @@ impl<'a> PopupWin<'a> {
                 }
 
                 Some(UserAction::Quit) => {
+                    let mut eps_to_download = Vec::new();
+                    {
+                        let map = menu.items.borrow_map();
+                        for (_, ep) in map.iter() {
+                            if ep.selected {
+                                eps_to_download.push((ep.pod_id, ep.id));
+                            }
+                        }
+                    }
+                    if !eps_to_download.is_empty() {
+                        msg = UiMsg::DownloadMulti(eps_to_download);
+                    }
                     self.turn_off_download_win();
                 }
 
@@ -394,6 +394,7 @@ impl<'a> PopupWin<'a> {
             },
             _ => (),
         }
+        return msg;
     }
 
 

@@ -16,7 +16,7 @@ lazy_static! {
 
 
 pub struct SyncResult {
-    pub added: Vec<i64>,
+    pub added: Vec<NewEpisode>,
     pub updated: Vec<i64>,
 }
 
@@ -207,7 +207,14 @@ impl Database {
         let mut ep_ids = Vec::new();
         for ep in podcast.episodes.iter().rev() {
             let id = self.insert_episode(pod_id, &ep)?;
-            ep_ids.push(id);
+            let new_ep = NewEpisode {
+                id: id,
+                pod_id: pod_id,
+                title: ep.title.clone(),
+                pod_title: podcast.title.clone(),
+                selected: false,
+            };
+            ep_ids.push(new_ep);
         }
 
         return Ok(SyncResult {
@@ -328,7 +335,7 @@ impl Database {
             ],
         )?;
 
-        let result = self.update_episodes(pod_id, podcast.episodes);
+        let result = self.update_episodes(pod_id, podcast.title, podcast.episodes);
         return Ok(result);
     }
 
@@ -340,7 +347,13 @@ impl Database {
     /// episode that has changed either of these fields will show up as
     /// a "new" episode. The old version will still remain in the
     /// database.
-    fn update_episodes(&self, podcast_id: i64, episodes: Vec<EpisodeNoId>) -> SyncResult {
+    fn update_episodes(
+        &self,
+        podcast_id: i64,
+        podcast_title: String,
+        episodes: Vec<EpisodeNoId>,
+    ) -> SyncResult
+    {
         let conn = self.conn.as_ref().unwrap();
 
         let old_episodes = self.get_episodes(podcast_id);
@@ -411,7 +424,14 @@ impl Database {
                 }
                 None => {
                     let id = self.insert_episode(podcast_id, &new_ep).unwrap();
-                    insert_ep.push(id);
+                    let new_ep = NewEpisode {
+                        id: id,
+                        pod_id: podcast_id,
+                        title: new_ep.title.clone(),
+                        pod_title: podcast_title.clone(),
+                        selected: false,
+                    };
+                    insert_ep.push(new_ep);
                 }
             }
         }

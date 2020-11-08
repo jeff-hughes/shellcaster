@@ -21,6 +21,7 @@ pub enum MainMessage {
     UiSpawnNotif(String, bool, u64),
     UiSpawnPersistentNotif(String, bool),
     UiClearPersistentNotif,
+    UiSpawnDownloadPopup(Vec<NewEpisode>),
     UiTearDown,
 }
 
@@ -121,6 +122,12 @@ impl MainController {
                 }
 
                 Message::Ui(UiMsg::Download(pod_id, ep_id)) => self.download(pod_id, Some(ep_id)),
+
+                Message::Ui(UiMsg::DownloadMulti(vec)) => {
+                    for (pod_id, ep_id) in vec.into_iter() {
+                        self.download(pod_id, Some(ep_id));
+                    }
+                }
 
                 Message::Ui(UiMsg::DownloadAll(pod_id)) => self.download(pod_id, None),
 
@@ -290,9 +297,11 @@ impl MainController {
                         // episodes when sync process is finished
                         let mut added = 0;
                         let mut updated = 0;
+                        let mut new_eps = Vec::new();
                         for res in self.sync_tracker.iter() {
                             added += res.added.len();
                             updated += res.updated.len();
+                            new_eps.extend(res.added.clone());
                         }
                         self.sync_tracker = Vec::new();
                         self.notif_to_ui(
@@ -302,6 +311,11 @@ impl MainController {
                             ),
                             false,
                         );
+                        if !new_eps.is_empty() {
+                            self.tx_to_ui
+                                .send(MainMessage::UiSpawnDownloadPopup(new_eps))
+                                .unwrap();
+                        }
                     }
                 } else {
                     self.notif_to_ui(

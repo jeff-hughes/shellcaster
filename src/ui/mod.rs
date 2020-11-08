@@ -52,6 +52,7 @@ pub enum UiMsg {
     Sync(i64),
     SyncAll,
     Download(i64, i64),
+    DownloadMulti(Vec<(i64, i64)>),
     DownloadAll(i64),
     Delete(i64, i64),
     DeleteAll(i64),
@@ -126,6 +127,9 @@ impl<'a> UI<'a> {
                         MainMessage::UiTearDown => {
                             ui.tear_down();
                             break;
+                        }
+                        MainMessage::UiSpawnDownloadPopup(episodes) => {
+                            ui.popup_win.spawn_download_win(episodes);
                         }
                     }
                 }
@@ -232,8 +236,6 @@ impl<'a> UI<'a> {
         if self.podcast_menu.items.is_empty() {
             self.popup_win.spawn_welcome_win();
         }
-
-        self.popup_win.spawn_download_win();
     }
 
     /// Waits for user input and, where necessary, provides UiMsgs
@@ -261,7 +263,7 @@ impl<'a> UI<'a> {
                 // welcome window which takes no input), then
                 // redirect user input there
                 if self.popup_win.is_non_welcome_popup_active() {
-                    self.popup_win.handle_input(input);
+                    let popup_msg = self.popup_win.handle_input(input);
 
                     // need to check if popup window is still active, as
                     // handling character input above may involve
@@ -273,6 +275,7 @@ impl<'a> UI<'a> {
                             self.update_details_panel();
                         }
                     }
+                    return popup_msg;
                 } else {
                     match self.keymap.get_from_input(input) {
                         Some(a @ UserAction::Down)
