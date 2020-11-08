@@ -1,4 +1,5 @@
 use pancurses::Input;
+use std::cmp::min;
 
 use super::{ColorType, Colors};
 use super::{Menu, Panel};
@@ -16,31 +17,19 @@ pub enum ActivePopup {
 
 impl ActivePopup {
     pub fn is_welcome_win(&self) -> bool {
-        match self {
-            ActivePopup::WelcomeWin(_) => true,
-            _ => false,
-        }
+        return matches!(self, ActivePopup::WelcomeWin(_));
     }
 
     pub fn is_help_win(&self) -> bool {
-        match self {
-            ActivePopup::HelpWin(_) => true,
-            _ => false,
-        }
+        return matches!(self, ActivePopup::HelpWin(_));
     }
 
     pub fn is_download_win(&self) -> bool {
-        match self {
-            ActivePopup::DownloadWin(_) => true,
-            _ => false,
-        }
+        return matches!(self, ActivePopup::DownloadWin(_));
     }
 
     pub fn is_none(&self) -> bool {
-        match self {
-            ActivePopup::None => true,
-            _ => false,
-        }
+        return matches!(self, ActivePopup::None);
     }
 }
 
@@ -101,7 +90,11 @@ impl<'a> PopupWin<'a> {
                 help_win.refresh();
                 self.popup = ActivePopup::HelpWin(help_win);
             }
-            ActivePopup::DownloadWin(_win) => (), // not yet implemented
+            ActivePopup::DownloadWin(_win) => {
+                let mut download_win = self.make_download_win();
+                download_win.highlight_selected(true);
+                self.popup = ActivePopup::DownloadWin(download_win);
+            }
             ActivePopup::None => (),
         }
         // if let Some(panel) = &self.panel {
@@ -122,24 +115,7 @@ impl<'a> PopupWin<'a> {
         let actions = vec![UserAction::AddFeed, UserAction::Quit, UserAction::Help];
         let mut key_strs = Vec::new();
         for action in actions {
-            let keys = self.keymap.keys_for_action(action);
-            let key_str = match keys.len() {
-                0 => "<missing>".to_string(),
-                1 => format!("\"{}\"", &keys[0]),
-                2 => format!("\"{}\" or \"{}\"", &keys[0], &keys[1]),
-                _ => {
-                    let mut s = "".to_string();
-                    for i in 0..keys.len() {
-                        if i == keys.len() - 1 {
-                            s = format!("{}, \"{}\"", s, keys[i]);
-                        } else {
-                            s = format!("{}, or \"{}\"", s, keys[i]);
-                        }
-                    }
-                    s
-                }
-            };
-            key_strs.push(key_str);
+            key_strs.push(self.list_keys(action, None));
         }
 
         // the warning on the unused mut is a function of Rust getting
@@ -309,7 +285,7 @@ impl<'a> PopupWin<'a> {
         #[allow(unused_mut)]
         let mut download_panel = Panel::new(
             self.colors.clone(),
-            "Downloads".to_string(),
+            "New episodes".to_string(),
             0,
             self.total_rows - 1,
             self.total_cols,
@@ -317,12 +293,16 @@ impl<'a> PopupWin<'a> {
             0,
         );
 
-        let mut download_win = Menu::<NewEpisode> {
-            panel: download_panel,
-            items: LockVec::new(self.new_episodes.clone()),
-            top_row: 0,
-            selected: 0,
-        };
+        let header = format!(
+            "Select which episodes to download with {}. Select all/none with {}. Press {} to confirm the selection and exit the menu.",
+            self.list_keys(UserAction::MarkPlayed, Some(2)),
+            self.list_keys(UserAction::MarkAllPlayed, Some(2)),
+            self.list_keys(UserAction::Quit, Some(2)));
+        let mut download_win = Menu::new(
+            download_panel,
+            Some(header),
+            LockVec::new(self.new_episodes.clone()),
+        );
         download_win.init();
 
         return download_win;
@@ -394,35 +374,54 @@ impl<'a> PopupWin<'a> {
                     _ => (),
                 }
             }
-            ActivePopup::DownloadWin(ref mut menu) => {
-                match self.keymap.get_from_input(input) {
-                    Some(UserAction::Down) => menu.scroll(1),
-                    Some(UserAction::Up) => menu.scroll(-1),
+            ActivePopup::DownloadWin(ref mut menu) => match self.keymap.get_from_input(input) {
+                Some(UserAction::Down) => menu.scroll(1),
+                Some(UserAction::Up) => menu.scroll(-1),
 
-                    Some(UserAction::Download)
-                    | Some(UserAction::MarkPlayed)
-                    | Some(UserAction::Play) => {
-                        menu.select_item();
-                    }
-
-                    Some(UserAction::DownloadAll) | Some(UserAction::MarkAllPlayed) => {
-                        menu.select_all_items();
-                    }
-
-                    Some(_) | None => {
-                        match input {
-                            Input::KeyExit
-                            | Input::Character('\u{1b}') // Esc
-                            | Input::Character('q')
-                            | Input::Character('Q') => {
-                                self.turn_off_download_win();
-                            }
-                            _ => (),
-                        }
-                    }
+                Some(UserAction::MarkPlayed) => {
+                    menu.select_item();
                 }
-            }
+
+                Some(UserAction::MarkAllPlayed) => {
+                    menu.select_all_items();
+                }
+
+                Some(UserAction::Quit) => {
+                    self.turn_off_download_win();
+                }
+
+                Some(_) | None => (),
+            },
             _ => (),
         }
+    }
+
+
+    /// Helper function that gets the keybindings for a particular
+    /// user action, and converts it to a string, e.g., '"a", "b", or
+    /// "c"'. If `max_num` is set, will only list up to that number of
+    /// items.
+    fn list_keys(&self, action: UserAction, max_num: Option<usize>) -> String {
+        let keys = self.keymap.keys_for_action(action);
+        let mut max_keys = keys.len();
+        if let Some(max_num) = max_num {
+            max_keys = min(keys.len(), max_num);
+        }
+        return match max_keys {
+            0 => "<missing>".to_string(),
+            1 => format!("\"{}\"", &keys[0]),
+            2 => format!("\"{}\" or \"{}\"", &keys[0], &keys[1]),
+            _ => {
+                let mut s = "".to_string();
+                for (i, key) in keys.iter().enumerate().take(max_keys) {
+                    if i == max_keys - 1 {
+                        s = format!("{}, \"{}\"", s, key);
+                    } else {
+                        s = format!("{}, or \"{}\"", s, key);
+                    }
+                }
+                s
+            }
+        };
     }
 }

@@ -167,12 +167,7 @@ impl<'a> UI<'a> {
             0,
             0,
         );
-        let podcast_menu = Menu {
-            panel: podcast_panel,
-            items: items.clone(),
-            top_row: 0,
-            selected: 0,
-        };
+        let podcast_menu = Menu::new(podcast_panel, None, items.clone());
 
         let episode_panel = Panel::new(
             colors.clone(),
@@ -192,12 +187,7 @@ impl<'a> UI<'a> {
             None => LockVec::new(Vec::new()),
         };
 
-        let episode_menu = Menu {
-            panel: episode_panel,
-            items: first_pod,
-            top_row: 0,
-            selected: 0,
-        };
+        let episode_menu = Menu::new(episode_panel, None, first_pod);
 
         let details_panel = if n_col > crate::config::DETAILS_PANEL_LENGTH {
             Some(Self::make_details_panel(
@@ -242,6 +232,8 @@ impl<'a> UI<'a> {
         if self.podcast_menu.items.is_empty() {
             self.popup_win.spawn_welcome_win();
         }
+
+        self.popup_win.spawn_download_win();
     }
 
     /// Waits for user input and, where necessary, provides UiMsgs

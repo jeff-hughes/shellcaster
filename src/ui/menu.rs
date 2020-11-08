@@ -12,25 +12,42 @@ use crate::types::*;
 ///
 /// * `screen_pos` stores the position of the window on the screen, from
 ///   left to right
-/// * `n_row` and `n_col` store the size of the `window`
+/// * `start_row` indicates the first row that is used for the menu;
+///   this will be 0 if there is no header; otherwise, `start_row` will
+///   be the first row below the header. Calculated relative to the
+///   panel, i.e., a value between 0 and (n_row - 1)
 /// * `top_row` indicates the top line of text that is shown on screen
 ///   (since the list of items can be longer than the available size of
 ///   the screen). `top_row` is calculated relative to the `items` index,
 ///   i.e., it will be a value between 0 and items.len()
 /// * `selected` indicates which item on screen is currently highlighted.
-///   It is calculated relative to the screen itself, i.e., a value between
+///   It is calculated relative to the panel, i.e., a value between
 ///   0 and (n_row - 1)
 #[derive(Debug)]
 pub struct Menu<T>
 where T: Clone + Menuable
 {
     pub panel: Panel,
+    pub header: Option<String>,
     pub items: LockVec<T>,
-    pub top_row: i32,  // top row of text shown in window
-    pub selected: i32, // which line of text is highlighted
+    pub start_row: i32, // beginning of first row of menu
+    pub top_row: i32,   // top row of text shown in window
+    pub selected: i32,  // which line of text is highlighted
 }
 
 impl<T: Clone + Menuable> Menu<T> {
+    /// Creates a new menu.
+    pub fn new(panel: Panel, header: Option<String>, items: LockVec<T>) -> Self {
+        return Self {
+            panel: panel,
+            header: header,
+            items: items,
+            start_row: 0,
+            top_row: 0,
+            selected: 0,
+        };
+    }
+
     /// Prints the list of visible items to the pancurses window and
     /// refreshes it.
     pub fn init(&mut self) {
@@ -42,20 +59,23 @@ impl<T: Clone + Menuable> Menu<T> {
     /// window and refreshes it.
     pub fn update_items(&mut self) {
         self.panel.erase();
+        self.start_row = self.print_header();
+        if self.selected < self.start_row {
+            self.selected = self.start_row;
+        }
 
         let (map, order) = self.items.borrow();
         if !order.is_empty() {
             // update selected item if list has gotten shorter
-            let current_selected = self.selected + self.top_row;
+            let current_selected = self.get_menu_idx(self.selected) as i32;
             let list_len = order.len() as i32;
             if current_selected >= list_len {
                 self.selected = self.selected - (current_selected - list_len) - 1;
             }
 
             // for visible rows, print strings from list
-            for i in 0..self.panel.get_rows() {
-                let item_idx = (self.top_row + i) as usize;
-                if let Some(elem_id) = order.get(item_idx) {
+            for i in self.start_row..self.panel.get_rows() {
+                if let Some(elem_id) = order.get(self.get_menu_idx(i)) {
                     let elem = map.get(&elem_id).unwrap();
                     self.panel
                         .write_line(i, elem.get_title(self.panel.get_cols() as usize));
@@ -83,6 +103,16 @@ impl<T: Clone + Menuable> Menu<T> {
         self.panel.refresh();
     }
 
+    /// If a header exists, prints lines of text to the panel to appear
+    /// above the menu.
+    fn print_header(&mut self) -> i32 {
+        if let Some(header) = &self.header {
+            return self.panel.write_wrap_line(0, header.clone()) + 2;
+        } else {
+            return 0;
+        }
+    }
+
     /// Scrolls the menu up or down by `lines` lines. Negative values of
     /// `lines` will scroll the menu up.
     ///
@@ -108,7 +138,7 @@ impl<T: Clone + Menuable> Menu<T> {
 
         // don't allow scrolling past last item in list (if shorter
         // than self.panel.get_rows())
-        let abs_bottom = min(self.panel.get_rows(), (list_len - 1) as i32);
+        let abs_bottom = min(self.panel.get_rows(), list_len as i32 + self.start_row - 1);
         if self.selected > abs_bottom {
             self.selected = abs_bottom;
         }
@@ -124,7 +154,7 @@ impl<T: Clone + Menuable> Menu<T> {
                 })
             {
                 self.top_row += 1;
-                self.panel.delete_line(0);
+                self.panel.delete_line(self.start_row);
                 old_selected -= 1;
 
                 self.panel.delete_line(n_row - 1);
@@ -132,8 +162,8 @@ impl<T: Clone + Menuable> Menu<T> {
             }
 
         // scroll up
-        } else if self.selected < 0 {
-            self.selected = 0;
+        } else if self.selected < self.start_row {
+            self.selected = self.start_row;
             if let Some(title) = self
                 .items
                 .map_single_by_index((self.top_row - 1) as usize, |el| {
@@ -141,18 +171,18 @@ impl<T: Clone + Menuable> Menu<T> {
                 })
             {
                 self.top_row -= 1;
-                self.panel.insert_line(0, title);
+                self.panel.insert_line(self.start_row, title);
                 old_selected += 1;
             }
         }
 
         old_played = self
             .items
-            .map_single_by_index((self.top_row + old_selected) as usize, |el| el.is_played())
+            .map_single_by_index(self.get_menu_idx(old_selected), |el| el.is_played())
             .unwrap();
         new_played = self
             .items
-            .map_single_by_index((self.top_row + self.selected) as usize, |el| el.is_played())
+            .map_single_by_index(self.get_menu_idx(self.selected), |el| el.is_played())
             .unwrap();
 
         self.set_attrs(old_selected, old_played, ColorType::Normal);
@@ -180,7 +210,7 @@ impl<T: Clone + Menuable> Menu<T> {
     pub fn highlight_selected(&mut self, active_menu: bool) {
         let is_played = self
             .items
-            .map_single_by_index((self.top_row + self.selected) as usize, |el| el.is_played());
+            .map_single_by_index(self.get_menu_idx(self.selected), |el| el.is_played());
 
         if let Some(played) = is_played {
             if active_menu {
@@ -198,7 +228,7 @@ impl<T: Clone + Menuable> Menu<T> {
         // if list is empty, will return None
         if let Some(played) = self
             .items
-            .map_single_by_index((self.top_row + self.selected) as usize, |el| el.is_played())
+            .map_single_by_index(self.get_menu_idx(self.selected), |el| el.is_played())
         {
             self.set_attrs(self.selected, played, ColorType::HighlightedActive);
             self.panel.refresh();
@@ -217,6 +247,15 @@ impl<T: Clone + Menuable> Menu<T> {
             self.selected = n_row - 1;
         }
     }
+
+    /// Given a row on the panel, this translates it into the
+    /// corresponding menu item it represents. Note that this does not
+    /// do any checks to ensure `screen_y` is between 0 and `n_rows`,
+    /// or that the resulting menu index is between 0 and `n_items`.
+    /// It's merely a straight translation.
+    pub fn get_menu_idx(&self, screen_y: i32) -> usize {
+        return (self.top_row + screen_y - self.start_row) as usize;
+    }
 }
 
 
@@ -224,13 +263,8 @@ impl Menu<Podcast> {
     /// Returns a cloned reference to the list of episodes from the
     /// currently selected podcast.
     pub fn get_episodes(&self) -> LockVec<Episode> {
-        let index = self.selected + self.top_row;
-        let pod_id = self
-            .items
-            .borrow_order()
-            .get(index as usize)
-            .copied()
-            .unwrap();
+        let index = self.get_menu_idx(self.selected);
+        let pod_id = self.items.borrow_order().get(index).copied().unwrap();
         return self
             .items
             .borrow_map()
@@ -246,7 +280,7 @@ impl Menu<Podcast> {
         // if list is empty, will return None
         if let Some(played) = self
             .items
-            .map_single_by_index((self.top_row + self.selected) as usize, |el| el.is_played())
+            .map_single_by_index(self.get_menu_idx(self.selected), |el| el.is_played())
         {
             self.set_attrs(self.selected, played, ColorType::Highlighted);
             self.panel.refresh();
@@ -261,7 +295,7 @@ impl Menu<Episode> {
         // if list is empty, will return None
         if let Some(played) = self
             .items
-            .map_single_by_index((self.top_row + self.selected) as usize, |el| el.is_played())
+            .map_single_by_index(self.get_menu_idx(self.selected), |el| el.is_played())
         {
             self.set_attrs(self.selected, played, ColorType::Normal);
             self.panel.refresh();
@@ -366,7 +400,9 @@ mod tests {
         );
         return Menu {
             panel: panel,
+            header: None,
             items: LockVec::new(items),
+            start_row: 0,
             top_row: top_row,
             selected: selected,
         };
