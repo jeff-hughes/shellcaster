@@ -172,7 +172,7 @@ impl NotifWin {
         }
 
         pancurses::curs_set(0);
-        self.window.deleteln();
+        self.window.clear();
         self.window.refresh();
 
         if cancelled {

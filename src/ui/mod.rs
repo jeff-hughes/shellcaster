@@ -713,14 +713,14 @@ impl<'a> UI<'a> {
         return any_downloaded;
     }
 
-    /// Spawns a "(y/n)" notification with the specified input `message`
-    /// using `spawn_input_notif`. If the the user types 'y', then the 
-    /// function returns `true`, and 'n' returns `false`. Cancelling the
-    /// action returns `false` as well.
+    /// Spawns a "(y/n)" notification with the specified input
+    /// `message` using `spawn_input_notif`. If the the user types
+    /// 'y', then the function returns `true`, and 'n' returns
+    /// `false`. Cancelling the action returns `false` as well.
     pub fn ask_for_confirmation(&self, message: &str) -> bool {
         match self.spawn_yes_no_notif(message) {
             Some(val) => val,
-            None => false
+            None => false,
         }
     }
 
