@@ -60,6 +60,9 @@ impl Panel {
 
     /// Redraws borders and refreshes the window to display on terminal.
     pub fn refresh(&self) {
+        self.window.bkgd(pancurses::ColorPair(
+            self.colors.get(ColorType::Normal) as u8
+        ));
         self.draw_border();
         self.window.refresh();
     }
@@ -96,6 +99,9 @@ impl Panel {
     /// not refresh the screen.
     pub fn erase(&self) {
         self.window.erase();
+        self.window.bkgd(pancurses::ColorPair(
+            self.colors.get(ColorType::Normal) as u8
+        ));
         self.draw_border();
     }
 
