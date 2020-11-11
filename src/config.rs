@@ -26,11 +26,22 @@ pub const EPISODE_PUBDATE_LENGTH: usize = 60;
 pub const DETAILS_PANEL_LENGTH: i32 = 135;
 
 
+/// Identifies the user's selection for what to do with new episodes
+/// when syncing.
+#[derive(Debug, Clone)]
+pub enum DownloadNewEpisodes {
+    Always,
+    AskSelected,
+    AskUnselected,
+    Never,
+}
+
 /// Holds information about user configuration of program.
 #[derive(Debug, Clone)]
 pub struct Config {
     pub download_path: PathBuf,
     pub play_command: String,
+    pub download_new_episodes: DownloadNewEpisodes,
     pub simultaneous_downloads: usize,
     pub max_retries: usize,
     pub keybindings: Keybindings,
@@ -42,6 +53,7 @@ pub struct Config {
 struct ConfigFromToml {
     download_path: Option<String>,
     play_command: Option<String>,
+    download_new_episodes: Option<String>,
     simultaneous_downloads: Option<usize>,
     max_retries: Option<usize>,
     keybindings: KeybindingsFromToml,
@@ -113,6 +125,7 @@ impl Config {
                 config_toml = ConfigFromToml {
                     download_path: None,
                     play_command: None,
+                    download_new_episodes: None,
                     simultaneous_downloads: None,
                     max_retries: None,
                     keybindings: keybindings,
@@ -176,6 +189,14 @@ fn config_with_defaults(config_toml: &ConfigFromToml) -> Config {
         None => "vlc %s".to_string(),
     };
 
+    let download_new_episodes = match config_toml.download_new_episodes.as_deref() {
+        Some("always") => DownloadNewEpisodes::Always,
+        Some("ask-selected") => DownloadNewEpisodes::AskSelected,
+        Some("ask-unselected") => DownloadNewEpisodes::AskUnselected,
+        Some("never") => DownloadNewEpisodes::Never,
+        Some(_) | None => DownloadNewEpisodes::AskUnselected,
+    };
+
     let simultaneous_downloads = match config_toml.simultaneous_downloads {
         Some(num) if num > 0 => num,
         Some(_) => 3,
@@ -191,6 +212,7 @@ fn config_with_defaults(config_toml: &ConfigFromToml) -> Config {
     return Config {
         download_path: download_path,
         play_command: play_command,
+        download_new_episodes: download_new_episodes,
         simultaneous_downloads: simultaneous_downloads,
         max_retries: max_retries,
         keybindings: keymap,

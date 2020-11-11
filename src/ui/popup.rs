@@ -257,8 +257,9 @@ impl<'a> PopupWin<'a> {
     }
 
     /// Create a new download window and draw it to the screen.
-    pub fn spawn_download_win(&mut self, episodes: Vec<NewEpisode>) {
-        for ep in episodes {
+    pub fn spawn_download_win(&mut self, episodes: Vec<NewEpisode>, selected: bool) {
+        for mut ep in episodes {
+            ep.selected = selected;
             self.new_episodes.push(ep);
         }
         self.download_win = true;

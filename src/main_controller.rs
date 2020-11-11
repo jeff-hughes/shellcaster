@@ -5,7 +5,7 @@ use std::sync::mpsc;
 
 use sanitize_filename::{sanitize_with_options, Options};
 
-use crate::config::Config;
+use crate::config::{Config, DownloadNewEpisodes};
 use crate::db::{Database, SyncResult};
 use crate::downloads::{self, DownloadMsg, EpData};
 use crate::feeds::{self, FeedMsg, PodcastFeed};
@@ -21,7 +21,7 @@ pub enum MainMessage {
     UiSpawnNotif(String, bool, u64),
     UiSpawnPersistentNotif(String, bool),
     UiClearPersistentNotif,
-    UiSpawnDownloadPopup(Vec<NewEpisode>),
+    UiSpawnDownloadPopup(Vec<NewEpisode>, bool),
     UiTearDown,
 }
 
@@ -311,10 +311,28 @@ impl MainController {
                             ),
                             false,
                         );
+
+                        // deal with new episodes once syncing is
+                        // complete, based on user preferences
                         if !new_eps.is_empty() {
-                            self.tx_to_ui
-                                .send(MainMessage::UiSpawnDownloadPopup(new_eps))
-                                .unwrap();
+                            match self.config.download_new_episodes {
+                                DownloadNewEpisodes::Always => {
+                                    for ep in new_eps.into_iter() {
+                                        self.download(ep.pod_id, Some(ep.id));
+                                    }
+                                }
+                                DownloadNewEpisodes::AskSelected => {
+                                    self.tx_to_ui
+                                        .send(MainMessage::UiSpawnDownloadPopup(new_eps, true))
+                                        .unwrap();
+                                }
+                                DownloadNewEpisodes::AskUnselected => {
+                                    self.tx_to_ui
+                                        .send(MainMessage::UiSpawnDownloadPopup(new_eps, false))
+                                        .unwrap();
+                                }
+                                _ => (),
+                            }
                         }
                     }
                 } else {

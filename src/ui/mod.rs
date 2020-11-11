@@ -128,8 +128,8 @@ impl<'a> UI<'a> {
                             ui.tear_down();
                             break;
                         }
-                        MainMessage::UiSpawnDownloadPopup(episodes) => {
-                            ui.popup_win.spawn_download_win(episodes);
+                        MainMessage::UiSpawnDownloadPopup(episodes, selected) => {
+                            ui.popup_win.spawn_download_win(episodes, selected);
                         }
                     }
                 }
