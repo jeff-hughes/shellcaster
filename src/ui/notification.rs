@@ -97,7 +97,7 @@ impl NotifWin {
                 // otherwise, there was a notification before but there
                 // isn't now, so erase
                 self.window.erase();
-                self.window.bkgd(pancurses::ColorPair(
+                self.window.bkgdset(pancurses::ColorPair(
                     self.colors.get(ColorType::Normal) as u8
                 ));
                 self.window.refresh();
@@ -251,7 +251,7 @@ impl NotifWin {
         );
         oldwin.delwin();
 
-        self.window.bkgd(pancurses::ColorPair(
+        self.window.bkgdset(pancurses::ColorPair(
             self.colors.get(ColorType::Normal) as u8
         ));
         if let Some(curr) = &self.current_msg {
