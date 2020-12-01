@@ -155,6 +155,14 @@ The sample file above provides comments that should walk you through all the ava
 * Command used to play episodes. Use "%s" to indicate where file/URL will be entered to the command. Note that shellcaster does *not* include a native media player -- it simply passes the file path/URL to the given command with no further checking as to its success or failure. This process is started *in the background*, so be sure to send it to a program that has GUI controls of some kind so you have control over the playback.
 * Default: "vlc %s"
 
+**download_new_episodes**:
+* Configures what happens when new episodes are found as podcasts are synced. Valid options:
+    * "always" will automatically download all new episodes;
+    * "ask-selected" will open a popup window to let you select which episodes to download, with all of them selected by default;
+    * "ask-unselected" will open a popup window to let you select with episodes to download, with none of them selected by default;
+    * "never" will never automatically download new episodes.
+* Default: "ask-unselected"
+
 **simultaneous_downloads**:
 * Maximum number of files to download simultaneously. Setting this too high could result in network requests being denied. A good general guide would be to set this to the number of processor cores on your computer.
 * Default: 3
@@ -167,6 +175,7 @@ The sample file above provides comments that should walk you through all the ava
 
 | Key     | Action         |
 | ------- | -------------- |
+| ?       | Open help window |
 | Arrow keys / h,j,k,l | Navigate menus |
 | a       | Add new feed |
 | q       | Quit program |
@@ -191,6 +200,8 @@ Some users may wish to sync their podcasts automatically on a regular basis, e.g
 ## Contributing
 
 Contributions from others are welcome! If you wish to contribute, feel free to clone the repo and submit pull requests. **Please ensure you are on the `develop` branch when making your edits**, as this is where the continued development of the app is taking place. Pull requests will only be merged to the `develop` branch, so you can help to avoid merge conflicts by doing your work on that branch in the first place.
+
+Thanks to these fine folks who have made contributions: [a-kenji](https://github.com/a-kenji), [dougli1sqrd](https://github.com/dougli1sqrd), [dwvisser](https://github.com/dwvisser), [thunderbiscuit](https://github.com/thunderbiscuit)
 
 ## Why "shellcaster"?
 
