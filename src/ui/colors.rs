@@ -20,7 +20,7 @@ impl Colors {
     pub fn new() -> Colors {
         return Colors {
             map: HashMap::new(),
-        }
+        };
     }
 
     pub fn insert(&mut self, color: ColorType, num: i16) {
@@ -48,18 +48,26 @@ pub fn set_colors() -> Colors {
     pancurses::init_color(pancurses::COLOR_YELLOW, 820, 643, 0);
 
     // instantiate curses color pairs
-    pancurses::init_pair(colors.get(ColorType::Normal),
+    pancurses::init_pair(
+        colors.get(ColorType::Normal),
         pancurses::COLOR_WHITE,
-        pancurses::COLOR_BLACK);
-    pancurses::init_pair(colors.get(ColorType::Highlighted),
         pancurses::COLOR_BLACK,
-        pancurses::COLOR_WHITE);
-    pancurses::init_pair(colors.get(ColorType::HighlightedActive),
+    );
+    pancurses::init_pair(
+        colors.get(ColorType::Highlighted),
         pancurses::COLOR_BLACK,
-        pancurses::COLOR_YELLOW);
-    pancurses::init_pair(colors.get(ColorType::Error),
+        pancurses::COLOR_WHITE,
+    );
+    pancurses::init_pair(
+        colors.get(ColorType::HighlightedActive),
+        pancurses::COLOR_BLACK,
+        pancurses::COLOR_YELLOW,
+    );
+    pancurses::init_pair(
+        colors.get(ColorType::Error),
         pancurses::COLOR_RED,
-        pancurses::COLOR_BLACK);
+        pancurses::COLOR_BLACK,
+    );
 
     return colors;
 }

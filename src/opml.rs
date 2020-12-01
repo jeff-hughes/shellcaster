@@ -1,9 +1,11 @@
-use opml::{OPML, Head, Body, Outline};
 use chrono::Utc;
+use opml::{Body, Head, Outline, OPML};
 
-use crate::types::*;
 use crate::feeds::PodcastFeed;
+use crate::types::*;
 
+/// Import a list of podcast feeds from an OPML file. Supports
+/// v1.0, v1.1, and v2.0 OPML files.
 pub fn import(xml: String) -> Result<Vec<PodcastFeed>, String> {
     return match OPML::new(&xml) {
         Err(err) => Err(err),
@@ -21,7 +23,7 @@ pub fn import(xml: String) -> Result<Vec<PodcastFeed>, String> {
                             } else {
                                 Some(t.clone())
                             }
-                        },
+                        }
                         None => None,
                     };
                     let title = match temp_title {
@@ -42,13 +44,14 @@ pub fn import(xml: String) -> Result<Vec<PodcastFeed>, String> {
     };
 }
 
+/// Converts the current set of podcast feeds to the OPML format
 pub fn export(podcasts: Vec<Podcast>) -> OPML {
     let date = Utc::now();
     let mut opml = OPML::default();
     opml.head = Some(Head {
-    title: Some("Shellcaster Podcast Feeds".to_string()),
-    date_created: Some(date.to_rfc2822()),
-    ..Head::default()
+        title: Some("Shellcaster Podcast Feeds".to_string()),
+        date_created: Some(date.to_rfc2822()),
+        ..Head::default()
     });
 
     let mut outlines = Vec::new();

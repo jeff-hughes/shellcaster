@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.1.0 (2020-12-01)
+- Help menu showing the current keybindings (accessible by pressing
+  "?" by default)
+- New options for downloading new episodes:
+    - Can select whether to always download new episodes when syncing
+      podcasts, to never download, or to pop up with a window allowing
+      you to select which new episodes to download
+- Will now ask for confirmation before removing podcasts/episodes
+  (thanks to contributor [dougli1sqrd](https://github.com/dougli1sqrd))
+- Bug fixes:
+    - Border gets redrawn properly when scrolling (thanks to contributor [a-kenji](https://github.com/a-kenji))
+    - Messages at the bottom of the screen properly reset cursor
+      position, so they always show up on the far left
+- Other notes:
+    - Added consistent code formatting style with rustfmt (thanks to
+      contributor [thunderbiscuit](https://github.com/thunderbiscuit))
+
+
 ## v1.0.1 (2020-08-18)
 - This is a patch release to fix some minor bugs
 - Bug fixes:
@@ -7,6 +25,7 @@
     - Fix decoding of HTML entities in episode descriptions to avoid getting cut off in certain cases
     - Properly import OPML v1.0 files
     - Correctly segment titles with Unicode letters
+    - Also some fixes to documentation (thanks to contributor [dwvisser](https://github.com/dwvisser))
 
 ## v1.0.0 (2020-08-13)
 - Adjusted the criteria for checking existing episodes when syncing, which results in a dramatic speedup in the syncing process

@@ -1,18 +1,18 @@
+use std::collections::HashSet;
+use std::fs;
 use std::path::PathBuf;
 use std::sync::mpsc;
-use std::fs;
-use std::collections::HashSet;
 
 use sanitize_filename::{sanitize_with_options, Options};
 
-use crate::types::*;
-use crate::config::Config;
-use crate::ui::{UI, UiMsg};
+use crate::config::{Config, DownloadNewEpisodes};
 use crate::db::{Database, SyncResult};
-use crate::threadpool::Threadpool;
+use crate::downloads::{self, DownloadMsg, EpData};
 use crate::feeds::{self, FeedMsg, PodcastFeed};
-use crate::downloads::{self, EpData, DownloadMsg};
 use crate::play_file;
+use crate::threadpool::Threadpool;
+use crate::types::*;
+use crate::ui::{UiMsg, UI};
 
 /// Enum used for communicating with other threads.
 #[derive(Debug)]
@@ -21,6 +21,7 @@ pub enum MainMessage {
     UiSpawnNotif(String, bool, u64),
     UiSpawnPersistentNotif(String, bool),
     UiClearPersistentNotif,
+    UiSpawnDownloadPopup(Vec<NewEpisode>, bool),
     UiTearDown,
 }
 
@@ -48,24 +49,29 @@ impl MainController {
         // create transmitters and receivers for passing messages between threads
         let (tx_to_ui, rx_from_main) = mpsc::channel();
         let (tx_to_main, rx_to_main) = mpsc::channel();
-        
+
         // get connection to the database
         let db_inst = Database::connect(&db_path);
 
         // set up threadpool
         let threadpool = Threadpool::new(config.simultaneous_downloads);
- 
+
         // create vector of podcasts, where references are checked at
         // runtime; this is necessary because we want main.rs to hold the
         // "ground truth" list of podcasts, and it must be mutable, but
         // UI needs to check this list and update the screen when
         // necessary
         let podcast_list = LockVec::new(db_inst.get_podcasts());
-    
+
         // set up UI in new thread
         let tx_ui_to_main = mpsc::Sender::clone(&tx_to_main);
-        let ui_thread = UI::spawn(config.clone(), podcast_list.clone(), rx_from_main, tx_ui_to_main);
-            // TODO: Can we do this without cloning the config?
+        let ui_thread = UI::spawn(
+            config.clone(),
+            podcast_list.clone(),
+            rx_from_main,
+            tx_ui_to_main,
+        );
+        // TODO: Can we do this without cloning the config?
 
         return MainController {
             config: config,
@@ -87,69 +93,72 @@ impl MainController {
         while let Some(message) = self.rx_to_main.iter().next() {
             match message {
                 Message::Ui(UiMsg::Quit) => break,
-    
-                Message::Ui(UiMsg::AddFeed(url)) =>
-                    self.add_podcast(url),
-    
-                Message::Feed(FeedMsg::NewData(pod)) =>
-                    self.add_or_sync_data(pod, None),
-    
-                Message::Feed(FeedMsg::Error(feed)) => {
-                    match feed.title {
-                        Some(t) => self.notif_to_ui(format!("Error retrieving RSS feed for {}.", t), true),
-                        None => self.notif_to_ui("Error retrieving RSS feed.".to_string(), true),
+
+                Message::Ui(UiMsg::AddFeed(url)) => self.add_podcast(url),
+
+                Message::Feed(FeedMsg::NewData(pod)) => self.add_or_sync_data(pod, None),
+
+                Message::Feed(FeedMsg::Error(feed)) => match feed.title {
+                    Some(t) => {
+                        self.notif_to_ui(format!("Error retrieving RSS feed for {}.", t), true)
                     }
+                    None => self.notif_to_ui("Error retrieving RSS feed.".to_string(), true),
                 },
-    
-                Message::Ui(UiMsg::Sync(pod_id)) =>
-                    self.sync(Some(pod_id)),
-    
-                Message::Feed(FeedMsg::SyncData((id, pod))) =>
-                    self.add_or_sync_data(pod, Some(id)),
-    
-                Message::Ui(UiMsg::SyncAll) =>
-                    self.sync(None),
-    
-                Message::Ui(UiMsg::Play(pod_id, ep_id)) =>
-                    self.play_file(pod_id, ep_id),
-    
-                Message::Ui(UiMsg::MarkPlayed(pod_id, ep_id, played)) =>
-                    self.mark_played(pod_id, ep_id, played),
-    
-                Message::Ui(UiMsg::MarkAllPlayed(pod_id, played)) =>
-                    self.mark_all_played(pod_id, played),
-    
-                Message::Ui(UiMsg::Download(pod_id, ep_id)) =>
-                    self.download(pod_id, Some(ep_id)),
-    
-                Message::Ui(UiMsg::DownloadAll(pod_id)) =>
-                    self.download(pod_id, None),
-    
+
+                Message::Ui(UiMsg::Sync(pod_id)) => self.sync(Some(pod_id)),
+
+                Message::Feed(FeedMsg::SyncData((id, pod))) => self.add_or_sync_data(pod, Some(id)),
+
+                Message::Ui(UiMsg::SyncAll) => self.sync(None),
+
+                Message::Ui(UiMsg::Play(pod_id, ep_id)) => self.play_file(pod_id, ep_id),
+
+                Message::Ui(UiMsg::MarkPlayed(pod_id, ep_id, played)) => {
+                    self.mark_played(pod_id, ep_id, played)
+                }
+
+                Message::Ui(UiMsg::MarkAllPlayed(pod_id, played)) => {
+                    self.mark_all_played(pod_id, played)
+                }
+
+                Message::Ui(UiMsg::Download(pod_id, ep_id)) => self.download(pod_id, Some(ep_id)),
+
+                Message::Ui(UiMsg::DownloadMulti(vec)) => {
+                    for (pod_id, ep_id) in vec.into_iter() {
+                        self.download(pod_id, Some(ep_id));
+                    }
+                }
+
+                Message::Ui(UiMsg::DownloadAll(pod_id)) => self.download(pod_id, None),
+
                 // downloading can produce any one of these responses
-                Message::Dl(DownloadMsg::Complete(ep_data)) =>
-                    self.download_complete(ep_data),
-                Message::Dl(DownloadMsg::ResponseError(_)) =>
-                    self.notif_to_ui("Error sending download request.".to_string(), true),
-                Message::Dl(DownloadMsg::FileCreateError(_)) =>
-                    self.notif_to_ui("Error creating file.".to_string(), true),
-                Message::Dl(DownloadMsg::FileWriteError(_)) =>
-                    self.notif_to_ui("Error downloading episode.".to_string(), true),
-    
-                Message::Ui(UiMsg::Delete(pod_id, ep_id)) =>
-                    self.delete_file(pod_id, ep_id),
-    
-                Message::Ui(UiMsg::DeleteAll(pod_id)) =>
-                    self.delete_files(pod_id),
-    
-                Message::Ui(UiMsg::RemovePodcast(pod_id, delete_files)) =>
-                    self.remove_podcast(pod_id, delete_files),
-    
-                Message::Ui(UiMsg::RemoveEpisode(pod_id, ep_id, delete_files)) =>
-                    self.remove_episode(pod_id, ep_id, delete_files),
-    
-                Message::Ui(UiMsg::RemoveAllEpisodes(pod_id, delete_files)) =>
-                    self.remove_all_episodes(pod_id, delete_files),
-                        
+                Message::Dl(DownloadMsg::Complete(ep_data)) => self.download_complete(ep_data),
+                Message::Dl(DownloadMsg::ResponseError(_)) => {
+                    self.notif_to_ui("Error sending download request.".to_string(), true)
+                }
+                Message::Dl(DownloadMsg::FileCreateError(_)) => {
+                    self.notif_to_ui("Error creating file.".to_string(), true)
+                }
+                Message::Dl(DownloadMsg::FileWriteError(_)) => {
+                    self.notif_to_ui("Error downloading episode.".to_string(), true)
+                }
+
+                Message::Ui(UiMsg::Delete(pod_id, ep_id)) => self.delete_file(pod_id, ep_id),
+
+                Message::Ui(UiMsg::DeleteAll(pod_id)) => self.delete_files(pod_id),
+
+                Message::Ui(UiMsg::RemovePodcast(pod_id, delete_files)) => {
+                    self.remove_podcast(pod_id, delete_files)
+                }
+
+                Message::Ui(UiMsg::RemoveEpisode(pod_id, ep_id, delete_files)) => {
+                    self.remove_episode(pod_id, ep_id, delete_files)
+                }
+
+                Message::Ui(UiMsg::RemoveAllEpisodes(pod_id, delete_files)) => {
+                    self.remove_all_episodes(pod_id, delete_files)
+                }
+
                 Message::Ui(UiMsg::Noop) => (),
             }
         }
@@ -158,20 +167,28 @@ impl MainController {
     /// Sends the specified notification to the UI, which will display at
     /// the bottom of the screen.
     pub fn notif_to_ui(&self, message: String, error: bool) {
-        self.tx_to_ui.send(MainMessage::UiSpawnNotif(
-            message, error, crate::config::MESSAGE_TIME)).unwrap();
+        self.tx_to_ui
+            .send(MainMessage::UiSpawnNotif(
+                message,
+                error,
+                crate::config::MESSAGE_TIME,
+            ))
+            .unwrap();
     }
 
     /// Sends a persistent notification to the UI, which will display at
     /// the bottom of the screen until cleared.
     pub fn persistent_notif_to_ui(&self, message: String, error: bool) {
-        self.tx_to_ui.send(MainMessage::UiSpawnPersistentNotif(
-            message, error)).unwrap();
+        self.tx_to_ui
+            .send(MainMessage::UiSpawnPersistentNotif(message, error))
+            .unwrap();
     }
 
     /// Clears persistent notifications in the UI.
     pub fn clear_persistent_notif(&self) {
-        self.tx_to_ui.send(MainMessage::UiClearPersistentNotif).unwrap();
+        self.tx_to_ui
+            .send(MainMessage::UiClearPersistentNotif)
+            .unwrap();
     }
 
     /// Updates the persistent notification about syncing podcasts and
@@ -183,7 +200,10 @@ impl MainController {
         let dl_plural = if dl_len > 1 { "s" } else { "" };
 
         if sync_len > 0 && dl_len > 0 {
-            let notif = format!("Syncing {} podcast{}, downloading {} episode{}...", sync_len, sync_plural, dl_len, dl_plural);
+            let notif = format!(
+                "Syncing {} podcast{}, downloading {} episode{}...",
+                sync_len, sync_plural, dl_len, dl_plural
+            );
             self.persistent_notif_to_ui(notif, false);
         } else if sync_len > 0 {
             let notif = format!("Syncing {} podcast{}...", sync_len, sync_plural);
@@ -199,9 +219,13 @@ impl MainController {
     /// Add a new podcast by fetching the RSS feed data.
     pub fn add_podcast(&self, url: String) {
         let feed = PodcastFeed::new(None, url, None);
-        feeds::check_feed(feed, self.config.max_retries,
-            &self.threadpool, self.tx_to_main.clone());
-    } 
+        feeds::check_feed(
+            feed,
+            self.config.max_retries,
+            &self.threadpool,
+            self.tx_to_main.clone(),
+        );
+    }
 
     /// Synchronize RSS feed data for one or more podcasts.
     pub fn sync(&mut self, pod_id: Option<i64>) {
@@ -213,18 +237,28 @@ impl MainController {
         let mut pod_data = Vec::new();
         match pod_id {
             // just grab one podcast
-            Some(id) => pod_data.push(self.podcasts
-                .map_single(id,
-                    |pod| PodcastFeed::new(Some(pod.id), pod.url.clone(), Some(pod.title.clone())))
-                .unwrap()),
+            Some(id) => pod_data.push(
+                self.podcasts
+                    .map_single(id, |pod| {
+                        PodcastFeed::new(Some(pod.id), pod.url.clone(), Some(pod.title.clone()))
+                    })
+                    .unwrap(),
+            ),
             // get all of 'em!
-            None => pod_data = self.podcasts
-                .map(|pod| PodcastFeed::new(Some(pod.id), pod.url.clone(), Some(pod.title.clone()))),
+            None => {
+                pod_data = self.podcasts.map(|pod| {
+                    PodcastFeed::new(Some(pod.id), pod.url.clone(), Some(pod.title.clone()))
+                })
+            }
         }
         for feed in pod_data.into_iter() {
             self.sync_counter += 1;
-            feeds::check_feed(feed, self.config.max_retries,
-                &self.threadpool, self.tx_to_main.clone())
+            feeds::check_feed(
+                feed,
+                self.config.max_retries,
+                &self.threadpool,
+                self.tx_to_main.clone(),
+            )
         }
         self.update_tracker_notif();
     }
@@ -263,17 +297,51 @@ impl MainController {
                         // episodes when sync process is finished
                         let mut added = 0;
                         let mut updated = 0;
+                        let mut new_eps = Vec::new();
                         for res in self.sync_tracker.iter() {
                             added += res.added.len();
                             updated += res.updated.len();
+                            new_eps.extend(res.added.clone());
                         }
                         self.sync_tracker = Vec::new();
-                        self.notif_to_ui(format!("Sync complete: Added {}, updated {} episodes.", added, updated), false);
+                        self.notif_to_ui(
+                            format!(
+                                "Sync complete: Added {}, updated {} episodes.",
+                                added, updated
+                            ),
+                            false,
+                        );
+
+                        // deal with new episodes once syncing is
+                        // complete, based on user preferences
+                        if !new_eps.is_empty() {
+                            match self.config.download_new_episodes {
+                                DownloadNewEpisodes::Always => {
+                                    for ep in new_eps.into_iter() {
+                                        self.download(ep.pod_id, Some(ep.id));
+                                    }
+                                }
+                                DownloadNewEpisodes::AskSelected => {
+                                    self.tx_to_ui
+                                        .send(MainMessage::UiSpawnDownloadPopup(new_eps, true))
+                                        .unwrap();
+                                }
+                                DownloadNewEpisodes::AskUnselected => {
+                                    self.tx_to_ui
+                                        .send(MainMessage::UiSpawnDownloadPopup(new_eps, false))
+                                        .unwrap();
+                                }
+                                _ => (),
+                            }
+                        }
                     }
                 } else {
-                    self.notif_to_ui(format!("Successfully added {} episodes.", result.added.len()), false);
+                    self.notif_to_ui(
+                        format!("Successfully added {} episodes.", result.added.len()),
+                        false,
+                    );
                 }
-            },
+            }
             Err(_err) => self.notif_to_ui(failure, true),
         }
     }
@@ -282,28 +350,25 @@ impl MainController {
     /// episode.
     pub fn play_file(&self, pod_id: i64, ep_id: i64) {
         self.mark_played(pod_id, ep_id, true);
-        let episode = self.podcasts
-            .clone_episode(pod_id, ep_id).unwrap();
+        let episode = self.podcasts.clone_episode(pod_id, ep_id).unwrap();
 
         match episode.path {
             // if there is a local file, try to play that
-            Some(path) => {
-                match path.to_str() {
-                    Some(p) => {
-                        if play_file::execute(&self.config.play_command, &p).is_err() {
-                            self.notif_to_ui(
-                                "Error: Could not play file. Check configuration.".to_string(), true);
-                        }
-                    },
-                    None => self.notif_to_ui(
-                        "Error: Filepath is not valid Unicode.".to_string(), true),
+            Some(path) => match path.to_str() {
+                Some(p) => {
+                    if play_file::execute(&self.config.play_command, &p).is_err() {
+                        self.notif_to_ui(
+                            "Error: Could not play file. Check configuration.".to_string(),
+                            true,
+                        );
+                    }
                 }
+                None => self.notif_to_ui("Error: Filepath is not valid Unicode.".to_string(), true),
             },
             // otherwise, try to stream the URL
             None => {
                 if play_file::execute(&self.config.play_command, &episode.url).is_err() {
-                    self.notif_to_ui(
-                        "Error: Could not stream URL.".to_string(),true);
+                    self.notif_to_ui("Error: Could not stream URL.".to_string(), true);
                 }
             }
         }
@@ -319,7 +384,7 @@ impl MainController {
         // to clone the episode...
         let mut episode = podcast.episodes.clone_episode(ep_id).unwrap();
         episode.played = played;
-        
+
         self.db.set_played_status(episode.id, played);
         podcast.episodes.replace(ep_id, episode);
 
@@ -333,13 +398,14 @@ impl MainController {
     pub fn mark_all_played(&self, pod_id: i64, played: bool) {
         let podcast = self.podcasts.clone_podcast(pod_id).unwrap();
         {
-            let borrowed_ep_list = podcast
-                .episodes.borrow_order();
+            let borrowed_ep_list = podcast.episodes.borrow_order();
             for ep in borrowed_ep_list.iter() {
                 self.db.set_played_status(*ep, played);
             }
         }
-        podcast.episodes.replace_all(self.db.get_episodes(podcast.id));
+        podcast
+            .episodes
+            .replace_all(self.db.get_episodes(podcast.id));
 
         self.podcasts.replace(pod_id, podcast);
         self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
@@ -362,22 +428,29 @@ impl MainController {
             match ep_id {
                 Some(ep_id) => {
                     // grab just the relevant data we need
-                    let data = podcast.episodes.map_single(ep_id,
-                        |ep| (EpData {
-                            id: ep.id,
-                            pod_id: ep.pod_id,
-                            title: ep.title.clone(),
-                            url: ep.url.clone(),
-                            file_path: None,
-                        }, ep.path.is_none())).unwrap();
+                    let data = podcast
+                        .episodes
+                        .map_single(ep_id, |ep| {
+                            (
+                                EpData {
+                                    id: ep.id,
+                                    pod_id: ep.pod_id,
+                                    title: ep.title.clone(),
+                                    url: ep.url.clone(),
+                                    file_path: None,
+                                },
+                                ep.path.is_none(),
+                            )
+                        })
+                        .unwrap();
                     if data.1 {
                         ep_data.push(data.0);
                     }
-                },
+                }
                 None => {
                     // grab just the relevant data we need
-                    ep_data = podcast.episodes
-                        .filter_map(|ep| if ep.path.is_none() {
+                    ep_data = podcast.episodes.filter_map(|ep| {
+                        if ep.path.is_none() {
                             Some(EpData {
                                 id: ep.id,
                                 pod_id: ep.pod_id,
@@ -387,23 +460,22 @@ impl MainController {
                             })
                         } else {
                             None
-                        });
+                        }
+                    });
                 }
             }
         }
 
         // check against episodes currently being downloaded -- so we
         // don't needlessly download them again
-        ep_data.retain(|ep| {
-            !self.download_tracker.contains(&ep.id)
-        });
+        ep_data.retain(|ep| !self.download_tracker.contains(&ep.id));
 
         if !ep_data.is_empty() {
             // add directory for podcast, create if it does not exist
             let dir_name = sanitize_with_options(&pod_title, Options {
                 truncate: true,
-                windows: true,  // for simplicity, we'll just use Windows-friendly paths for everyone
-                replacement: ""
+                windows: true, // for simplicity, we'll just use Windows-friendly paths for everyone
+                replacement: "",
             });
             match self.create_podcast_dir(dir_name) {
                 Ok(path) => {
@@ -411,11 +483,14 @@ impl MainController {
                         self.download_tracker.insert(ep.id);
                     }
                     downloads::download_list(
-                    ep_data, &path, self.config.max_retries,
-                    &self.threadpool, self.tx_to_main.clone());
-                },
-                Err(_) => self.notif_to_ui(
-                    format!("Could not create dir: {}", pod_title), true),
+                        ep_data,
+                        &path,
+                        self.config.max_retries,
+                        &self.threadpool,
+                        self.tx_to_main.clone(),
+                    );
+                }
+                Err(_) => self.notif_to_ui(format!("Could not create dir: {}", pod_title), true),
             }
             self.update_tracker_notif();
         }
@@ -427,8 +502,7 @@ impl MainController {
         let _ = self.db.insert_file(ep_data.id, &file_path);
         {
             // TODO: Try to do this without cloning the podcast...
-            let podcast = self.podcasts
-                .clone_podcast(ep_data.pod_id).unwrap();
+            let podcast = self.podcasts.clone_podcast(ep_data.pod_id).unwrap();
             let mut episode = podcast.episodes.clone_episode(ep_data.id).unwrap();
             episode.path = Some(file_path);
             podcast.episodes.replace(ep_data.id, episode);
@@ -451,7 +525,7 @@ impl MainController {
         return match std::fs::create_dir_all(&download_path) {
             Ok(_) => Ok(download_path),
             Err(err) => Err(err),
-        }
+        };
     }
 
     /// Deletes a downloaded file for an episode from the user's local
@@ -470,11 +544,9 @@ impl MainController {
                     podcast.episodes.replace(ep_id, episode);
 
                     self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
-                    self.notif_to_ui(
-                    format!("Deleted \"{}\"", title), false);
-                },
-                Err(_) => self.notif_to_ui(
-                    format!("Error deleting \"{}\"", title), true),
+                    self.notif_to_ui(format!("Deleted \"{}\"", title), false);
+                }
+                Err(_) => self.notif_to_ui(format!("Error deleting \"{}\"", title), true),
             }
         }
     }
@@ -497,7 +569,7 @@ impl MainController {
                             eps_to_remove.push(episode.id);
                             episode.path = None;
                             *ep = episode;
-                        },
+                        }
                         Err(_) => success = false,
                     }
                 }
@@ -508,11 +580,9 @@ impl MainController {
         self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
 
         if success {
-            self.notif_to_ui(
-                "Files successfully deleted.".to_string(), false);
+            self.notif_to_ui("Files successfully deleted.".to_string(), false);
         } else {
-            self.notif_to_ui(
-                "Error while deleting files".to_string(), true);
+            self.notif_to_ui("Error while deleting files".to_string(), true);
         }
     }
 
@@ -523,8 +593,7 @@ impl MainController {
             self.delete_files(pod_id);
         }
 
-        let pod_id = self.podcasts
-            .map_single(pod_id, |pod| pod.id).unwrap();
+        let pod_id = self.podcasts.map_single(pod_id, |pod| pod.id).unwrap();
         self.db.remove_podcast(pod_id);
         {
             self.podcasts.replace_all(self.db.get_podcasts());

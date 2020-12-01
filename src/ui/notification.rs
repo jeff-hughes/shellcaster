@@ -1,7 +1,7 @@
-use std::time::{Instant, Duration};
+use std::time::{Duration, Instant};
 
-use super::colors::{Colors, ColorType};
-use pancurses::{Window, Input};
+use super::colors::{ColorType, Colors};
+use pancurses::{Input, Window};
 
 /// Holds details of a notification message.
 #[derive(Debug, Clone, PartialEq)]
@@ -19,7 +19,7 @@ impl Notification {
         return Self {
             message: message,
             error: error,
-            expiry: expiry
+            expiry: expiry,
         };
     }
 }
@@ -27,7 +27,7 @@ impl Notification {
 /// A struct handling the one-line message window at the bottom of the
 /// screen. Holds state about the size of the window as well as any
 /// persistent message text.
-/// 
+///
 /// The `msg_stack` holds a vector of all timed notifications, each
 /// pushed on the end of the stack. The last notification on the stack
 /// will be the one displayed; however, they will be removed from the
@@ -48,11 +48,7 @@ pub struct NotifWin {
 impl NotifWin {
     /// Creates a new NotifWin.
     pub fn new(colors: Colors, total_rows: i32, total_cols: i32) -> Self {
-        let win = pancurses::newwin(
-            1,
-            total_cols,
-            total_rows-1,
-            0);
+        let win = pancurses::newwin(1, total_cols, total_rows - 1, 0);
         return Self {
             window: win,
             colors: colors,
@@ -81,7 +77,7 @@ impl NotifWin {
                         if &last_item != curr {
                             self.display_notif(last_item.clone());
                         }
-                    },
+                    }
                     None => self.display_notif(last_item.clone()),
                 };
                 self.current_msg = Some(last_item);
@@ -93,7 +89,7 @@ impl NotifWin {
                         if msg != curr {
                             self.display_notif(msg.clone());
                         }
-                    },
+                    }
                     None => self.display_notif(msg.clone()),
                 };
                 self.current_msg = Some(msg.clone());
@@ -101,6 +97,9 @@ impl NotifWin {
                 // otherwise, there was a notification before but there
                 // isn't now, so erase
                 self.window.erase();
+                self.window.bkgdset(pancurses::ColorPair(
+                    self.colors.get(ColorType::Normal) as u8
+                ));
                 self.window.refresh();
                 self.current_msg = None;
             }
@@ -112,12 +111,12 @@ impl NotifWin {
     /// input line. This returns the user's input; if the user cancels
     /// their input, the String will be empty.
     pub fn input_notif(&self, prefix: &str) -> String {
-        self.window.mv(self.total_rows-1, 0);
+        self.window.mv(self.total_rows - 1, 0);
         self.window.addstr(&prefix);
         self.window.keypad(true);
         self.window.refresh();
         pancurses::curs_set(2);
-        
+
         let mut inputs = String::new();
         let mut cancelled = false;
 
@@ -127,18 +126,15 @@ impl NotifWin {
         loop {
             match self.window.getch() {
                 // Cancel input
-                Some(Input::KeyExit) |
-                Some(Input::Character('\u{1b}')) => {
+                Some(Input::KeyExit) | Some(Input::Character('\u{1b}')) => {
                     cancelled = true;
                     break;
-                },
+                }
                 // Complete input
-                Some(Input::KeyEnter) |
-                Some(Input::Character('\n')) => {
+                Some(Input::KeyEnter) | Some(Input::Character('\n')) => {
                     break;
-                },
-                Some(Input::KeyBackspace) |
-                Some(Input::Character('\u{7f}')) => {
+                }
+                Some(Input::KeyBackspace) | Some(Input::Character('\u{7f}')) => {
                     if current_x > min_x {
                         current_x -= 1;
                         cursor_x -= 1;
@@ -146,32 +142,32 @@ impl NotifWin {
                         self.window.mv(0, cursor_x);
                         self.window.delch();
                     }
-                },
+                }
                 Some(Input::KeyDC) => {
                     if cursor_x < current_x {
                         let _ = inputs.remove((cursor_x as usize) - prefix.len());
                         self.window.delch();
                     }
-                },
+                }
                 Some(Input::KeyLeft) => {
                     if cursor_x > min_x {
                         cursor_x -= 1;
                         self.window.mv(0, cursor_x);
                     }
-                },
+                }
                 Some(Input::KeyRight) => {
                     if cursor_x < current_x {
                         cursor_x += 1;
                         self.window.mv(0, cursor_x);
                     }
-                },
+                }
                 Some(Input::Character(c)) => {
                     current_x += 1;
                     cursor_x += 1;
                     self.window.insch(c);
                     self.window.mv(0, cursor_x);
                     inputs.push(c);
-                },
+                }
                 Some(_) => (),
                 None => (),
             }
@@ -179,7 +175,7 @@ impl NotifWin {
         }
 
         pancurses::curs_set(0);
-        self.window.deleteln();
+        self.window.clear();
         self.window.refresh();
 
         if cancelled {
@@ -196,8 +192,13 @@ impl NotifWin {
         self.window.addstr(notif.message);
 
         if notif.error {
-            self.window.mvchgat(0, 0, -1, pancurses::A_BOLD,
-                self.colors.get(ColorType::Error));
+            self.window.mvchgat(
+                0,
+                0,
+                -1,
+                pancurses::A_BOLD,
+                self.colors.get(ColorType::Error),
+            );
         }
         self.window.refresh();
     }
@@ -207,7 +208,8 @@ impl NotifWin {
     /// presenting error messages, among other things.
     pub fn timed_notif(&mut self, message: String, duration: u64, error: bool) {
         let expiry = Instant::now() + Duration::from_millis(duration);
-        self.msg_stack.push(Notification::new(message, error, Some(expiry)));
+        self.msg_stack
+            .push(Notification::new(message, error, Some(expiry)));
     }
 
     /// Adds a notification that will stay on screen indefinitely. Must
@@ -245,15 +247,16 @@ impl NotifWin {
         // but c'est la vie
         let oldwin = std::mem::replace(
             &mut self.window,
-            pancurses::newwin(
-                1,
-                total_cols,
-                total_rows-1,
-                0));
+            pancurses::newwin(1, total_cols, total_rows - 1, 0),
+        );
         oldwin.delwin();
 
+        self.window.bkgdset(pancurses::ColorPair(
+            self.colors.get(ColorType::Normal) as u8
+        ));
         if let Some(curr) = &self.current_msg {
             self.display_notif(curr.clone());
         }
+        self.window.refresh();
     }
 }

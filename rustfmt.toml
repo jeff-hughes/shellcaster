@@ -1,0 +1,8 @@
+unstable_features = true
+blank_lines_upper_bound = 2
+fn_params_layout = "Compressed"
+newline_style = "Unix"
+overflow_delimited_expr = true
+struct_lit_single_line = false
+use_try_shorthand = true
+where_single_line = true

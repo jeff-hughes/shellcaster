@@ -1,16 +1,16 @@
+use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
-use std::collections::HashMap;
-use std::cmp::Ordering;
 use unicode_segmentation::UnicodeSegmentation;
 
 use chrono::{DateTime, Utc};
 use lazy_static::lazy_static;
 use regex::Regex;
 
-use crate::ui::UiMsg;
-use crate::feeds::FeedMsg;
 use crate::downloads::DownloadMsg;
+use crate::feeds::FeedMsg;
+use crate::ui::UiMsg;
 
 lazy_static! {
     /// Regex for removing "A", "An", and "The" from the beginning of
@@ -44,7 +44,11 @@ pub struct Podcast {
 impl Podcast {
     /// Counts and returns the number of unplayed episodes in the podcast.
     fn num_unplayed(&self) -> usize {
-        return self.episodes.map(|ep| !ep.is_played() as usize).iter().sum();
+        return self
+            .episodes
+            .map(|ep| !ep.is_played() as usize)
+            .iter()
+            .sum();
     }
 }
 
@@ -61,24 +65,20 @@ impl Menuable for Podcast {
         // if the size available is big enough, we add the unplayed data
         // to the end
         if length > crate::config::PODCAST_UNPLAYED_TOTALS_LENGTH {
-            let meta_str = format!("({}/{})",
-                self.num_unplayed(), self.episodes.len());
+            let meta_str = format!("({}/{})", self.num_unplayed(), self.episodes.len());
             title_length = length - meta_str.chars().count();
 
-            let out = self.title
-                .graphemes(true)
-                .take(title_length)
-                .collect::<String>();
+            let out = self.title.substr(0, title_length);
 
-            return format!("{} {:>width$}", out, meta_str, 
-                width=length-out.graphemes(true).count());
-                // this pads spaces between title and totals
+            return format!(
+                "{} {:>width$}",
+                out,
+                meta_str,
+                width = length - out.grapheme_len()
+            );
+        // this pads spaces between title and totals
         } else {
-            let out = self.title
-                .graphemes(true)
-                .take(title_length)
-                .collect::<String>();
-            return out;
+            return self.title.substr(0, title_length);
         }
     }
 
@@ -109,8 +109,8 @@ impl Ord for Podcast {
 
 /// Struct holding data about an individual podcast episode. Most of this
 /// is metadata, but if the episode has been downloaded to the local
-/// machine, the filepath will be included here as well. `played` indicates
-/// whether the podcast has been marked as played or unplayed.
+/// machine, the filepath will be included here as well. `played`
+/// indicates whether the podcast has been marked as played or unplayed.
 #[derive(Debug, Clone)]
 pub struct Episode {
     pub id: i64,
@@ -135,7 +135,7 @@ impl Episode {
                 let minutes = seconds / 60;
                 seconds -= minutes * 60;
                 format!("{:02}:{:02}:{:02}", hours, minutes, seconds)
-            },
+            }
             None => "--:--:--".to_string(),
         };
     }
@@ -151,55 +151,49 @@ impl Menuable for Episode {
     fn get_title(&self, length: usize) -> String {
         let out = match self.path {
             Some(_) => {
-                let title = self.title
-                    .graphemes(true)
-                    .take(length-4)
-                    .collect::<String>();
+                let title = self.title.substr(0, length - 4);
                 format!("[D] {}", title)
-            },
-            None => {
-                self.title
-                    .graphemes(true)
-                    .take(length)
-                    .collect::<String>()
-            },
+            }
+            None => self.title.substr(0, length),
         };
-        let out_len = out.graphemes(true).count();
+        let out_len = out.grapheme_len();
         if length > crate::config::EPISODE_PUBDATE_LENGTH {
             let dur = self.format_duration();
             let meta_dur = format!("[{}]", dur);
 
             if let Some(pubdate) = self.pubdate {
                 // print pubdate and duration
-                let pd = pubdate.format("%F")
-                    .to_string();
+                let pd = pubdate.format("%F").to_string();
                 let meta_str = format!("({}) {}", pd, meta_dur);
                 let added_len = meta_str.chars().count();
 
-                let out_added = out
-                    .graphemes(true)
-                    .take(length-added_len)
-                    .collect::<String>();
-                return format!("{} {:>width$}", out_added, meta_str,
-                    width=length-out_len);
+                let out_added = out.substr(0, length - added_len);
+                return format!(
+                    "{} {:>width$}",
+                    out_added,
+                    meta_str,
+                    width = length - out_len
+                );
             } else {
                 // just print duration
-                let out_added = out
-                    .graphemes(true)
-                    .take(length-meta_dur.chars().count())
-                    .collect::<String>();
-                return format!("{} {:>width$}", out_added, meta_dur,
-                    width=length-out_len);
+                let out_added = out.substr(0, length - meta_dur.chars().count());
+                return format!(
+                    "{} {:>width$}",
+                    out_added,
+                    meta_dur,
+                    width = length - out_len
+                );
             }
         } else if length > crate::config::EPISODE_DURATION_LENGTH {
             let dur = self.format_duration();
             let meta_dur = format!("[{}]", dur);
-            let out_added = out
-                .graphemes(true)
-                .take(length-meta_dur.chars().count())
-                .collect::<String>();
-            return format!("{} {:>width$}", out_added, meta_dur,
-                width=length-out_len);
+            let out_added = out.substr(0, length - meta_dur.chars().count());
+            return format!(
+                "{} {:>width$}",
+                out_added,
+                meta_dur,
+                width = length - out_len
+            );
         } else {
             return out;
         }
@@ -236,6 +230,39 @@ pub struct EpisodeNoId {
     pub duration: Option<i64>,
 }
 
+/// Struct holding data about an individual podcast episode, specifically
+/// for the popup window that asks users which new episodes they wish to
+/// download.
+#[derive(Debug, Clone)]
+pub struct NewEpisode {
+    pub id: i64,
+    pub pod_id: i64,
+    pub title: String,
+    pub pod_title: String,
+    pub selected: bool,
+}
+
+impl Menuable for NewEpisode {
+    /// Returns the database ID for the episode.
+    fn get_id(&self) -> i64 {
+        return self.id;
+    }
+
+    /// Returns the title for the episode, up to length characters.
+    fn get_title(&self, length: usize) -> String {
+        let selected = if self.selected {
+            "✓".to_string()
+        } else {
+            " ".to_string()
+        };
+        let full_string = format!("[{}] {} ({})", selected, self.title, self.pod_title);
+        return full_string.substr(0, length);
+    }
+
+    fn is_played(&self) -> bool {
+        return true;
+    }
+}
 
 /// Struct used to hold a vector of data inside a reference-counted
 /// mutex, to allow for multiple owners of mutable data.
@@ -244,7 +271,8 @@ pub struct EpisodeNoId {
 /// Arc<Mutex<_>>.
 #[derive(Debug)]
 pub struct LockVec<T>
-    where T: Clone + Menuable {
+where T: Clone + Menuable
+{
     data: Arc<Mutex<HashMap<i64, T>>>,
     order: Arc<Mutex<Vec<i64>>>,
 }
@@ -263,7 +291,7 @@ impl<T: Clone + Menuable> LockVec<T> {
         return LockVec {
             data: Arc::new(Mutex::new(hm)),
             order: Arc::new(Mutex::new(order)),
-        }
+        };
     }
 
     /// Lock the LockVec hashmap for reading/writing.
@@ -281,8 +309,8 @@ impl<T: Clone + Menuable> LockVec<T> {
         return (self.data.lock().unwrap(), self.order.lock().unwrap());
     }
 
-    /// Given an index in the vector, this takes a new T and replaces
-    /// the old T at that position in the vector.
+    /// Given an id, this takes a new T and replaces the old T with that
+    /// id.
     pub fn replace(&self, id: i64, t: T) {
         let mut borrowed = self.borrow_map();
         borrowed.insert(id, t);
@@ -305,19 +333,15 @@ impl<T: Clone + Menuable> LockVec<T> {
     /// alive, the function returns a Vec of the collected results,
     /// rather than an iterator.
     pub fn map<B, F>(&self, mut f: F) -> Vec<B>
-        where F: FnMut(&T) -> B {
-
+    where F: FnMut(&T) -> B {
         let (map, order) = self.borrow();
-        return order.iter().map(|id| {
-            f(map.get(id).unwrap())
-        }).collect();
+        return order.iter().map(|id| f(map.get(id).unwrap())).collect();
     }
 
     /// Maps a closure to a single element in the LockVec, specified by
     /// `id`. If there is no element `id`, this returns None.
     pub fn map_single<B, F>(&self, id: i64, f: F) -> Option<B>
-        where F: FnOnce(&T) -> B {
-
+    where F: FnOnce(&T) -> B {
         let borrowed = self.borrow_map();
         return match borrowed.get(&id) {
             Some(item) => Some(f(item)),
@@ -329,8 +353,7 @@ impl<T: Clone + Menuable> LockVec<T> {
     /// `index` (position order). If there is no element at that index,
     /// this returns None.
     pub fn map_single_by_index<B, F>(&self, index: usize, f: F) -> Option<B>
-        where F: FnOnce(&T) -> B {
-
+    where F: FnOnce(&T) -> B {
         let order = self.borrow_order();
         return match order.get(index) {
             Some(id) => self.map_single(*id, f),
@@ -344,12 +367,12 @@ impl<T: Clone + Menuable> LockVec<T> {
     /// alive, the function returns a Vec of the collected results,
     /// rather than an iterator.
     pub fn filter_map<B, F>(&self, mut f: F) -> Vec<B>
-        where F: FnMut(&T) -> Option<B> {
-
+    where F: FnMut(&T) -> Option<B> {
         let (map, order) = self.borrow();
-        return order.iter().filter_map(|id| {
-            f(map.get(id).unwrap())
-        }).collect();
+        return order
+            .iter()
+            .filter_map(|id| f(map.get(id).unwrap()))
+            .collect();
     }
 
     /// Returns the number of items in the LockVec.
@@ -368,7 +391,7 @@ impl<T: Clone + Menuable> Clone for LockVec<T> {
         return LockVec {
             data: Arc::clone(&self.data),
             order: Arc::clone(&self.order),
-        }
+        };
     }
 }
 
@@ -416,4 +439,28 @@ pub enum Message {
     Ui(UiMsg),
     Feed(FeedMsg),
     Dl(DownloadMsg),
+}
+
+
+/// Some helper functions for dealing with Unicode strings.
+pub trait StringUtils {
+    fn substr(&self, start: usize, length: usize) -> String;
+    fn grapheme_len(&self) -> usize;
+}
+
+impl StringUtils for String {
+    /// Takes a slice of the String, properly separated at Unicode
+    /// grapheme boundaries. Returns a new String.
+    fn substr(&self, start: usize, length: usize) -> String {
+        return self
+            .graphemes(true)
+            .skip(start)
+            .take(length)
+            .collect::<String>();
+    }
+
+    /// Counts the total number of Unicode graphemes in the String.
+    fn grapheme_len(&self) -> usize {
+        return self.graphemes(true).count();
+    }
 }

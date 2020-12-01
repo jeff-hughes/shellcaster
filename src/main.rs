@@ -1,57 +1,57 @@
-use std::process;
-use std::path::PathBuf;
-use std::sync::mpsc;
 use std::fs::File;
 use std::io::{Read, Write};
+use std::path::PathBuf;
+use std::process;
+use std::sync::mpsc;
 
 use clap::{App, Arg, SubCommand};
 
-mod main_controller;
 mod config;
-mod keymap;
 mod db;
-mod ui;
-mod types;
-mod threadpool;
-mod feeds;
-mod sanitizer;
 mod downloads;
-mod play_file;
+mod feeds;
+mod keymap;
+mod main_controller;
 mod opml;
+mod play_file;
+mod sanitizer;
+mod threadpool;
+mod types;
+mod ui;
 
-use crate::main_controller::{MainController, MainMessage};
 use crate::config::Config;
 use crate::db::Database;
+use crate::feeds::{FeedMsg, PodcastFeed};
+use crate::main_controller::{MainController, MainMessage};
 use crate::threadpool::Threadpool;
 use crate::types::*;
-use crate::feeds::{FeedMsg, PodcastFeed};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Main controller for shellcaster program.
-/// 
+///
 /// *Main command:*
-/// Setup involves connecting to the sqlite database (creating it if 
+/// Setup involves connecting to the sqlite database (creating it if
 /// necessary), then querying the list of podcasts and episodes. This
 /// is then passed off to the UI, which instantiates the menus displaying
 /// the podcast info.
-/// 
+///
 /// After this, the program enters a loop that listens for user keyboard
 /// input, and dispatches to the proper module as necessary. User input
 /// to quit the program breaks the loop, tears down the UI, and ends the
 /// program.
-/// 
+///
 /// *Sync subcommand:*
 /// Connects to the sqlite database, then initiates a full sync of all
 /// podcasts. No UI is created for this, as the intention is to be used
 /// in a programmatic way (e.g., setting up a cron job to sync
 /// regularly.)
-/// 
+///
 /// *Import subcommand:*
 /// Reads in an OPML file and adds feeds to the database that do not
 /// already exist. If the `-r` option is used, the database is wiped
 /// first.
-/// 
+///
 /// *Export subcommand:*
 /// Connects to the sqlite database, and reads all podcasts into an OPML
 /// file, with the location specified from the command line arguments.
@@ -127,26 +127,26 @@ fn main() {
         // SYNC SUBCOMMAND ----------------------------------------------
         ("sync", Some(sub_args)) => {
             sync_podcasts(&db_path, config, sub_args);
-        },
+        }
 
         // IMPORT SUBCOMMAND --------------------------------------------
         ("import", Some(sub_args)) => {
             import(&db_path, config, sub_args);
-        },
+        }
 
         // EXPORT SUBCOMMAND --------------------------------------------
         ("export", Some(sub_args)) => {
             export(&db_path, sub_args);
-        },
+        }
 
         // MAIN COMMAND -------------------------------------------------
         _ => {
             let mut main_ctrl = MainController::new(config, &db_path);
 
-            main_ctrl.loop_msgs();  // main loop
+            main_ctrl.loop_msgs(); // main loop
 
             main_ctrl.tx_to_ui.send(MainMessage::UiTearDown).unwrap();
-            main_ctrl.ui_thread.join().unwrap();  // wait for UI thread to finish teardown
+            main_ctrl.ui_thread.join().unwrap(); // wait for UI thread to finish teardown
         }
     }
 }
@@ -156,7 +156,7 @@ fn main() {
 /// line arguments, or else returns the default config path for the
 /// user's operating system.
 /// Returns None if default OS config directory cannot be determined.
-/// 
+///
 /// Note: Right now we only have one possible command-line argument,
 /// specifying a config path. If the command-line API is
 /// extended in the future, this will have to be refactored.
@@ -170,10 +170,10 @@ fn get_config_path(config: Option<&str>) -> Option<PathBuf> {
                     path.push("shellcaster");
                     path.push("config.toml");
                     Some(path)
-                },
+                }
                 None => None,
-            } 
-        },
+            }
+        }
     };
 }
 
@@ -193,8 +193,7 @@ fn sync_podcasts(db_path: &PathBuf, config: Config, args: &clap::ArgMatches) {
 
         for pod in podcast_list.iter() {
             let feed = PodcastFeed::new(Some(pod.id), pod.url.clone(), Some(pod.title.clone()));
-            feeds::check_feed(feed, config.max_retries, &threadpool,
-                tx_to_main.clone());
+            feeds::check_feed(feed, config.max_retries, &threadpool, tx_to_main.clone());
         }
 
         let mut msg_counter: usize = 0;
@@ -204,18 +203,18 @@ fn sync_podcasts(db_path: &PathBuf, config: Config, args: &clap::ArgMatches) {
                 Message::Feed(FeedMsg::SyncData((pod_id, pod))) => {
                     let title = pod.title.clone();
                     let db_result;
-            
+
                     db_result = db_inst.update_podcast(pod_id, pod);
                     match db_result {
                         Ok(_) => {
                             if !args.is_present("quiet") {
                                 println!("Synced {}", title);
                             }
-                        },
+                        }
                         Err(_err) => {
                             failure = true;
                             eprintln!("Error synchronizing {}", title);
-                        },
+                        }
                     }
                 }
 
@@ -265,12 +264,14 @@ fn import(db_path: &PathBuf, config: Config, args: &clap::ArgMatches) {
         }
         None => {
             let mut contents = String::new();
-            std::io::stdin().read_to_string(&mut contents).unwrap_or_else(|err| {
-                eprintln!("Error reading from stdin: {}", err);
-                process::exit(5);
-            });
+            std::io::stdin()
+                .read_to_string(&mut contents)
+                .unwrap_or_else(|err| {
+                    eprintln!("Error reading from stdin: {}", err);
+                    process::exit(5);
+                });
             contents
-        },
+        }
     };
 
     let mut podcast_list = opml::import(xml).unwrap_or_else(|err| {
@@ -295,14 +296,17 @@ fn import(db_path: &PathBuf, config: Config, args: &clap::ArgMatches) {
             let old_podcasts = db_inst.get_podcasts();
 
             // if URL is already in database, remove it from import
-            podcast_list = podcast_list.into_iter().filter(|pod| {
-                for op in &old_podcasts {
-                    if pod.url == op.url {
-                        return false;
+            podcast_list = podcast_list
+                .into_iter()
+                .filter(|pod| {
+                    for op in &old_podcasts {
+                        if pod.url == op.url {
+                            return false;
+                        }
                     }
-                }
-                return true;
-            }).collect();
+                    return true;
+                })
+                .collect();
         }
 
         if podcast_list.is_empty() {
@@ -316,7 +320,12 @@ fn import(db_path: &PathBuf, config: Config, args: &clap::ArgMatches) {
             let (tx_to_main, rx_to_main) = mpsc::channel();
 
             for pod in podcast_list.iter() {
-                feeds::check_feed(pod.clone(), config.max_retries, &threadpool, tx_to_main.clone());
+                feeds::check_feed(
+                    pod.clone(),
+                    config.max_retries,
+                    &threadpool,
+                    tx_to_main.clone(),
+                );
             }
 
             let mut msg_counter: usize = 0;
@@ -326,18 +335,18 @@ fn import(db_path: &PathBuf, config: Config, args: &clap::ArgMatches) {
                     Message::Feed(FeedMsg::NewData(pod)) => {
                         let title = pod.title.clone();
                         let db_result;
-                
+
                         db_result = db_inst.insert_podcast(pod);
                         match db_result {
                             Ok(_) => {
                                 if !args.is_present("quiet") {
                                     println!("Added {}", title);
                                 }
-                            },
+                            }
                             Err(_err) => {
                                 failure = true;
                                 eprintln!("Error adding {}", title);
-                            },
+                            }
                         }
                     }
 
@@ -392,7 +401,7 @@ fn export(db_path: &PathBuf, args: &clap::ArgMatches) {
                 eprintln!("Error copying OPML data to output file: {}", err);
                 process::exit(4);
             });
-        },
+        }
         // print to stdout
         None => println!("{}", xml),
     }

@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use pancurses::Input;
+use std::collections::HashMap;
 
 /// Enum delineating all actions that may be performed by the user, and
 /// thus have keybindings associated with them.
@@ -25,6 +25,7 @@ pub enum UserAction {
     Remove,
     RemoveAll,
 
+    Help,
     Quit,
 }
 
@@ -48,9 +49,7 @@ impl Keybindings {
     /// user action, if one exists.
     pub fn get_from_input(&self, input: Input) -> Option<&UserAction> {
         match input_to_str(input) {
-            Some(code) => {
-                self.map.get(&code)
-            },
+            Some(code) => self.map.get(&code),
             None => None,
         }
     }
@@ -70,8 +69,12 @@ impl Keybindings {
         }
     }
 
+    /// Returns a Vec with all of the keys mapped to a particular user
+    /// action.
     pub fn keys_for_action(&self, action: UserAction) -> Vec<String> {
-        return self.map.iter()
+        return self
+            .map
+            .iter()
             .filter_map(|(key, &val)| {
                 if val == action {
                     Some(key.clone())
@@ -83,11 +86,11 @@ impl Keybindings {
     }
 }
 
-/// Helper function converting a pancurses Input object to a unique string
-/// representing that input.
-/// This function is a bit ridiculous, given that 95% of keyboards probably
-/// don't even have half these special keys, but at any rate...they're
-/// mapped, if anyone wants them.
+/// Helper function converting a pancurses Input object to a unique
+/// string representing that input.
+/// This function is a bit ridiculous, given that 95% of keyboards
+/// probably don't even have half these special keys, but at any rate...
+/// they're mapped, if anyone wants them.
 pub fn input_to_str(input: Input) -> Option<String> {
     let mut tmp = [0; 4];
     let code = match input {
@@ -110,7 +113,7 @@ pub fn input_to_str(input: Input) -> Option<String> {
         Input::KeyF8 => "F8",
         Input::KeyF9 => "F9",
         Input::KeyF10 => "F10",
-        Input::KeyF11 => "F11",  // F11 triggers KeyResize for me
+        Input::KeyF11 => "F11", // F11 triggers KeyResize for me
         Input::KeyF12 => "F12",
         Input::KeyF13 => "F13",
         Input::KeyF14 => "F14",
@@ -127,7 +130,7 @@ pub fn input_to_str(input: Input) -> Option<String> {
         Input::KeySR => "S_Up",
         Input::KeyNPage => "PgDn",
         Input::KeyPPage => "PgUp",
-        Input::KeySTab => "STab",  // this doesn't appear to be Shift+Tab
+        Input::KeySTab => "STab", // this doesn't appear to be Shift+Tab
         Input::KeyCTab => "C_Tab",
         Input::KeyCATab => "CATab",
         Input::KeyEnter => "Enter",
@@ -138,7 +141,7 @@ pub fn input_to_str(input: Input) -> Option<String> {
         Input::KeyAbort => "Abort",
         Input::KeySHelp => "SHelp",
         Input::KeyLHelp => "LHelp",
-        Input::KeyBTab => "S_Tab",  // Shift+Tab
+        Input::KeyBTab => "S_Tab", // Shift+Tab
         Input::KeyBeg => "Beg",
         Input::KeyCancel => "Cancel",
         Input::KeyClose => "Close",
@@ -211,8 +214,8 @@ pub fn input_to_str(input: Input) -> Option<String> {
             } else {
                 c.encode_utf8(&mut tmp)
             }
-        },
-        _ => ""
+        }
+        _ => "",
     };
     if code == "" {
         return None;

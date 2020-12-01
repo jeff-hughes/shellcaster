@@ -14,7 +14,20 @@
 # will be entered to the command.
 # Default: vlc %s
 
-play_command = "vlc %s"
+#play_command = "vlc %s"
+
+
+# Configures what happens when new episodes are found as podcasts are
+# synced:
+#  - "always" will automatically download all new episodes;
+#  - "ask-selected" will open a popup window to let you select which
+#    episodes to download, with all of them selected by default;
+#  - "ask-unselected" will open a popup window to let you select which
+#    episodes to download, with NONE of them selected by default;
+#  - "never" will never automatically download new episodes.
+# Default: "ask-unselected"
+
+#download_new_episodes = "ask-unselected"
 
 
 # Maximum number of files to download simultaneously. Setting this too
@@ -72,4 +85,5 @@ delete_all = [ "X" ]
 remove = [ "r" ]
 remove_all = [ "R" ]
 
+help = [ "?" ]
 quit = [ "q" ]

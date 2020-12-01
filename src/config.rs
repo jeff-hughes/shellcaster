@@ -1,6 +1,6 @@
+use serde::Deserialize;
 use std::fs::File;
 use std::io::Read;
-use serde::Deserialize;
 use std::path::PathBuf;
 
 use crate::keymap::{Keybindings, UserAction};
@@ -26,11 +26,22 @@ pub const EPISODE_PUBDATE_LENGTH: usize = 60;
 pub const DETAILS_PANEL_LENGTH: i32 = 135;
 
 
-/// Holds information about user configuration of program. 
+/// Identifies the user's selection for what to do with new episodes
+/// when syncing.
+#[derive(Debug, Clone)]
+pub enum DownloadNewEpisodes {
+    Always,
+    AskSelected,
+    AskUnselected,
+    Never,
+}
+
+/// Holds information about user configuration of program.
 #[derive(Debug, Clone)]
 pub struct Config {
     pub download_path: PathBuf,
     pub play_command: String,
+    pub download_new_episodes: DownloadNewEpisodes,
     pub simultaneous_downloads: usize,
     pub max_retries: usize,
     pub keybindings: Keybindings,
@@ -38,11 +49,11 @@ pub struct Config {
 
 /// A temporary struct used to deserialize data from the TOML configuration
 /// file. Will be converted into Config struct.
-#[derive(Debug)]
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct ConfigFromToml {
     download_path: Option<String>,
     play_command: Option<String>,
+    download_new_episodes: Option<String>,
     simultaneous_downloads: Option<usize>,
     max_retries: Option<usize>,
     keybindings: KeybindingsFromToml,
@@ -50,8 +61,7 @@ struct ConfigFromToml {
 
 /// A temporary struct used to deserialize keybinding data from the TOML
 /// configuration file.
-#[derive(Debug)]
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct KeybindingsFromToml {
     left: Option<Vec<String>>,
     right: Option<Vec<String>>,
@@ -69,6 +79,7 @@ struct KeybindingsFromToml {
     delete_all: Option<Vec<String>>,
     remove: Option<Vec<String>>,
     remove_all: Option<Vec<String>>,
+    help: Option<Vec<String>>,
     quit: Option<Vec<String>>,
 }
 
@@ -87,7 +98,7 @@ impl Config {
                     .expect("Error reading config.toml. Please ensure file is readable.");
                 config_toml = toml::from_str(&config_string)
                     .expect("Error parsing config.toml. Please check file syntax.");
-            },
+            }
             Err(_) => {
                 // if we can't find the file, set everything to empty
                 // so we it will use the defaults for everything
@@ -108,11 +119,13 @@ impl Config {
                     delete_all: None,
                     remove: None,
                     remove_all: None,
+                    help: None,
                     quit: None,
                 };
                 config_toml = ConfigFromToml {
                     download_path: None,
                     play_command: None,
+                    download_new_episodes: None,
                     simultaneous_downloads: None,
                     max_retries: None,
                     keybindings: keybindings,
@@ -130,6 +143,7 @@ impl Config {
 #[allow(clippy::type_complexity)]
 fn config_with_defaults(config_toml: &ConfigFromToml) -> Config {
     // specify all default keybindings for actions
+    #[rustfmt::skip]
     let action_map: Vec<(&Option<Vec<String>>, UserAction, Vec<String>)> = vec![
         (&config_toml.keybindings.left, UserAction::Left, vec!["Left".to_string(), "h".to_string()]),
         (&config_toml.keybindings.right, UserAction::Right, vec!["Right".to_string(), "l".to_string()]),
@@ -151,6 +165,7 @@ fn config_with_defaults(config_toml: &ConfigFromToml) -> Config {
         (&config_toml.keybindings.remove, UserAction::Remove, vec!["r".to_string()]),
         (&config_toml.keybindings.remove_all, UserAction::RemoveAll, vec!["R".to_string()]),
 
+        (&config_toml.keybindings.help, UserAction::Help, vec!["?".to_string()]),
         (&config_toml.keybindings.quit, UserAction::Quit, vec!["q".to_string()]),
     ];
 
@@ -166,13 +181,20 @@ fn config_with_defaults(config_toml: &ConfigFromToml) -> Config {
 
     // paths are set by user, or they resolve to OS-specific path as
     // provided by dirs crate
-    let download_path = parse_create_dir(
-        config_toml.download_path.as_deref(),
-        dirs::data_local_dir());
+    let download_path =
+        parse_create_dir(config_toml.download_path.as_deref(), dirs::data_local_dir());
 
     let play_command = match config_toml.play_command.as_deref() {
         Some(cmd) => cmd.to_string(),
         None => "vlc %s".to_string(),
+    };
+
+    let download_new_episodes = match config_toml.download_new_episodes.as_deref() {
+        Some("always") => DownloadNewEpisodes::Always,
+        Some("ask-selected") => DownloadNewEpisodes::AskSelected,
+        Some("ask-unselected") => DownloadNewEpisodes::AskUnselected,
+        Some("never") => DownloadNewEpisodes::Never,
+        Some(_) | None => DownloadNewEpisodes::AskUnselected,
     };
 
     let simultaneous_downloads = match config_toml.simultaneous_downloads {
@@ -190,6 +212,7 @@ fn config_with_defaults(config_toml: &ConfigFromToml) -> Config {
     return Config {
         download_path: download_path,
         play_command: play_command,
+        download_new_episodes: download_new_episodes,
         simultaneous_downloads: simultaneous_downloads,
         max_retries: max_retries,
         keybindings: keymap,
