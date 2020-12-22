@@ -363,6 +363,22 @@ impl<T: Clone + Menuable> LockVec<T> {
 
     /// Maps a closure to every element in the LockVec, in the same way
     /// as the `filter_map()` does on an Iterator, both mapping and
+    /// filtering, over a specified range.
+    /// Does not check if the range is valid!
+    /// However, to avoid issues with keeping the borrow
+    /// alive, the function returns a Vec of the collected results,
+    /// rather than an iterator.
+    pub fn map_by_range<B, F>(&self, start: usize, end: usize, mut f: F) -> Vec<B>
+    where F: FnMut(&T) -> Option<B> {
+        let (map, order) = self.borrow();
+        return (start..end)
+            .into_iter()
+            .filter_map(|id| f(map.get(order.get(id).unwrap()).unwrap()))
+            .collect();
+    }
+
+    /// Maps a closure to every element in the LockVec, in the same way
+    /// as the `filter_map()` does on an Iterator, both mapping and
     /// filtering. However, to avoid issues with keeping the borrow
     /// alive, the function returns a Vec of the collected results,
     /// rather than an iterator.

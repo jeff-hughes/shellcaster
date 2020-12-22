@@ -10,6 +10,13 @@ pub enum UserAction {
     Up,
     Down,
 
+    BigUp,
+    BigDown,
+    PageUp,
+    PageDown,
+    GoTop,
+    GoBot,
+
     AddFeed,
     Sync,
     SyncAll,
