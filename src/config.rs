@@ -25,6 +25,10 @@ pub const EPISODE_PUBDATE_LENGTH: usize = 60;
 // display the details panel
 pub const DETAILS_PANEL_LENGTH: i32 = 135;
 
+// How many lines will be scrolled by the big scroll,
+// in relation to the rows eg: 4 = 1/4 of the screen
+pub const BIG_SCROLL_AMOUNT: i32 = 4;
+
 
 /// Identifies the user's selection for what to do with new episodes
 /// when syncing.
@@ -67,6 +71,12 @@ struct KeybindingsFromToml {
     right: Option<Vec<String>>,
     up: Option<Vec<String>>,
     down: Option<Vec<String>>,
+    big_up: Option<Vec<String>>,
+    big_down: Option<Vec<String>>,
+    go_top: Option<Vec<String>>,
+    go_bot: Option<Vec<String>>,
+    page_up: Option<Vec<String>>,
+    page_down: Option<Vec<String>>,
     add_feed: Option<Vec<String>>,
     sync: Option<Vec<String>>,
     sync_all: Option<Vec<String>>,
@@ -107,6 +117,12 @@ impl Config {
                     right: None,
                     up: None,
                     down: None,
+                    big_up: None,
+                    big_down: None,
+                    go_top: None,
+                    go_bot: None,
+                    page_up: None,
+                    page_down: None,
                     add_feed: None,
                     sync: None,
                     sync_all: None,
@@ -149,6 +165,12 @@ fn config_with_defaults(config_toml: &ConfigFromToml) -> Config {
         (&config_toml.keybindings.right, UserAction::Right, vec!["Right".to_string(), "l".to_string()]),
         (&config_toml.keybindings.up, UserAction::Up, vec!["Up".to_string(), "k".to_string()]),
         (&config_toml.keybindings.down, UserAction::Down, vec!["Down".to_string(), "j".to_string()]),
+        (&config_toml.keybindings.big_up, UserAction::BigUp, vec!["K".to_string()]),
+        (&config_toml.keybindings.big_down, UserAction::BigDown, vec!["J".to_string()]),
+        (&config_toml.keybindings.page_up, UserAction::PageUp, vec!["PgUp".to_string()]),
+        (&config_toml.keybindings.page_down, UserAction::PageDown, vec!["PgDn".to_string()]),
+        (&config_toml.keybindings.go_top, UserAction::GoTop, vec!["g".to_string()]),
+        (&config_toml.keybindings.go_bot, UserAction::GoBot, vec!["G".to_string()]),
 
         (&config_toml.keybindings.add_feed, UserAction::AddFeed, vec!["a".to_string()]),
         (&config_toml.keybindings.sync, UserAction::Sync, vec!["s".to_string()]),

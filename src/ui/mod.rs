@@ -97,8 +97,7 @@ impl<'a> UI<'a> {
         items: LockVec<Podcast>,
         rx_from_main: mpsc::Receiver<MainMessage>,
         tx_to_main: mpsc::Sender<Message>,
-    ) -> thread::JoinHandle<()>
-    {
+    ) -> thread::JoinHandle<()> {
         return thread::spawn(move || {
             let mut ui = UI::new(&config, &items);
             ui.init();
@@ -281,7 +280,13 @@ impl<'a> UI<'a> {
                         Some(a @ UserAction::Down)
                         | Some(a @ UserAction::Up)
                         | Some(a @ UserAction::Left)
-                        | Some(a @ UserAction::Right) => {
+                        | Some(a @ UserAction::Right)
+                        | Some(a @ UserAction::PageUp)
+                        | Some(a @ UserAction::PageDown)
+                        | Some(a @ UserAction::BigUp)
+                        | Some(a @ UserAction::BigDown)
+                        | Some(a @ UserAction::GoTop)
+                        | Some(a @ UserAction::GoBot) => {
                             self.move_cursor(a, curr_pod_id, curr_ep_id)
                         }
 
@@ -444,55 +449,14 @@ impl<'a> UI<'a> {
         action: &UserAction,
         curr_pod_id: Option<i64>,
         curr_ep_id: Option<i64>,
-    )
-    {
+    ) {
         match action {
             UserAction::Down => {
-                match self.active_menu {
-                    ActiveMenu::PodcastMenu => {
-                        if curr_pod_id.is_some() {
-                            self.podcast_menu.scroll(1);
-
-                            self.episode_menu.top_row = 0;
-                            self.episode_menu.selected = 0;
-
-                            // update episodes menu with new list
-                            self.episode_menu.items = self.podcast_menu.get_episodes();
-                            self.episode_menu.update_items();
-                            self.update_details_panel();
-                        }
-                    }
-                    ActiveMenu::EpisodeMenu => {
-                        if curr_ep_id.is_some() {
-                            self.episode_menu.scroll(1);
-                            self.update_details_panel();
-                        }
-                    }
-                }
+                self.scroll_current_window(curr_pod_id, 1);
             }
 
             UserAction::Up => {
-                match self.active_menu {
-                    ActiveMenu::PodcastMenu => {
-                        if curr_pod_id.is_some() {
-                            self.podcast_menu.scroll(-1);
-
-                            self.episode_menu.top_row = 0;
-                            self.episode_menu.selected = 0;
-
-                            // update episodes menu with new list
-                            self.episode_menu.items = self.podcast_menu.get_episodes();
-                            self.episode_menu.update_items();
-                            self.update_details_panel();
-                        }
-                    }
-                    ActiveMenu::EpisodeMenu => {
-                        if curr_pod_id.is_some() {
-                            self.episode_menu.scroll(-1);
-                            self.update_details_panel();
-                        }
-                    }
-                }
+                self.scroll_current_window(curr_pod_id, -1);
             }
 
             UserAction::Left => {
@@ -527,9 +491,68 @@ impl<'a> UI<'a> {
                 }
             }
 
+            UserAction::PageUp => {
+                self.scroll_current_window(curr_pod_id, -self.n_row + 3);
+            }
+
+            UserAction::PageDown => {
+                self.scroll_current_window(curr_pod_id, self.n_row - 3);
+            }
+
+            UserAction::BigUp => {
+                self.scroll_current_window(
+                    curr_pod_id,
+                    -self.n_row / crate::config::BIG_SCROLL_AMOUNT,
+                );
+            }
+
+            UserAction::BigDown => {
+                self.scroll_current_window(
+                    curr_pod_id,
+                    self.n_row / crate::config::BIG_SCROLL_AMOUNT,
+                );
+            }
+
+            UserAction::GoTop => {
+                self.scroll_current_window(curr_pod_id, -i32::MAX);
+            }
+
+            UserAction::GoBot => {
+                self.scroll_current_window(curr_pod_id, i32::MAX);
+            }
+
             // this shouldn't occur because we only trigger this
-            // function when the UserAction is Up, Down, Left, or Right.
+            // function when the UserAction is Up, Down, Left, Right, BigUp, BigDown,
+            // PageUp, PageDown, GoBot and GoTop
             _ => (),
+        }
+    }
+
+    /// Scrolls the current active menu by
+    /// the specified amount and refreshes
+    /// the window.
+    /// Positive Scroll is down.
+    pub fn scroll_current_window(&mut self, pod_id: Option<i64>, scroll: i32) {
+        match self.active_menu {
+            ActiveMenu::PodcastMenu => {
+                if pod_id.is_some() {
+                    self.podcast_menu.scroll(scroll);
+
+                    self.episode_menu.top_row = 0;
+                    self.episode_menu.selected = 0;
+
+                    // update episodes menu with new list
+                    self.episode_menu.items = self.podcast_menu.get_episodes();
+                    self.episode_menu.update_items();
+                    self.update_details_panel();
+                }
+            }
+            ActiveMenu::EpisodeMenu => {
+                if pod_id.is_some() {
+                    self.episode_menu.scroll(scroll);
+                    self.update_details_panel();
+                }
+            }
         }
     }
 
@@ -539,8 +562,7 @@ impl<'a> UI<'a> {
         &mut self,
         curr_pod_id: Option<i64>,
         curr_ep_id: Option<i64>,
-    ) -> Option<UiMsg>
-    {
+    ) -> Option<UiMsg> {
         if let Some(pod_id) = curr_pod_id {
             if let Some(ep_id) = curr_ep_id {
                 if let Some(played) = self
@@ -602,8 +624,7 @@ impl<'a> UI<'a> {
         &mut self,
         curr_pod_id: Option<i64>,
         curr_ep_id: Option<i64>,
-    ) -> Option<UiMsg>
-    {
+    ) -> Option<UiMsg> {
         let confirm = self.ask_for_confirmation("Are you sure you want to remove the episode?");
         // If we don't get a confirmation to delete, then don't remove
         if !confirm {
@@ -808,8 +829,7 @@ impl<'a> UI<'a> {
         n_col: i32,
         start_y: i32,
         start_x: i32,
-    ) -> Panel
-    {
+    ) -> Panel {
         return Panel::new(
             colors,
             "Details".to_string(),
