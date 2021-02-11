@@ -38,8 +38,7 @@ pub fn download_list(
     max_retries: usize,
     threadpool: &Threadpool,
     tx_to_main: Sender<Message>,
-)
-{
+) {
     // parse episode details and push to queue
     for ep in episodes.into_iter() {
         let tx = tx_to_main.clone();

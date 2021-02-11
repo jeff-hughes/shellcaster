@@ -47,12 +47,14 @@ pub fn import(xml: String) -> Result<Vec<PodcastFeed>, String> {
 /// Converts the current set of podcast feeds to the OPML format
 pub fn export(podcasts: Vec<Podcast>) -> OPML {
     let date = Utc::now();
-    let mut opml = OPML::default();
-    opml.head = Some(Head {
-        title: Some("Shellcaster Podcast Feeds".to_string()),
-        date_created: Some(date.to_rfc2822()),
-        ..Head::default()
-    });
+    let mut opml = OPML {
+        head: Some(Head {
+            title: Some("Shellcaster Podcast Feeds".to_string()),
+            date_created: Some(date.to_rfc2822()),
+            ..Head::default()
+        }),
+        ..Default::default()
+    };
 
     let mut outlines = Vec::new();
 

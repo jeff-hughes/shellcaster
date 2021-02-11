@@ -30,8 +30,7 @@ impl Panel {
         n_col: i32,
         _start_y: i32,
         _start_x: i32,
-    ) -> Self
-    {
+    ) -> Self {
         // we represent the window as a vector of Strings instead of
         // the pancurses window
         let panel_win =
@@ -159,8 +158,7 @@ impl Panel {
         _nchars: i32,
         attr: pancurses::chtype,
         color: ColorType,
-    )
-    {
+    ) {
         let current = &self.window[y as usize];
         self.window[y as usize] = (current.0.clone(), attr, color);
     }

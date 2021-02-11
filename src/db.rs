@@ -181,8 +181,7 @@ impl Database {
     pub fn insert_podcast(
         &self,
         podcast: PodcastNoId,
-    ) -> Result<SyncResult, Box<dyn std::error::Error>>
-    {
+    ) -> Result<SyncResult, Box<dyn std::error::Error>> {
         let conn = self.conn.as_ref().unwrap();
         let _ = conn.execute(
             "INSERT INTO podcasts (title, url, description, author,
@@ -228,8 +227,7 @@ impl Database {
         &self,
         podcast_id: i64,
         episode: &EpisodeNoId,
-    ) -> Result<i64, Box<dyn std::error::Error>>
-    {
+    ) -> Result<i64, Box<dyn std::error::Error>> {
         let conn = self.conn.as_ref().unwrap();
 
         let pubdate = match episode.pubdate {
@@ -260,8 +258,7 @@ impl Database {
         &self,
         episode_id: i64,
         path: &PathBuf,
-    ) -> Result<(), Box<dyn std::error::Error>>
-    {
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let conn = self.conn.as_ref().unwrap();
 
         let _ = conn.execute(
@@ -317,8 +314,7 @@ impl Database {
         &self,
         pod_id: i64,
         podcast: PodcastNoId,
-    ) -> Result<SyncResult, Box<dyn std::error::Error>>
-    {
+    ) -> Result<SyncResult, Box<dyn std::error::Error>> {
         let conn = self.conn.as_ref().unwrap();
         let _ = conn.execute(
             "UPDATE podcasts SET title = ?, url = ?, description = ?,
@@ -352,8 +348,7 @@ impl Database {
         podcast_id: i64,
         podcast_title: String,
         episodes: Vec<EpisodeNoId>,
-    ) -> SyncResult
-    {
+    ) -> SyncResult {
         let conn = self.conn.as_ref().unwrap();
 
         let old_episodes = self.get_episodes(podcast_id);

@@ -50,8 +50,7 @@ pub fn check_feed(
     max_retries: usize,
     threadpool: &Threadpool,
     tx_to_main: mpsc::Sender<Message>,
-)
-{
+) {
     threadpool.execute(move || match get_feed_data(feed.url.clone(), max_retries) {
         Ok(pod) => match feed.id {
             Some(id) => {
@@ -74,8 +73,7 @@ pub fn check_feed(
 fn get_feed_data(
     url: String,
     mut max_retries: usize,
-) -> Result<PodcastNoId, Box<dyn std::error::Error>>
-{
+) -> Result<PodcastNoId, Box<dyn std::error::Error>> {
     let request: Result<ureq::Response, Box<dyn std::error::Error>> = loop {
         let response = ureq::get(&url)
             .timeout_connect(5000)

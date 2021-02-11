@@ -39,8 +39,7 @@ impl Panel {
         n_col: i32,
         start_y: i32,
         start_x: i32,
-    ) -> Self
-    {
+    ) -> Self {
         let panel_win = pancurses::newwin(n_row, n_col, start_y, start_x);
 
         return Panel {
@@ -222,8 +221,7 @@ impl Panel {
         nchars: i32,
         attr: pancurses::chtype,
         color: ColorType,
-    )
-    {
+    ) {
         self.window.mvchgat(
             self.abs_y(y),
             self.abs_x(x),

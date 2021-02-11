@@ -608,10 +608,7 @@ impl<'a> UI<'a> {
             // to delete those too
             if self.check_for_local_files(pod_id) {
                 let ask_delete = self.spawn_yes_no_notif("Delete local files too?");
-                delete = match ask_delete {
-                    Some(val) => val,
-                    None => false, // default not to delete
-                };
+                delete = ask_delete.unwrap_or(false); // default not to delete
             }
 
             return Some(UiMsg::RemovePodcast(pod_id, delete));
@@ -641,10 +638,7 @@ impl<'a> UI<'a> {
                     .unwrap();
                 if is_downloaded {
                     let ask_delete = self.spawn_yes_no_notif("Delete local file too?");
-                    delete = match ask_delete {
-                        Some(val) => val,
-                        None => false, // default not to delete
-                    };
+                    delete = ask_delete.unwrap_or(false); // default not to delete
                 }
 
                 return Some(UiMsg::RemoveEpisode(pod_id, ep_id, delete));
@@ -662,10 +656,7 @@ impl<'a> UI<'a> {
             // to delete those too
             if self.check_for_local_files(pod_id) {
                 let ask_delete = self.spawn_yes_no_notif("Delete local files too?");
-                delete = match ask_delete {
-                    Some(val) => val,
-                    None => false, // default not to delete
-                };
+                delete = ask_delete.unwrap_or(false); // default not to delete
             }
             return Some(UiMsg::RemoveAllEpisodes(pod_id, delete));
         }
@@ -739,10 +730,7 @@ impl<'a> UI<'a> {
     /// 'y', then the function returns `true`, and 'n' returns
     /// `false`. Cancelling the action returns `false` as well.
     pub fn ask_for_confirmation(&self, message: &str) -> bool {
-        match self.spawn_yes_no_notif(message) {
-            Some(val) => val,
-            None => false,
-        }
+        self.spawn_yes_no_notif(message).unwrap_or(false)
     }
 
     /// Adds a notification to the bottom of the screen that solicits

@@ -224,7 +224,7 @@ pub fn input_to_str(input: Input) -> Option<String> {
         }
         _ => "",
     };
-    if code == "" {
+    if code.is_empty() {
         return None;
     } else {
         return Some(code.to_string());
