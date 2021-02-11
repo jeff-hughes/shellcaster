@@ -1,5 +1,5 @@
-use std::cmp::min;
 use std::cmp::max;
+use std::cmp::min;
 use std::collections::hash_map::Entry;
 
 use super::ColorType;
@@ -133,7 +133,7 @@ impl<T: Clone + Menuable> Menu<T> {
 
         let n_row = self.panel.get_rows();
         let max_lines = list_len as i32 + self.start_row;
-        let check_max = | lines | min(lines, max_lines);
+        let check_max = |lines| min(lines, max_lines);
 
         // check the bounds of lines and adjust accordingly
         if lines.checked_add(self.top_row + n_row).is_some() {
@@ -153,19 +153,20 @@ impl<T: Clone + Menuable> Menu<T> {
         }
 
         // given a selection, apply correct play status and highlight
-        apply_color_played = | menu: &mut Menu<T>, selected, color : ColorType | {
-            let played = menu.items
+        apply_color_played = |menu: &mut Menu<T>, selected, color: ColorType| {
+            let played = menu
+                .items
                 .map_single_by_index(menu.get_menu_idx(selected), |el| el.is_played())
                 .unwrap();
             menu.set_attrs(selected, played, color);
         };
 
         // return a vec with sorted titles in range start, end (exclusive)
-        get_titles = | menu: &mut Menu<T>, start, end |
-            menu
-            .items
-            .map_by_range(start, end, |el| {
-                Some(el.get_title(menu.panel.get_cols() as usize))});
+        get_titles = |menu: &mut Menu<T>, start, end| {
+            menu.items.map_by_range(start, end, |el| {
+                Some(el.get_title(menu.panel.get_cols() as usize))
+            })
+        };
 
         // scroll list if necessary:
         // scroll down
@@ -177,7 +178,8 @@ impl<T: Clone + Menuable> Menu<T> {
             let titles = get_titles(
                 self,
                 (self.top_row + n_row) as usize,
-                (check_max(checked_lines + self.top_row + n_row - delta)) as usize);
+                (check_max(checked_lines + self.top_row + n_row - delta)) as usize,
+            );
             for title in titles.into_iter() {
                 self.top_row += 1;
                 self.panel.delete_line(self.start_row);
@@ -192,8 +194,9 @@ impl<T: Clone + Menuable> Menu<T> {
         } else if self.selected < self.start_row {
             let titles = get_titles(
                 self,
-                max(0,self.top_row + self.selected) as usize,
-                (self.top_row) as usize);
+                max(0, self.top_row + self.selected) as usize,
+                (self.top_row) as usize,
+            );
             for title in titles.into_iter().rev() {
                 self.top_row -= 1;
                 self.panel.insert_line(self.start_row, title);

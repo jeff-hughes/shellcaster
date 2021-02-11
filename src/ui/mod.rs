@@ -456,7 +456,7 @@ impl<'a> UI<'a> {
             }
 
             UserAction::Up => {
-                self.scroll_current_window(curr_pod_id, - 1);
+                self.scroll_current_window(curr_pod_id, -1);
             }
 
             UserAction::Left => {
@@ -492,17 +492,11 @@ impl<'a> UI<'a> {
             }
 
             UserAction::PageUp => {
-                self.scroll_current_window(
-                    curr_pod_id,
-                    - self.n_row + 3,
-                );
+                self.scroll_current_window(curr_pod_id, -self.n_row + 3);
             }
 
             UserAction::PageDown => {
-                self.scroll_current_window(
-                    curr_pod_id,
-                    self.n_row - 3,
-                );
+                self.scroll_current_window(curr_pod_id, self.n_row - 3);
             }
 
             UserAction::BigUp => {
