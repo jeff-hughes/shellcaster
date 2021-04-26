@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process;
 use std::sync::mpsc;
 
@@ -179,7 +179,7 @@ fn get_config_path(config: Option<&str>) -> Option<PathBuf> {
 
 
 /// Synchronizes RSS feed data for all podcasts, without setting up a UI.
-fn sync_podcasts(db_path: &PathBuf, config: Config, args: &clap::ArgMatches) {
+fn sync_podcasts(db_path: &Path, config: Config, args: &clap::ArgMatches) {
     let db_inst = Database::connect(db_path);
     let podcast_list = db_inst.get_podcasts();
 
@@ -247,7 +247,7 @@ fn sync_podcasts(db_path: &PathBuf, config: Config, args: &clap::ArgMatches) {
 /// Imports a list of podcasts from OPML format, either reading from a
 /// file or from stdin. If the `replace` flag is set, this replaces all
 /// existing data in the database.
-fn import(db_path: &PathBuf, config: Config, args: &clap::ArgMatches) {
+fn import(db_path: &Path, config: Config, args: &clap::ArgMatches) {
     // read from file or from stdin
     let xml = match args.value_of("file") {
         Some(filepath) => {
@@ -380,7 +380,7 @@ fn import(db_path: &PathBuf, config: Config, args: &clap::ArgMatches) {
 
 /// Exports all podcasts to OPML format, either printing to stdout or
 /// exporting to a file.
-fn export(db_path: &PathBuf, args: &clap::ArgMatches) {
+fn export(db_path: &Path, args: &clap::ArgMatches) {
     let db_inst = Database::connect(&db_path);
     let podcast_list = db_inst.get_podcasts();
     let opml = opml::export(podcast_list);

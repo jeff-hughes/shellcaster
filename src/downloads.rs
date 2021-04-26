@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
 
 use sanitize_filename::{sanitize_with_options, Options};
@@ -34,7 +34,7 @@ pub struct EpData {
 /// by the user while there are still ongoing jobs.
 pub fn download_list(
     episodes: Vec<EpData>,
-    dest: &PathBuf,
+    dest: &Path,
     max_retries: usize,
     threadpool: &Threadpool,
     tx_to_main: Sender<Message>,
@@ -42,7 +42,7 @@ pub fn download_list(
     // parse episode details and push to queue
     for ep in episodes.into_iter() {
         let tx = tx_to_main.clone();
-        let dest2 = dest.clone();
+        let dest2 = dest.to_path_buf();
         threadpool.execute(move || {
             let result = download_file(ep, dest2, max_retries);
             tx.send(Message::Dl(result)).unwrap();

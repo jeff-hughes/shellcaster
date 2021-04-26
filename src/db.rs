@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, NaiveDateTime, Utc};
 use lazy_static::lazy_static;
@@ -30,8 +30,8 @@ pub struct Database {
 impl Database {
     /// Creates a new connection to the database (and creates database if
     /// it does not already exist). Panics if database cannot be accessed.
-    pub fn connect(path: &PathBuf) -> Database {
-        let mut db_path = path.clone();
+    pub fn connect(path: &Path) -> Database {
+        let mut db_path = path.to_path_buf();
         if std::fs::create_dir_all(&db_path).is_err() {
             panic!("Unable to create subdirectory for database.");
         }
@@ -253,7 +253,7 @@ impl Database {
     pub fn insert_file(
         &self,
         episode_id: i64,
-        path: &PathBuf,
+        path: &Path,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let conn = self.conn.as_ref().unwrap();
 

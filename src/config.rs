@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use std::fs::File;
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::keymap::{Keybindings, UserAction};
 
@@ -98,7 +98,7 @@ impl Config {
     /// Given a file path, this reads a TOML config file and returns a
     /// Config struct with keybindings, etc. Inserts defaults if config
     /// file does not exist, or if specific values are not set.
-    pub fn new(path: &PathBuf) -> Config {
+    pub fn new(path: &Path) -> Config {
         let mut config_string = String::new();
         let config_toml: ConfigFromToml;
 

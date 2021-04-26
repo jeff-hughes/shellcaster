@@ -75,7 +75,7 @@ enum ActiveMenu {
 /// encapsulates the pancurses windows, and holds data about the size of
 /// the screen.
 #[derive(Debug)]
-pub struct UI<'a> {
+pub struct Ui<'a> {
     stdscr: Window,
     n_row: i32,
     n_col: i32,
@@ -89,7 +89,7 @@ pub struct UI<'a> {
     popup_win: PopupWin<'a>,
 }
 
-impl<'a> UI<'a> {
+impl<'a> Ui<'a> {
     /// Spawns a UI object in a new thread, with message channels to send
     /// and receive messages
     pub fn spawn(
@@ -99,7 +99,7 @@ impl<'a> UI<'a> {
         tx_to_main: mpsc::Sender<Message>,
     ) -> thread::JoinHandle<()> {
         return thread::spawn(move || {
-            let mut ui = UI::new(&config, &items);
+            let mut ui = Ui::new(&config, &items);
             ui.init();
             let mut message_iter = rx_from_main.try_iter();
             // this is the main event loop: on each loop, we update
@@ -142,7 +142,7 @@ impl<'a> UI<'a> {
     /// Initializes the UI with a list of podcasts and podcast episodes,
     /// creates the pancurses window and draws it to the screen, and
     /// returns a UI object for future manipulation.
-    pub fn new(config: &'a Config, items: &LockVec<Podcast>) -> UI<'a> {
+    pub fn new(config: &'a Config, items: &LockVec<Podcast>) -> Ui<'a> {
         let stdscr = pancurses::initscr();
 
         // set some options
@@ -207,7 +207,7 @@ impl<'a> UI<'a> {
         let notif_win = NotifWin::new(colors.clone(), n_row, n_col);
         let popup_win = PopupWin::new(colors.clone(), &config.keybindings, n_row, n_col);
 
-        return UI {
+        return Ui {
             stdscr,
             n_row,
             n_col,
