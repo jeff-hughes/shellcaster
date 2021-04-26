@@ -177,6 +177,10 @@ The sample file above provides comments that should walk you through all the ava
 | ------- | -------------- |
 | ?       | Open help window |
 | Arrow keys / h,j,k,l | Navigate menus |
+| Shift+K | Up 1/4 page |
+| Shift+J | Down 1/4 page |
+| PgUp    | Page up |
+| PgDn    | Page down |
 | a       | Add new feed |
 | q       | Quit program |
 | s       | Synchronize selected feed |

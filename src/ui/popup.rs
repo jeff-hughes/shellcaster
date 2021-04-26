@@ -3,6 +3,7 @@ use std::cmp::min;
 
 use super::{ColorType, Colors};
 use super::{Menu, Panel, UiMsg};
+use crate::config::BIG_SCROLL_AMOUNT;
 use crate::keymap::{Keybindings, UserAction};
 use crate::types::*;
 
@@ -158,11 +159,19 @@ impl<'a> PopupWin<'a> {
 
     /// Create a new Panel holding a help window.
     pub fn make_help_win(&self) -> Panel {
+        let big_scroll_up = format!("Up 1/{} page:", BIG_SCROLL_AMOUNT);
+        let big_scroll_dn = format!("Down 1/{} page:", BIG_SCROLL_AMOUNT);
         let actions = vec![
             (Some(UserAction::Left), "Left:"),
             (Some(UserAction::Right), "Right:"),
             (Some(UserAction::Up), "Up:"),
             (Some(UserAction::Down), "Down:"),
+            (Some(UserAction::BigUp), &big_scroll_up),
+            (Some(UserAction::BigDown), &big_scroll_dn),
+            (Some(UserAction::PageUp), "Page up:"),
+            (Some(UserAction::PageDown), "Page down:"),
+            (Some(UserAction::GoTop), "Go to top:"),
+            (Some(UserAction::GoBot), "Go to bottom:"),
             // (None, ""),
             (Some(UserAction::AddFeed), "Add feed:"),
             (Some(UserAction::Sync), "Sync:"),
