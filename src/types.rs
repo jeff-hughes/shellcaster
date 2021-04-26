@@ -6,6 +6,7 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use chrono::{DateTime, Utc};
 use lazy_static::lazy_static;
+use nohash_hasher::BuildNoHashHasher;
 use regex::Regex;
 
 use crate::downloads::DownloadMsg;
@@ -273,14 +274,14 @@ impl Menuable for NewEpisode {
 pub struct LockVec<T>
 where T: Clone + Menuable
 {
-    data: Arc<Mutex<HashMap<i64, T>>>,
+    data: Arc<Mutex<HashMap<i64, T, BuildNoHashHasher<i64>>>>,
     order: Arc<Mutex<Vec<i64>>>,
 }
 
 impl<T: Clone + Menuable> LockVec<T> {
     /// Create a new LockVec.
     pub fn new(data: Vec<T>) -> LockVec<T> {
-        let mut hm = HashMap::new();
+        let mut hm = HashMap::with_hasher(BuildNoHashHasher::default());
         let mut order = Vec::new();
         for i in data.into_iter() {
             let id = i.get_id();
@@ -295,7 +296,7 @@ impl<T: Clone + Menuable> LockVec<T> {
     }
 
     /// Lock the LockVec hashmap for reading/writing.
-    pub fn borrow_map(&self) -> MutexGuard<HashMap<i64, T>> {
+    pub fn borrow_map(&self) -> MutexGuard<HashMap<i64, T, BuildNoHashHasher<i64>>> {
         return self.data.lock().unwrap();
     }
 
@@ -305,7 +306,13 @@ impl<T: Clone + Menuable> LockVec<T> {
     }
 
     /// Lock the LockVec hashmap for reading/writing.
-    pub fn borrow(&self) -> (MutexGuard<HashMap<i64, T>>, MutexGuard<Vec<i64>>) {
+    #[allow(clippy::type_complexity)]
+    pub fn borrow(
+        &self,
+    ) -> (
+        MutexGuard<HashMap<i64, T, BuildNoHashHasher<i64>>>,
+        MutexGuard<Vec<i64>>,
+    ) {
         return (self.data.lock().unwrap(), self.order.lock().unwrap());
     }
 

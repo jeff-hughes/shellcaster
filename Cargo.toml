@@ -29,6 +29,7 @@ sanitize-filename = "0.2.1"
 shellexpand = "2.0.0"
 dirs = { package = "dirs-next", version = "1.0.1" }
 opml = "0.2.4"
+nohash-hasher = "0.2.0"
 unicode-segmentation = "1.6.0"
 textwrap = "0.12.1"
 escaper = "0.1.0"
