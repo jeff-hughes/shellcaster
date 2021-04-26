@@ -183,26 +183,22 @@ impl Database {
         podcast: PodcastNoId,
     ) -> Result<SyncResult, Box<dyn std::error::Error>> {
         let conn = self.conn.as_ref().unwrap();
-        let _ = conn.execute(
+        let mut stmt = conn.prepare_cached(
             "INSERT INTO podcasts (title, url, description, author,
                 explicit, last_checked)
                 VALUES (?, ?, ?, ?, ?, ?);",
-            params![
-                podcast.title,
-                podcast.url,
-                podcast.description,
-                podcast.author,
-                podcast.explicit,
-                podcast.last_checked.timestamp()
-            ],
         )?;
+        stmt.execute(params![
+            podcast.title,
+            podcast.url,
+            podcast.description,
+            podcast.author,
+            podcast.explicit,
+            podcast.last_checked.timestamp()
+        ])?;
 
-        let mut stmt = conn
-            .prepare("SELECT id FROM podcasts WHERE url = ?")
-            .unwrap();
-        let pod_id = stmt
-            .query_row::<i64, _, _>(params![podcast.url], |row| row.get(0))
-            .unwrap();
+        let mut stmt = conn.prepare_cached("SELECT id FROM podcasts WHERE url = ?")?;
+        let pod_id = stmt.query_row::<i64, _, _>(params![podcast.url], |row| row.get(0))?;
         let mut ep_ids = Vec::new();
         for ep in podcast.episodes.iter().rev() {
             let id = self.insert_episode(pod_id, &ep)?;
@@ -235,21 +231,21 @@ impl Database {
             None => None,
         };
 
-        let _ = conn.execute(
+        let mut stmt = conn.prepare_cached(
             "INSERT INTO episodes (podcast_id, title, url,
                 description, pubdate, duration, played, hidden)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?);",
-            params![
-                podcast_id,
-                episode.title,
-                episode.url,
-                episode.description,
-                pubdate,
-                episode.duration,
-                false,
-                false,
-            ],
         )?;
+        stmt.execute(params![
+            podcast_id,
+            episode.title,
+            episode.url,
+            episode.description,
+            pubdate,
+            episode.duration,
+            false,
+            false,
+        ])?;
         return Ok(conn.last_insert_rowid());
     }
 
@@ -261,11 +257,11 @@ impl Database {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let conn = self.conn.as_ref().unwrap();
 
-        let _ = conn.execute(
+        let mut stmt = conn.prepare_cached(
             "INSERT INTO files (episode_id, path)
                 VALUES (?, ?);",
-            params![episode_id, path.to_str(),],
         )?;
+        stmt.execute(params![episode_id, path.to_str(),])?;
         return Ok(());
     }
 
@@ -273,11 +269,10 @@ impl Database {
     /// user has chosen to delete the file.
     pub fn remove_file(&self, episode_id: i64) {
         let conn = self.conn.as_ref().unwrap();
-        let _ = conn
-            .execute("DELETE FROM files WHERE episode_id = ?;", params![
-                episode_id
-            ])
+        let mut stmt = conn
+            .prepare_cached("DELETE FROM files WHERE episode_id = ?;")
             .unwrap();
+        stmt.execute(params![episode_id]).unwrap();
     }
 
     /// Removes all file listings for the selected episode ids.
@@ -288,11 +283,10 @@ impl Database {
         let episode_list: Vec<String> = episode_ids.iter().map(|x| x.to_string()).collect();
         let episodes = episode_list.join(", ");
 
-        let _ = conn
-            .execute("DELETE FROM files WHERE episode_id = (?);", params![
-                episodes
-            ])
+        let mut stmt = conn
+            .prepare_cached("DELETE FROM files WHERE episode_id = (?);")
             .unwrap();
+        stmt.execute(params![episodes]).unwrap();
     }
 
     /// Removes a podcast, all episodes, and files from the database.
@@ -302,9 +296,10 @@ impl Database {
         // and `files` tables, all associated episodes for this podcast
         // will also be deleted, and all associated file entries for
         // those episodes as well.
-        let _ = conn
-            .execute("DELETE FROM podcasts WHERE id = ?;", params![podcast_id])
+        let mut stmt = conn
+            .prepare_cached("DELETE FROM podcasts WHERE id = ?;")
             .unwrap();
+        stmt.execute(params![podcast_id]).unwrap();
     }
 
     /// Updates an existing podcast in the database, where metadata is
@@ -316,20 +311,20 @@ impl Database {
         podcast: PodcastNoId,
     ) -> Result<SyncResult, Box<dyn std::error::Error>> {
         let conn = self.conn.as_ref().unwrap();
-        let _ = conn.execute(
+        let mut stmt = conn.prepare_cached(
             "UPDATE podcasts SET title = ?, url = ?, description = ?,
             author = ?, explicit = ?, last_checked = ?
             WHERE id = ?;",
-            params![
-                podcast.title,
-                podcast.url,
-                podcast.description,
-                podcast.author,
-                podcast.explicit,
-                podcast.last_checked.timestamp(),
-                pod_id,
-            ],
         )?;
+        stmt.execute(params![
+            podcast.title,
+            podcast.url,
+            podcast.description,
+            podcast.author,
+            podcast.explicit,
+            podcast.last_checked.timestamp(),
+            pod_id,
+        ])?;
 
         let result = self.update_episodes(pod_id, podcast.title, podcast.episodes);
         return Ok(result);
@@ -399,21 +394,22 @@ impl Database {
             match existing_id {
                 Some(id) => {
                     if update {
-                        let _ = conn
-                            .execute(
+                        let mut stmt = conn
+                            .prepare_cached(
                                 "UPDATE episodes SET title = ?, url = ?,
                                 description = ?, pubdate = ?, duration = ?
                                 WHERE id = ?;",
-                                params![
-                                    new_ep.title,
-                                    new_ep.url,
-                                    new_ep.description,
-                                    new_pd,
-                                    new_ep.duration,
-                                    id,
-                                ],
                             )
                             .unwrap();
+                        stmt.execute(params![
+                            new_ep.title,
+                            new_ep.url,
+                            new_ep.description,
+                            new_pd,
+                            new_ep.duration,
+                            id,
+                        ])
+                        .unwrap();
                         update_ep.push(id);
                     }
                 }
@@ -440,11 +436,10 @@ impl Database {
     pub fn set_played_status(&self, episode_id: i64, played: bool) {
         let conn = self.conn.as_ref().unwrap();
 
-        let _ = conn
-            .execute("UPDATE episodes SET played = ? WHERE id = ?;", params![
-                played, episode_id
-            ])
+        let mut stmt = conn
+            .prepare_cached("UPDATE episodes SET played = ? WHERE id = ?;")
             .unwrap();
+        stmt.execute(params![played, episode_id]).unwrap();
     }
 
     /// Updates an episode to "remove" it by hiding it. "Removed"
@@ -453,18 +448,17 @@ impl Database {
     pub fn hide_episode(&self, episode_id: i64, hide: bool) {
         let conn = self.conn.as_ref().unwrap();
 
-        let _ = conn
-            .execute("UPDATE episodes SET hidden = ? WHERE id = ?;", params![
-                hide, episode_id
-            ])
+        let mut stmt = conn
+            .prepare_cached("UPDATE episodes SET hidden = ? WHERE id = ?;")
             .unwrap();
+        stmt.execute(params![hide, episode_id]).unwrap();
     }
 
     /// Generates list of all podcasts in database.
     /// TODO: This should probably use a JOIN statement instead.
     pub fn get_podcasts(&self) -> Vec<Podcast> {
         if let Some(conn) = &self.conn {
-            let mut stmt = conn.prepare("SELECT * FROM podcasts;").unwrap();
+            let mut stmt = conn.prepare_cached("SELECT * FROM podcasts;").unwrap();
             let podcast_iter = stmt
                 .query_map(params![], |row| {
                     let pod_id = row.get("id")?;
@@ -505,7 +499,7 @@ impl Database {
     pub fn get_episodes(&self, pod_id: i64) -> Vec<Episode> {
         if let Some(conn) = &self.conn {
             let mut stmt = conn
-                .prepare(
+                .prepare_cached(
                     "SELECT * FROM episodes
                     LEFT JOIN files ON episodes.id = files.episode_id
                     WHERE episodes.podcast_id = ?
