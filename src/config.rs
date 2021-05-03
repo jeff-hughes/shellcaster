@@ -1,3 +1,4 @@
+use anyhow::{anyhow, Context, Result};
 use serde::Deserialize;
 use std::fs::File;
 use std::io::Read;
@@ -98,16 +99,17 @@ impl Config {
     /// Given a file path, this reads a TOML config file and returns a
     /// Config struct with keybindings, etc. Inserts defaults if config
     /// file does not exist, or if specific values are not set.
-    pub fn new(path: &Path) -> Config {
+    pub fn new(path: &Path) -> Result<Config> {
         let mut config_string = String::new();
         let config_toml: ConfigFromToml;
 
         match File::open(path) {
             Ok(mut file) => {
-                file.read_to_string(&mut config_string)
-                    .expect("Error reading config.toml. Please ensure file is readable.");
+                file.read_to_string(&mut config_string).with_context(|| {
+                    "Could not read config.toml. Please ensure file is readable."
+                })?;
                 config_toml = toml::from_str(&config_string)
-                    .expect("Error parsing config.toml. Please check file syntax.");
+                    .with_context(|| "Could not parse config.toml. Please check file syntax.")?;
             }
             Err(_) => {
                 // if we can't find the file, set everything to empty
@@ -157,7 +159,7 @@ impl Config {
 /// that specifies user settings where indicated, and defaults for any
 /// settings that were not specified by the user.
 #[allow(clippy::type_complexity)]
-fn config_with_defaults(config_toml: &ConfigFromToml) -> Config {
+fn config_with_defaults(config_toml: &ConfigFromToml) -> Result<Config> {
     // specify all default keybindings for actions
     #[rustfmt::skip]
     let action_map: Vec<(&Option<Vec<String>>, UserAction, Vec<String>)> = vec![
@@ -204,7 +206,7 @@ fn config_with_defaults(config_toml: &ConfigFromToml) -> Config {
     // paths are set by user, or they resolve to OS-specific path as
     // provided by dirs crate
     let download_path =
-        parse_create_dir(config_toml.download_path.as_deref(), dirs::data_local_dir());
+        parse_create_dir(config_toml.download_path.as_deref(), dirs::data_local_dir())?;
 
     let play_command = match config_toml.play_command.as_deref() {
         Some(cmd) => cmd.to_string(),
@@ -231,14 +233,14 @@ fn config_with_defaults(config_toml: &ConfigFromToml) -> Config {
         None => 3,
     };
 
-    return Config {
+    return Ok(Config {
         download_path: download_path,
         play_command: play_command,
         download_new_episodes: download_new_episodes,
         simultaneous_downloads: simultaneous_downloads,
         max_retries: max_retries,
         keybindings: keymap,
-    };
+    });
 }
 
 
@@ -248,29 +250,35 @@ fn config_with_defaults(config_toml: &ConfigFromToml) -> Config {
 /// variables cannot be found, if OS could not produce the appropriate
 /// default directory, or if the specified directories in the path could
 /// not be created.
-fn parse_create_dir(user_dir: Option<&str>, default: Option<PathBuf>) -> PathBuf {
+fn parse_create_dir(user_dir: Option<&str>, default: Option<PathBuf>) -> Result<PathBuf> {
     let final_path = match user_dir {
-        Some(path) => {
-            match shellexpand::full(path) {
-                Ok(realpath) => PathBuf::from(realpath.as_ref()),
-                Err(err) => panic!("Could not parse environment variable {} in config.toml. Reason: {}", err.var_name, err.cause),
+        Some(path) => match shellexpand::full(path) {
+            Ok(realpath) => PathBuf::from(realpath.as_ref()),
+            Err(err) => {
+                return Err(anyhow!(
+                    "Could not parse environment variable {} in config.toml. Reason: {}",
+                    err.var_name,
+                    err.cause
+                ))
             }
         },
         None => {
-            match default {
-                Some(mut path) => {
-                    path.push("shellcaster");
-                    path
-                },
-                None => panic!("Could not identify a default directory for your OS. Please specify paths manually in config.toml."),
+            if let Some(mut path) = default {
+                path.push("shellcaster");
+                path
+            } else {
+                return Err(anyhow!("Could not identify a default directory for your OS. Please specify paths manually in config.toml."));
             }
-        },
+        }
     };
 
     // create directories if they do not exist
-    if let Err(err) = std::fs::create_dir_all(&final_path) {
-        panic!("Could not create filepath: {}", err);
-    }
+    std::fs::create_dir_all(&final_path).with_context(|| {
+        format!(
+            "Could not create filepath: {}",
+            final_path.to_string_lossy()
+        )
+    })?;
 
-    return final_path;
+    return Ok(final_path);
 }

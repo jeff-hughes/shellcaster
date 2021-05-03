@@ -29,13 +29,13 @@ use crate::types::*;
 lazy_static! {
     /// Regex for finding <br/> tags -- also captures any surrounding
     /// line breaks
-    static ref RE_BR_TAGS: Regex = Regex::new(r"((\r\n)|\r|\n)*<br */?>((\r\n)|\r|\n)*").unwrap();
+    static ref RE_BR_TAGS: Regex = Regex::new(r"((\r\n)|\r|\n)*<br */?>((\r\n)|\r|\n)*").expect("Regex error");
 
     /// Regex for finding HTML tags
-    static ref RE_HTML_TAGS: Regex = Regex::new(r"<[^<>]*>").unwrap();
+    static ref RE_HTML_TAGS: Regex = Regex::new(r"<[^<>]*>").expect("Regex error");
 
     /// Regex for finding more than two line breaks
-    static ref RE_MULT_LINE_BREAKS: Regex = Regex::new(r"((\r\n)|\r|\n){3,}").unwrap();
+    static ref RE_MULT_LINE_BREAKS: Regex = Regex::new(r"((\r\n)|\r|\n){3,}").expect("Regex error");
 }
 
 
@@ -110,7 +110,9 @@ impl<'a> Ui<'a> {
 
                 match ui.getch() {
                     UiMsg::Noop => (),
-                    input => tx_to_main.send(Message::Ui(input)).unwrap(),
+                    input => tx_to_main
+                        .send(Message::Ui(input))
+                        .expect("Thread messaging error"),
                 }
 
                 if let Some(message) = message_iter.next() {
@@ -522,8 +524,8 @@ impl<'a> Ui<'a> {
             }
 
             // this shouldn't occur because we only trigger this
-            // function when the UserAction is Up, Down, Left, Right, BigUp, BigDown,
-            // PageUp, PageDown, GoBot and GoTop
+            // function when the UserAction is Up, Down, Left, Right,
+            // BigUp, BigDown, PageUp, PageDown, GoBot and GoTop
             _ => (),
         }
     }
@@ -635,7 +637,7 @@ impl<'a> Ui<'a> {
                     .episode_menu
                     .items
                     .map_single(ep_id, |ep| ep.path.is_some())
-                    .unwrap();
+                    .unwrap_or(false);
                 if is_downloaded {
                     let ask_delete = self.spawn_yes_no_notif("Delete local file too?");
                     delete = ask_delete.unwrap_or(false); // default not to delete
@@ -712,7 +714,9 @@ impl<'a> Ui<'a> {
     pub fn check_for_local_files(&self, pod_id: i64) -> bool {
         let mut any_downloaded = false;
         let borrowed_map = self.podcast_menu.items.borrow_map();
-        let borrowed_pod = borrowed_map.get(&pod_id).unwrap();
+        let borrowed_pod = borrowed_map
+            .get(&pod_id)
+            .expect("Could not retrieve podcast info.");
 
         let borrowed_ep_list = borrowed_pod.episodes.borrow_map();
 

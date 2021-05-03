@@ -1,3 +1,4 @@
+use anyhow::{anyhow, Result};
 use std::io::Read;
 use std::sync::mpsc;
 
@@ -13,7 +14,7 @@ use crate::types::*;
 lazy_static! {
     /// Regex for parsing an episode "duration", which could take the form
     /// of HH:MM:SS, MM:SS, or SS.
-    static ref RE_DURATION: Regex = Regex::new(r"(\d+)(?::(\d+))?(?::(\d+))?").unwrap();
+    static ref RE_DURATION: Regex = Regex::new(r"(\d+)(?::(\d+))?(?::(\d+))?").expect("Regex error");
 }
 
 /// Enum for communicating back to the main thread after feed data has
@@ -56,25 +57,22 @@ pub fn check_feed(
             Some(id) => {
                 tx_to_main
                     .send(Message::Feed(FeedMsg::SyncData((id, pod))))
-                    .unwrap();
+                    .expect("Thread messaging error");
             }
             None => tx_to_main
                 .send(Message::Feed(FeedMsg::NewData(pod)))
-                .unwrap(),
+                .expect("Thread messaging error"),
         },
         Err(_err) => tx_to_main
             .send(Message::Feed(FeedMsg::Error(feed)))
-            .unwrap(),
+            .expect("Thread messaging error"),
     });
 }
 
 /// Given a URL, this attempts to pull the data about a podcast and its
 /// episodes from an RSS feed.
-fn get_feed_data(
-    url: String,
-    mut max_retries: usize,
-) -> Result<PodcastNoId, Box<dyn std::error::Error>> {
-    let request: Result<ureq::Response, Box<dyn std::error::Error>> = loop {
+fn get_feed_data(url: String, mut max_retries: usize) -> Result<PodcastNoId> {
+    let request: Result<ureq::Response> = loop {
         let response = ureq::get(&url)
             .timeout_connect(5000)
             .timeout_read(15000)
@@ -82,7 +80,7 @@ fn get_feed_data(
         if response.error() {
             max_retries -= 1;
             if max_retries == 0 {
-                break Err(String::from("TODO: Better error handling here.").into());
+                break Err(anyhow!("No response from feed"));
             }
         } else {
             break Ok(response);

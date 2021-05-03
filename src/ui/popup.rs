@@ -229,7 +229,11 @@ impl<'a> PopupWin<'a> {
         // check how long our strings are, and map to two columns
         // if possible; `col_spacing` is the space to leave in between
         // the two columns
-        let longest_line = key_strs.iter().map(|x| x.chars().count()).max().unwrap();
+        let longest_line = key_strs
+            .iter()
+            .map(|x| x.chars().count())
+            .max()
+            .expect("Could not parse keybindings.");
         let col_spacing = 5;
         let n_cols = if help_win.get_cols() > (longest_line * 2 + col_spacing) as i32 {
             2

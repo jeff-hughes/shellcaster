@@ -45,7 +45,8 @@ pub fn download_list(
         let dest2 = dest.to_path_buf();
         threadpool.execute(move || {
             let result = download_file(ep, dest2, max_retries);
-            tx.send(Message::Dl(result)).unwrap();
+            tx.send(Message::Dl(result))
+                .expect("Thread messaging error");
         });
     }
 }

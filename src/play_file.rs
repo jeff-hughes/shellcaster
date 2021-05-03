@@ -1,13 +1,14 @@
+use anyhow::{anyhow, Result};
 use std::process::{Command, Stdio};
 
 /// Execute an external shell command to play an episode file and/or URL.
-pub fn execute(command: &str, path: &str) -> Result<(), std::io::Error> {
+pub fn execute(command: &str, path: &str) -> Result<()> {
     // Command expects a command and then optional arguments (giving
     // everything to it in a string doesn't work), so we need to split
     // on white space and treat everything after the first word as args
     let cmd_string = String::from(command);
     let mut parts = cmd_string.trim().split_whitespace();
-    let base_cmd = parts.next().unwrap();
+    let base_cmd = parts.next().ok_or_else(|| anyhow!("Invalid command."))?;
     let args_iter = parts;
 
     let mut args: Vec<String>;
@@ -30,6 +31,6 @@ pub fn execute(command: &str, path: &str) -> Result<(), std::io::Error> {
     cmd.args(args).stdout(Stdio::null()).stderr(Stdio::null());
     match cmd.spawn() {
         Ok(_) => Ok(()),
-        Err(err) => Err(err),
+        Err(err) => Err(anyhow!(err)),
     }
 }

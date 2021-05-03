@@ -28,7 +28,7 @@ impl Colors {
     }
 
     pub fn get(&self, color: ColorType) -> i16 {
-        return *self.map.get(&color).unwrap();
+        return *self.map.get(&color).expect("Error retrieving color type.");
     }
 }
 

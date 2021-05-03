@@ -67,7 +67,10 @@ impl NotifWin {
             // compare expiry times of all notifications to current time,
             // remove expired ones
             let now = Instant::now();
-            self.msg_stack.retain(|x| now < x.expiry.unwrap());
+            self.msg_stack.retain(|x| match x.expiry {
+                Some(exp) => now < exp,
+                None => true,
+            });
 
             if !self.msg_stack.is_empty() {
                 // check if last item changed, and update screen if it has

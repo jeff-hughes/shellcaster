@@ -77,7 +77,7 @@ impl<T: Clone + Menuable> Menu<T> {
             // for visible rows, print strings from list
             for i in self.start_row..self.panel.get_rows() {
                 if let Some(elem_id) = order.get(self.get_menu_idx(i)) {
-                    let elem = map.get(&elem_id).unwrap();
+                    let elem = map.get(&elem_id).expect("Could not retrieve menu item.");
                     self.panel
                         .write_line(i, elem.get_title(self.panel.get_cols() as usize));
 
@@ -157,7 +157,7 @@ impl<T: Clone + Menuable> Menu<T> {
             let played = menu
                 .items
                 .map_single_by_index(menu.get_menu_idx(selected), |el| el.is_played())
-                .unwrap();
+                .unwrap_or(false);
             menu.set_attrs(selected, played, color);
         };
 
@@ -284,12 +284,13 @@ impl Menu<Podcast> {
     /// currently selected podcast.
     pub fn get_episodes(&self) -> LockVec<Episode> {
         let index = self.get_menu_idx(self.selected);
-        let pod_id = self.items.borrow_order().get(index).copied().unwrap();
-        return self
-            .items
-            .borrow_map()
-            .get(&pod_id)
-            .unwrap()
+        let (borrowed_map, borrowed_order) = self.items.borrow();
+        let pod_id = borrowed_order
+            .get(index)
+            .expect("Could not retrieve podcast.");
+        return borrowed_map
+            .get(pod_id)
+            .expect("Could not retrieve podcast info.")
             .episodes
             .clone();
     }

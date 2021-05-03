@@ -16,7 +16,7 @@ use crate::ui::UiMsg;
 lazy_static! {
     /// Regex for removing "A", "An", and "The" from the beginning of
     /// podcast titles
-    static ref RE_ARTICLES: Regex = Regex::new(r"^(a|an|the) ").unwrap();
+    static ref RE_ARTICLES: Regex = Regex::new(r"^(a|an|the) ").expect("Regex error");
 }
 
 /// Defines interface used for both podcasts and episodes, to be
@@ -297,12 +297,12 @@ impl<T: Clone + Menuable> LockVec<T> {
 
     /// Lock the LockVec hashmap for reading/writing.
     pub fn borrow_map(&self) -> MutexGuard<HashMap<i64, T, BuildNoHashHasher<i64>>> {
-        return self.data.lock().unwrap();
+        return self.data.lock().expect("Mutex error");
     }
 
     /// Lock the LockVec order vector for reading/writing.
     pub fn borrow_order(&self) -> MutexGuard<Vec<i64>> {
-        return self.order.lock().unwrap();
+        return self.order.lock().expect("Mutex error");
     }
 
     /// Lock the LockVec hashmap for reading/writing.
@@ -313,7 +313,10 @@ impl<T: Clone + Menuable> LockVec<T> {
         MutexGuard<HashMap<i64, T, BuildNoHashHasher<i64>>>,
         MutexGuard<Vec<i64>>,
     ) {
-        return (self.data.lock().unwrap(), self.order.lock().unwrap());
+        return (
+            self.data.lock().expect("Mutex error"),
+            self.order.lock().expect("Mutex error"),
+        );
     }
 
     /// Given an id, this takes a new T and replaces the old T with that
@@ -342,7 +345,10 @@ impl<T: Clone + Menuable> LockVec<T> {
     pub fn map<B, F>(&self, mut f: F) -> Vec<B>
     where F: FnMut(&T) -> B {
         let (map, order) = self.borrow();
-        return order.iter().map(|id| f(map.get(id).unwrap())).collect();
+        return order
+            .iter()
+            .map(|id| f(map.get(id).expect("Index error in LockVec")))
+            .collect();
     }
 
     /// Maps a closure to a single element in the LockVec, specified by
@@ -380,7 +386,11 @@ impl<T: Clone + Menuable> LockVec<T> {
         let (map, order) = self.borrow();
         return (start..end)
             .into_iter()
-            .filter_map(|id| f(map.get(order.get(id).unwrap()).unwrap()))
+            .filter_map(|id| {
+                f(map
+                    .get(order.get(id).expect("Index error in LockVec"))
+                    .expect("Index error in LockVec"))
+            })
             .collect();
     }
 
@@ -394,7 +404,7 @@ impl<T: Clone + Menuable> LockVec<T> {
         let (map, order) = self.borrow();
         return order
             .iter()
-            .filter_map(|id| f(map.get(id).unwrap()))
+            .filter_map(|id| f(map.get(id).expect("Index error in LockVec")))
             .collect();
     }
 

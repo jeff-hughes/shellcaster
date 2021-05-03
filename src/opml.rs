@@ -1,3 +1,4 @@
+use anyhow::{anyhow, Result};
 use chrono::Utc;
 use opml::{Body, Head, Outline, OPML};
 
@@ -6,9 +7,9 @@ use crate::types::*;
 
 /// Import a list of podcast feeds from an OPML file. Supports
 /// v1.0, v1.1, and v2.0 OPML files.
-pub fn import(xml: String) -> Result<Vec<PodcastFeed>, String> {
+pub fn import(xml: String) -> Result<Vec<PodcastFeed>> {
     return match OPML::new(&xml) {
-        Err(err) => Err(err),
+        Err(err) => Err(anyhow!(err)),
         Ok(opml) => {
             let mut feeds = Vec::new();
             for pod in opml.body.outlines.iter() {
