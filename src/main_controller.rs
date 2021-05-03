@@ -450,6 +450,7 @@ impl MainController {
                                     pod_id: ep.pod_id,
                                     title: ep.title.clone(),
                                     url: ep.url.clone(),
+                                    pubdate: ep.pubdate,
                                     file_path: None,
                                 },
                                 ep.path.is_none(),
@@ -469,6 +470,7 @@ impl MainController {
                                 pod_id: ep.pod_id,
                                 title: ep.title.clone(),
                                 url: ep.url.clone(),
+                                pubdate: ep.pubdate,
                                 file_path: None,
                             })
                         } else {
