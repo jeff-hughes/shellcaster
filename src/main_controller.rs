@@ -414,7 +414,7 @@ impl MainController {
         }
         podcast.episodes.replace_all(
             self.db
-                .get_episodes(podcast.id)
+                .get_episodes(podcast.id, false)
                 .expect("Error retrieving info from database."),
         );
 
@@ -665,7 +665,7 @@ impl MainController {
             let podcast = borrowed_map.get_mut(&pod_id).unwrap();
             podcast.episodes.replace_all(
                 self.db
-                    .get_episodes(pod_id)
+                    .get_episodes(pod_id, false)
                     .expect("Error retrieving info from database."),
             );
         }

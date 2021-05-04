@@ -316,7 +316,7 @@ impl Database {
     ) -> Result<SyncResult> {
         let conn = self.conn.as_ref().expect("Error connecting to database.");
 
-        let old_episodes = self.get_episodes(podcast_id)?;
+        let old_episodes = self.get_episodes(podcast_id, true)?;
 
         let mut insert_ep = Vec::new();
         let mut update_ep = Vec::new();
@@ -426,7 +426,7 @@ impl Database {
         let mut stmt = conn.prepare_cached("SELECT * FROM podcasts;")?;
         let podcast_iter = stmt.query_map(params![], |row| {
             let pod_id = row.get("id")?;
-            let episodes = match self.get_episodes(pod_id) {
+            let episodes = match self.get_episodes(pod_id, false) {
                 Ok(ep_list) => Ok(ep_list),
                 Err(_) => Err(rusqlite::Error::QueryReturnedNoRows),
             }?;
@@ -459,15 +459,24 @@ impl Database {
     }
 
     /// Generates list of episodes for a given podcast.
-    pub fn get_episodes(&self, pod_id: i64) -> Result<Vec<Episode>> {
+    pub fn get_episodes(&self, pod_id: i64, include_hidden: bool) -> Result<Vec<Episode>> {
         let conn = self.conn.as_ref().expect("Error connecting to database.");
-        let mut stmt = conn.prepare_cached(
-            "SELECT * FROM episodes
-                    LEFT JOIN files ON episodes.id = files.episode_id
-                    WHERE episodes.podcast_id = ?
-                    AND episodes.hidden = 0
-                    ORDER BY pubdate DESC;",
-        )?;
+        let mut stmt = if include_hidden {
+            conn.prepare_cached(
+                "SELECT * FROM episodes
+                        LEFT JOIN files ON episodes.id = files.episode_id
+                        WHERE episodes.podcast_id = ?
+                        ORDER BY pubdate DESC;",
+            )?
+        } else {
+            conn.prepare_cached(
+                "SELECT * FROM episodes
+                        LEFT JOIN files ON episodes.id = files.episode_id
+                        WHERE episodes.podcast_id = ?
+                        AND episodes.hidden = 0
+                        ORDER BY pubdate DESC;",
+            )?
+        };
         let episode_iter = stmt.query_map(params![pod_id], |row| {
             let path = match row.get::<&str, String>("path") {
                 Ok(val) => Some(PathBuf::from(val)),
