@@ -409,15 +409,7 @@ mod tests {
             });
         }
 
-        let panel = Panel::new(
-            crate::ui::colors::set_colors(),
-            "Episodes".to_string(),
-            1,
-            n_row,
-            n_col,
-            0,
-            0,
-        );
+        let panel = Panel::new("Episodes".to_string(), 1, n_row, n_col, 0, 0);
         return Menu {
             panel: panel,
             header: None,

@@ -36,6 +36,8 @@ lazy_static! {
 
     /// Regex for finding more than two line breaks
     static ref RE_MULT_LINE_BREAKS: Regex = Regex::new(r"((\r\n)|\r|\n){3,}").expect("Regex error");
+
+    pub static ref COLORS: Colors = self::colors::set_colors();
 }
 
 
@@ -80,7 +82,6 @@ pub struct Ui<'a> {
     n_row: i32,
     n_col: i32,
     keymap: &'a Keybindings,
-    colors: Colors,
     podcast_menu: Menu<Podcast>,
     episode_menu: Menu<Episode>,
     active_menu: ActiveMenu,
@@ -157,32 +158,14 @@ impl<'a> Ui<'a> {
                              // key codes
         stdscr.nodelay(true); // getch() will not wait for user input
 
-        // set colors
-        let colors = self::colors::set_colors();
-
         let (n_row, n_col) = stdscr.get_max_yx();
         let (pod_col, ep_col, det_col) = Self::calculate_sizes(n_col);
 
-        let podcast_panel = Panel::new(
-            colors.clone(),
-            "Podcasts".to_string(),
-            0,
-            n_row - 1,
-            pod_col,
-            0,
-            0,
-        );
+        let podcast_panel = Panel::new("Podcasts".to_string(), 0, n_row - 1, pod_col, 0, 0);
         let podcast_menu = Menu::new(podcast_panel, None, items.clone());
 
-        let episode_panel = Panel::new(
-            colors.clone(),
-            "Episodes".to_string(),
-            1,
-            n_row - 1,
-            ep_col,
-            0,
-            pod_col - 1,
-        );
+        let episode_panel =
+            Panel::new("Episodes".to_string(), 1, n_row - 1, ep_col, 0, pod_col - 1);
 
         let first_pod = match items.borrow_order().get(0) {
             Some(first_id) => match items.borrow_map().get(first_id) {
@@ -196,7 +179,6 @@ impl<'a> Ui<'a> {
 
         let details_panel = if n_col > crate::config::DETAILS_PANEL_LENGTH {
             Some(Self::make_details_panel(
-                colors.clone(),
                 n_row - 1,
                 det_col,
                 0,
@@ -206,15 +188,14 @@ impl<'a> Ui<'a> {
             None
         };
 
-        let notif_win = NotifWin::new(colors.clone(), n_row, n_col);
-        let popup_win = PopupWin::new(colors.clone(), &config.keybindings, n_row, n_col);
+        let notif_win = NotifWin::new(n_row, n_col);
+        let popup_win = PopupWin::new(&config.keybindings, n_row, n_col);
 
         return Ui {
             stdscr,
             n_row,
             n_col,
             keymap: &config.keybindings,
-            colors: colors,
             podcast_menu: podcast_menu,
             episode_menu: episode_menu,
             active_menu: ActiveMenu::PodcastMenu,
@@ -417,7 +398,6 @@ impl<'a> Ui<'a> {
             }
         } else if det_col > 0 {
             self.details_panel = Some(Self::make_details_panel(
-                self.colors.clone(),
                 n_row - 1,
                 det_col,
                 0,
@@ -815,22 +795,8 @@ impl<'a> Ui<'a> {
     }
 
     /// Create a details panel.
-    pub fn make_details_panel(
-        colors: Colors,
-        n_row: i32,
-        n_col: i32,
-        start_y: i32,
-        start_x: i32,
-    ) -> Panel {
-        return Panel::new(
-            colors,
-            "Details".to_string(),
-            2,
-            n_row,
-            n_col,
-            start_y,
-            start_x,
-        );
+    pub fn make_details_panel(n_row: i32, n_col: i32, start_y: i32, start_x: i32) -> Panel {
+        return Panel::new("Details".to_string(), 2, n_row, n_col, start_y, start_x);
     }
 
     /// Updates the details panel with information about the current

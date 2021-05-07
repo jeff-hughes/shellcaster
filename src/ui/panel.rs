@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use pancurses::{Attribute, Window};
 
-use super::{ColorType, Colors};
+use super::{ColorType, COLORS};
 
 /// Struct holding the raw data used for building the details panel.
 pub struct Details {
@@ -23,7 +23,6 @@ pub struct Details {
 pub struct Panel {
     window: Window,
     screen_pos: usize,
-    colors: Colors,
     title: String,
     n_row: i32,
     n_col: i32,
@@ -32,7 +31,6 @@ pub struct Panel {
 impl Panel {
     /// Creates a new panel.
     pub fn new(
-        colors: Colors,
         title: String,
         screen_pos: usize,
         n_row: i32,
@@ -45,7 +43,6 @@ impl Panel {
         return Panel {
             window: panel_win,
             screen_pos: screen_pos,
-            colors: colors,
             title: title,
             n_row: n_row,
             n_col: n_col,
@@ -59,9 +56,8 @@ impl Panel {
 
     /// Redraws borders and refreshes the window to display on terminal.
     pub fn refresh(&self) {
-        self.window.bkgdset(pancurses::ColorPair(
-            self.colors.get(ColorType::Normal) as u8
-        ));
+        self.window
+            .bkgdset(pancurses::ColorPair(COLORS.get(ColorType::Normal) as u8));
         self.draw_border();
         self.window.refresh();
     }
@@ -98,9 +94,8 @@ impl Panel {
     /// not refresh the screen.
     pub fn erase(&self) {
         self.window.erase();
-        self.window.bkgdset(pancurses::ColorPair(
-            self.colors.get(ColorType::Normal) as u8
-        ));
+        self.window
+            .bkgdset(pancurses::ColorPair(COLORS.get(ColorType::Normal) as u8));
         self.draw_border();
     }
 
@@ -227,7 +222,7 @@ impl Panel {
             self.abs_x(x),
             nchars,
             attr,
-            self.colors.get(color),
+            COLORS.get(color),
         );
     }
 

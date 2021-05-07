@@ -1,7 +1,7 @@
 use pancurses::Input;
 use std::cmp::min;
 
-use super::{ColorType, Colors};
+use super::ColorType;
 use super::{Menu, Panel, UiMsg};
 use crate::config::BIG_SCROLL_AMOUNT;
 use crate::keymap::{Keybindings, UserAction};
@@ -39,7 +39,6 @@ impl ActivePopup {
 pub struct PopupWin<'a> {
     popup: ActivePopup,
     new_episodes: Vec<NewEpisode>,
-    colors: Colors,
     keymap: &'a Keybindings,
     total_rows: i32,
     total_cols: i32,
@@ -50,11 +49,10 @@ pub struct PopupWin<'a> {
 
 impl<'a> PopupWin<'a> {
     /// Set up struct for handling popup windows.
-    pub fn new(colors: Colors, keymap: &'a Keybindings, total_rows: i32, total_cols: i32) -> Self {
+    pub fn new(keymap: &'a Keybindings, total_rows: i32, total_cols: i32) -> Self {
         return Self {
             popup: ActivePopup::None,
             new_episodes: Vec::new(),
-            colors: colors,
             keymap: keymap,
             total_rows: total_rows,
             total_cols: total_cols,
@@ -123,7 +121,6 @@ impl<'a> PopupWin<'a> {
         // confused between panel.rs and mock_panel.rs
         #[allow(unused_mut)]
         let mut welcome_win = Panel::new(
-            self.colors.clone(),
             "Shellcaster".to_string(),
             0,
             self.total_rows - 1,
@@ -212,7 +209,6 @@ impl<'a> PopupWin<'a> {
         // confused between panel.rs and mock_panel.rs
         #[allow(unused_mut)]
         let mut help_win = Panel::new(
-            self.colors.clone(),
             "Help".to_string(),
             0,
             self.total_rows - 1,
@@ -285,7 +281,6 @@ impl<'a> PopupWin<'a> {
         // confused between panel.rs and mock_panel.rs
         #[allow(unused_mut)]
         let mut download_panel = Panel::new(
-            self.colors.clone(),
             "New episodes".to_string(),
             0,
             self.total_rows - 1,
