@@ -56,8 +56,7 @@ pub fn download_list(
 
 /// Downloads a file to a local filepath, returning DownloadMsg variant
 /// indicating success or failure.
-fn download_file(ep_data: EpData, dest: PathBuf, mut max_retries: usize) -> DownloadMsg {
-    let mut data = ep_data.clone();
+fn download_file(mut ep_data: EpData, dest: PathBuf, mut max_retries: usize) -> DownloadMsg {
     let request: Result<ureq::Response, ()> = loop {
         let response = ureq::get(&ep_data.url)
             .timeout_connect(5000)
@@ -74,7 +73,7 @@ fn download_file(ep_data: EpData, dest: PathBuf, mut max_retries: usize) -> Down
     };
 
     if request.is_err() {
-        return DownloadMsg::ResponseError(data);
+        return DownloadMsg::ResponseError(ep_data);
     };
 
     let response = request.unwrap();
@@ -104,14 +103,14 @@ fn download_file(ep_data: EpData, dest: PathBuf, mut max_retries: usize) -> Down
 
     let dst = File::create(&file_path);
     if dst.is_err() {
-        return DownloadMsg::FileCreateError(data);
+        return DownloadMsg::FileCreateError(ep_data);
     };
 
-    data.file_path = Some(file_path);
+    ep_data.file_path = Some(file_path);
 
     let mut reader = response.into_reader();
     return match std::io::copy(&mut reader, &mut dst.unwrap()) {
-        Ok(_) => DownloadMsg::Complete(data),
-        Err(_) => DownloadMsg::FileWriteError(data),
+        Ok(_) => DownloadMsg::Complete(ep_data),
+        Err(_) => DownloadMsg::FileWriteError(ep_data),
     };
 }

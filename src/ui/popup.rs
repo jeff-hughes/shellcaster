@@ -130,20 +130,16 @@ impl<'a> PopupWin<'a> {
         );
 
         let mut row = 0;
-        row = welcome_win.write_wrap_line(row + 1, "Welcome to shellcaster!".to_string());
+        row = welcome_win.write_wrap_line(row + 1, "Welcome to shellcaster!");
 
         row = welcome_win.write_wrap_line(row+2,
-            format!("Your podcast list is currently empty. Press {} to add a new podcast feed, {} to quit, or see all available commands by typing {} to get help.", key_strs[0], key_strs[1], key_strs[2]));
+            &format!("Your podcast list is currently empty. Press {} to add a new podcast feed, {} to quit, or see all available commands by typing {} to get help.", key_strs[0], key_strs[1], key_strs[2]));
 
         row = welcome_win.write_wrap_line(
             row + 2,
-            "More details of how to customize shellcaster can be found on the Github repo readme:"
-                .to_string(),
+            "More details of how to customize shellcaster can be found on the Github repo readme:",
         );
-        let _ = welcome_win.write_wrap_line(
-            row + 1,
-            "https://github.com/jeff-hughes/shellcaster".to_string(),
-        );
+        let _ = welcome_win.write_wrap_line(row + 1, "https://github.com/jeff-hughes/shellcaster");
 
         return welcome_win;
     }
@@ -218,7 +214,7 @@ impl<'a> PopupWin<'a> {
         );
 
         let mut row = 0;
-        row = help_win.write_wrap_line(row + 1, "Available keybindings:".to_string());
+        row = help_win.write_wrap_line(row + 1, "Available keybindings:");
         help_win.change_attr(row, 0, 22, pancurses::A_UNDERLINE, ColorType::Normal);
         row += 1;
 
@@ -261,7 +257,7 @@ impl<'a> PopupWin<'a> {
             row += 1;
         }
 
-        let _ = help_win.write_wrap_line(row + 2, "Press \"q\" to close this window.".to_string());
+        let _ = help_win.write_wrap_line(row + 2, "Press \"q\" to close this window.");
         return help_win;
     }
 

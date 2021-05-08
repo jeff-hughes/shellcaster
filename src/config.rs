@@ -151,7 +151,7 @@ impl Config {
             }
         }
 
-        return config_with_defaults(&config_toml);
+        return config_with_defaults(config_toml);
     }
 }
 
@@ -159,48 +159,45 @@ impl Config {
 /// that specifies user settings where indicated, and defaults for any
 /// settings that were not specified by the user.
 #[allow(clippy::type_complexity)]
-fn config_with_defaults(config_toml: &ConfigFromToml) -> Result<Config> {
+fn config_with_defaults(config_toml: ConfigFromToml) -> Result<Config> {
     // specify all default keybindings for actions
     #[rustfmt::skip]
-    let action_map: Vec<(&Option<Vec<String>>, UserAction, Vec<String>)> = vec![
-        (&config_toml.keybindings.left, UserAction::Left, vec!["Left".to_string(), "h".to_string()]),
-        (&config_toml.keybindings.right, UserAction::Right, vec!["Right".to_string(), "l".to_string()]),
-        (&config_toml.keybindings.up, UserAction::Up, vec!["Up".to_string(), "k".to_string()]),
-        (&config_toml.keybindings.down, UserAction::Down, vec!["Down".to_string(), "j".to_string()]),
-        (&config_toml.keybindings.big_up, UserAction::BigUp, vec!["K".to_string()]),
-        (&config_toml.keybindings.big_down, UserAction::BigDown, vec!["J".to_string()]),
-        (&config_toml.keybindings.page_up, UserAction::PageUp, vec!["PgUp".to_string()]),
-        (&config_toml.keybindings.page_down, UserAction::PageDown, vec!["PgDn".to_string()]),
-        (&config_toml.keybindings.go_top, UserAction::GoTop, vec!["g".to_string()]),
-        (&config_toml.keybindings.go_bot, UserAction::GoBot, vec!["G".to_string()]),
+    let action_map: Vec<(Option<Vec<String>>, UserAction, Vec<String>)> = vec![
+        (config_toml.keybindings.left, UserAction::Left, vec!["Left".to_string(), "h".to_string()]),
+        (config_toml.keybindings.right, UserAction::Right, vec!["Right".to_string(), "l".to_string()]),
+        (config_toml.keybindings.up, UserAction::Up, vec!["Up".to_string(), "k".to_string()]),
+        (config_toml.keybindings.down, UserAction::Down, vec!["Down".to_string(), "j".to_string()]),
+        (config_toml.keybindings.big_up, UserAction::BigUp, vec!["K".to_string()]),
+        (config_toml.keybindings.big_down, UserAction::BigDown, vec!["J".to_string()]),
+        (config_toml.keybindings.page_up, UserAction::PageUp, vec!["PgUp".to_string()]),
+        (config_toml.keybindings.page_down, UserAction::PageDown, vec!["PgDn".to_string()]),
+        (config_toml.keybindings.go_top, UserAction::GoTop, vec!["g".to_string()]),
+        (config_toml.keybindings.go_bot, UserAction::GoBot, vec!["G".to_string()]),
 
-        (&config_toml.keybindings.add_feed, UserAction::AddFeed, vec!["a".to_string()]),
-        (&config_toml.keybindings.sync, UserAction::Sync, vec!["s".to_string()]),
-        (&config_toml.keybindings.sync_all, UserAction::SyncAll, vec!["S".to_string()]),
+        (config_toml.keybindings.add_feed, UserAction::AddFeed, vec!["a".to_string()]),
+        (config_toml.keybindings.sync, UserAction::Sync, vec!["s".to_string()]),
+        (config_toml.keybindings.sync_all, UserAction::SyncAll, vec!["S".to_string()]),
 
-        (&config_toml.keybindings.play, UserAction::Play, vec!["Enter".to_string(), "p".to_string()]),
-        (&config_toml.keybindings.mark_played, UserAction::MarkPlayed, vec!["m".to_string()]),
-        (&config_toml.keybindings.mark_all_played, UserAction::MarkAllPlayed, vec!["M".to_string()]),
+        (config_toml.keybindings.play, UserAction::Play, vec!["Enter".to_string(), "p".to_string()]),
+        (config_toml.keybindings.mark_played, UserAction::MarkPlayed, vec!["m".to_string()]),
+        (config_toml.keybindings.mark_all_played, UserAction::MarkAllPlayed, vec!["M".to_string()]),
 
-        (&config_toml.keybindings.download, UserAction::Download, vec!["d".to_string()]),
-        (&config_toml.keybindings.download_all, UserAction::DownloadAll, vec!["D".to_string()]),
-        (&config_toml.keybindings.delete, UserAction::Delete, vec!["x".to_string()]),
-        (&config_toml.keybindings.delete_all, UserAction::DeleteAll, vec!["X".to_string()]),
-        (&config_toml.keybindings.remove, UserAction::Remove, vec!["r".to_string()]),
-        (&config_toml.keybindings.remove_all, UserAction::RemoveAll, vec!["R".to_string()]),
+        (config_toml.keybindings.download, UserAction::Download, vec!["d".to_string()]),
+        (config_toml.keybindings.download_all, UserAction::DownloadAll, vec!["D".to_string()]),
+        (config_toml.keybindings.delete, UserAction::Delete, vec!["x".to_string()]),
+        (config_toml.keybindings.delete_all, UserAction::DeleteAll, vec!["X".to_string()]),
+        (config_toml.keybindings.remove, UserAction::Remove, vec!["r".to_string()]),
+        (config_toml.keybindings.remove_all, UserAction::RemoveAll, vec!["R".to_string()]),
 
-        (&config_toml.keybindings.help, UserAction::Help, vec!["?".to_string()]),
-        (&config_toml.keybindings.quit, UserAction::Quit, vec!["q".to_string()]),
+        (config_toml.keybindings.help, UserAction::Help, vec!["?".to_string()]),
+        (config_toml.keybindings.quit, UserAction::Quit, vec!["q".to_string()]),
     ];
 
     // for each action, if user preference is set, use that, otherwise,
     // use the default
     let mut keymap = Keybindings::new();
-    for (config, action, defaults) in action_map.iter() {
-        match config {
-            Some(v) => keymap.insert_from_vec(v, *action),
-            None => keymap.insert_from_vec(&defaults, *action),
-        }
+    for (config, action, defaults) in action_map.into_iter() {
+        keymap.insert_from_vec(config.unwrap_or(defaults), action);
     }
 
     // paths are set by user, or they resolve to OS-specific path as

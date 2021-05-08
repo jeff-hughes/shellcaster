@@ -108,7 +108,7 @@ impl<T: Clone + Menuable> Menu<T> {
     /// above the menu.
     fn print_header(&mut self) -> i32 {
         if let Some(header) = &self.header {
-            return self.panel.write_wrap_line(0, header.clone()) + 2;
+            return self.panel.write_wrap_line(0, header) + 2;
         } else {
             return 0;
         }

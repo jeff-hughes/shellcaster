@@ -87,7 +87,7 @@ impl Panel {
             pancurses::ACS_LRCORNER(),
         );
 
-        self.window.mvaddstr(0, 2, self.title.clone());
+        self.window.mvaddstr(0, 2, &self.title);
     }
 
     /// Erases all content on the window, and redraws the border. Does
@@ -126,13 +126,12 @@ impl Panel {
     /// when necessary. `start_y` refers to the row to start at (word
     /// wrapping makes it unknown where text will end). Returns the row
     /// on which the text ended.
-    pub fn write_wrap_line(&self, start_y: i32, string: String) -> i32 {
+    pub fn write_wrap_line(&self, start_y: i32, string: &str) -> i32 {
         let mut row = start_y;
         let max_row = self.get_rows();
-        let wrapper = textwrap::wrap_iter(&string, self.get_cols() as usize);
+        let wrapper = textwrap::wrap_iter(string, self.get_cols() as usize);
         for line in wrapper {
-            self.window
-                .mvaddstr(self.abs_y(row), self.abs_x(0), line.clone());
+            self.window.mvaddstr(self.abs_y(row), self.abs_x(0), line);
             row += 1;
 
             if row >= max_row {
@@ -150,14 +149,14 @@ impl Panel {
         self.window.attron(Attribute::Bold);
         // podcast title
         match details.pod_title {
-            Some(t) => row = self.write_wrap_line(row + 1, t),
-            None => row = self.write_wrap_line(row + 1, "No title".to_string()),
+            Some(t) => row = self.write_wrap_line(row + 1, &t),
+            None => row = self.write_wrap_line(row + 1, "No title"),
         }
 
         // episode title
         match details.ep_title {
-            Some(t) => row = self.write_wrap_line(row + 1, t),
-            None => row = self.write_wrap_line(row + 1, "No title".to_string()),
+            Some(t) => row = self.write_wrap_line(row + 1, &t),
+            None => row = self.write_wrap_line(row + 1, "No title"),
         }
         self.window.attroff(Attribute::Bold);
 
@@ -167,7 +166,7 @@ impl Panel {
         if let Some(date) = details.pubdate {
             let new_row = self.write_wrap_line(
                 row + 1,
-                format!("Published: {}", date.format("%B %-d, %Y").to_string()),
+                &format!("Published: {}", date.format("%B %-d, %Y")),
             );
             self.change_attr(row + 1, 0, 10, pancurses::A_UNDERLINE, ColorType::Normal);
             row = new_row;
@@ -175,7 +174,7 @@ impl Panel {
 
         // duration
         if let Some(dur) = details.duration {
-            let new_row = self.write_wrap_line(row + 1, format!("Duration: {}", dur));
+            let new_row = self.write_wrap_line(row + 1, &format!("Duration: {}", dur));
             self.change_attr(row + 1, 0, 9, pancurses::A_UNDERLINE, ColorType::Normal);
             row = new_row;
         }
@@ -183,9 +182,9 @@ impl Panel {
         // explicit
         if let Some(exp) = details.explicit {
             let new_row = if exp {
-                self.write_wrap_line(row + 1, "Explicit: Yes".to_string())
+                self.write_wrap_line(row + 1, "Explicit: Yes")
             } else {
-                self.write_wrap_line(row + 1, "Explicit: No".to_string())
+                self.write_wrap_line(row + 1, "Explicit: No")
             };
             self.change_attr(row + 1, 0, 9, pancurses::A_UNDERLINE, ColorType::Normal);
             row = new_row;
@@ -197,12 +196,12 @@ impl Panel {
         match details.description {
             Some(desc) => {
                 self.window.attron(Attribute::Bold);
-                row = self.write_wrap_line(row + 1, "Description:".to_string());
+                row = self.write_wrap_line(row + 1, "Description:");
                 self.window.attroff(Attribute::Bold);
-                let _row = self.write_wrap_line(row + 1, desc);
+                let _row = self.write_wrap_line(row + 1, &desc);
             }
             None => {
-                let _row = self.write_wrap_line(row + 1, "No description.".to_string());
+                let _row = self.write_wrap_line(row + 1, "No description.");
             }
         }
     }

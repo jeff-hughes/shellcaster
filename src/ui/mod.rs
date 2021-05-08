@@ -100,7 +100,7 @@ impl<'a> Ui<'a> {
         tx_to_main: mpsc::Sender<Message>,
     ) -> thread::JoinHandle<()> {
         return thread::spawn(move || {
-            let mut ui = Ui::new(&config, &items);
+            let mut ui = Ui::new(&config, items);
             ui.init();
             let mut message_iter = rx_from_main.try_iter();
             // this is the main event loop: on each loop, we update
@@ -145,7 +145,7 @@ impl<'a> Ui<'a> {
     /// Initializes the UI with a list of podcasts and podcast episodes,
     /// creates the pancurses window and draws it to the screen, and
     /// returns a UI object for future manipulation.
-    pub fn new(config: &'a Config, items: &LockVec<Podcast>) -> Ui<'a> {
+    pub fn new(config: &'a Config, items: LockVec<Podcast>) -> Ui<'a> {
         let stdscr = pancurses::initscr();
 
         // set some options
@@ -161,12 +161,6 @@ impl<'a> Ui<'a> {
         let (n_row, n_col) = stdscr.get_max_yx();
         let (pod_col, ep_col, det_col) = Self::calculate_sizes(n_col);
 
-        let podcast_panel = Panel::new("Podcasts".to_string(), 0, n_row - 1, pod_col, 0, 0);
-        let podcast_menu = Menu::new(podcast_panel, None, items.clone());
-
-        let episode_panel =
-            Panel::new("Episodes".to_string(), 1, n_row - 1, ep_col, 0, pod_col - 1);
-
         let first_pod = match items.borrow_order().get(0) {
             Some(first_id) => match items.borrow_map().get(first_id) {
                 Some(pod) => pod.episodes.clone(),
@@ -174,6 +168,12 @@ impl<'a> Ui<'a> {
             },
             None => LockVec::new(Vec::new()),
         };
+
+        let podcast_panel = Panel::new("Podcasts".to_string(), 0, n_row - 1, pod_col, 0, 0);
+        let podcast_menu = Menu::new(podcast_panel, None, items);
+
+        let episode_panel =
+            Panel::new("Episodes".to_string(), 1, n_row - 1, ep_col, 0, pod_col - 1);
 
         let episode_menu = Menu::new(episode_panel, None, first_pod);
 

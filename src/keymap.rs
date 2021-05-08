@@ -70,9 +70,9 @@ impl Keybindings {
     /// Inserts a set of new keybindings into the hash map, each one
     /// corresponding to the same UserAction. Will overwrite the value
     /// of keys that already exist.
-    pub fn insert_from_vec(&mut self, vec: &[String], action: UserAction) {
-        for key in vec.iter() {
-            self.insert(key.to_string(), action);
+    pub fn insert_from_vec(&mut self, vec: Vec<String>, action: UserAction) {
+        for key in vec.into_iter() {
+            self.insert(key, action);
         }
     }
 

@@ -164,7 +164,7 @@ impl Menuable for Episode {
 
             if let Some(pubdate) = self.pubdate {
                 // print pubdate and duration
-                let pd = pubdate.format("%F").to_string();
+                let pd = pubdate.format("%F");
                 let meta_str = format!("({}) {}", pd, meta_dur);
                 let added_len = meta_str.chars().count();
 
@@ -251,11 +251,7 @@ impl Menuable for NewEpisode {
 
     /// Returns the title for the episode, up to length characters.
     fn get_title(&self, length: usize) -> String {
-        let selected = if self.selected {
-            "✓".to_string()
-        } else {
-            " ".to_string()
-        };
+        let selected = if self.selected { "✓" } else { " " };
         let full_string = format!("[{}] {} ({})", selected, self.title, self.pod_title);
         return full_string.substr(0, length);
     }
