@@ -1,4 +1,6 @@
-use super::ColorType;
+use std::rc::Rc;
+
+use super::{ColorType, Colors};
 use chrono::{DateTime, Utc};
 
 /// Struct holding the raw data used for building the details panel.
@@ -15,6 +17,7 @@ pub struct Details {
 pub struct Panel {
     pub window: Vec<(String, pancurses::chtype, ColorType)>,
     pub screen_pos: usize,
+    pub colors: Rc<Colors>,
     pub title: String,
     pub n_row: i32,
     pub n_col: i32,
@@ -24,6 +27,7 @@ impl Panel {
     pub fn new(
         title: String,
         screen_pos: usize,
+        colors: Rc<Colors>,
         n_row: i32,
         n_col: i32,
         _start_y: i32,
@@ -37,6 +41,7 @@ impl Panel {
         return Panel {
             window: panel_win,
             screen_pos: screen_pos,
+            colors: colors,
             title: title,
             n_row: n_row,
             n_col: n_col,

@@ -1,6 +1,7 @@
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use super::{ColorType, COLORS};
+use super::{ColorType, Colors};
 use pancurses::{Input, Window};
 
 /// Holds details of a notification message.
@@ -37,6 +38,7 @@ impl Notification {
 #[derive(Debug)]
 pub struct NotifWin {
     window: Window,
+    colors: Rc<Colors>,
     total_rows: i32,
     total_cols: i32,
     msg_stack: Vec<Notification>,
@@ -46,10 +48,11 @@ pub struct NotifWin {
 
 impl NotifWin {
     /// Creates a new NotifWin.
-    pub fn new(total_rows: i32, total_cols: i32) -> Self {
+    pub fn new(colors: Rc<Colors>, total_rows: i32, total_cols: i32) -> Self {
         let win = pancurses::newwin(1, total_cols, total_rows - 1, 0);
         return Self {
             window: win,
+            colors: colors,
             total_rows: total_rows,
             total_cols: total_cols,
             msg_stack: Vec::new(),
@@ -98,8 +101,9 @@ impl NotifWin {
                 // otherwise, there was a notification before but there
                 // isn't now, so erase
                 self.window.erase();
-                self.window
-                    .bkgdset(pancurses::ColorPair(COLORS.get(ColorType::Normal) as u8));
+                self.window.bkgdset(pancurses::ColorPair(
+                    self.colors.get(ColorType::Normal) as u8
+                ));
                 self.window.refresh();
                 self.current_msg = None;
             }
@@ -192,8 +196,13 @@ impl NotifWin {
         self.window.addstr(&notif.message);
 
         if notif.error {
-            self.window
-                .mvchgat(0, 0, -1, pancurses::A_BOLD, COLORS.get(ColorType::Error));
+            self.window.mvchgat(
+                0,
+                0,
+                -1,
+                pancurses::A_BOLD,
+                self.colors.get(ColorType::Error),
+            );
         }
         self.window.refresh();
     }
@@ -246,8 +255,9 @@ impl NotifWin {
         );
         oldwin.delwin();
 
-        self.window
-            .bkgdset(pancurses::ColorPair(COLORS.get(ColorType::Normal) as u8));
+        self.window.bkgdset(pancurses::ColorPair(
+            self.colors.get(ColorType::Normal) as u8
+        ));
         if let Some(curr) = &self.current_msg {
             self.display_notif(curr);
         }
