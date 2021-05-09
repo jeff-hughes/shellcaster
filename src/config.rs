@@ -4,7 +4,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use crate::keymap::{Keybindings, UserAction};
+use crate::keymap::Keybindings;
 
 // Specifies how long, in milliseconds, to display messages at the
 // bottom of the screen in the UI.
@@ -61,37 +61,37 @@ struct ConfigFromToml {
     download_new_episodes: Option<String>,
     simultaneous_downloads: Option<usize>,
     max_retries: Option<usize>,
-    keybindings: KeybindingsFromToml,
+    keybindings: Option<KeybindingsFromToml>,
 }
 
 /// A temporary struct used to deserialize keybinding data from the TOML
 /// configuration file.
 #[derive(Debug, Deserialize)]
-struct KeybindingsFromToml {
-    left: Option<Vec<String>>,
-    right: Option<Vec<String>>,
-    up: Option<Vec<String>>,
-    down: Option<Vec<String>>,
-    big_up: Option<Vec<String>>,
-    big_down: Option<Vec<String>>,
-    go_top: Option<Vec<String>>,
-    go_bot: Option<Vec<String>>,
-    page_up: Option<Vec<String>>,
-    page_down: Option<Vec<String>>,
-    add_feed: Option<Vec<String>>,
-    sync: Option<Vec<String>>,
-    sync_all: Option<Vec<String>>,
-    play: Option<Vec<String>>,
-    mark_played: Option<Vec<String>>,
-    mark_all_played: Option<Vec<String>>,
-    download: Option<Vec<String>>,
-    download_all: Option<Vec<String>>,
-    delete: Option<Vec<String>>,
-    delete_all: Option<Vec<String>>,
-    remove: Option<Vec<String>>,
-    remove_all: Option<Vec<String>>,
-    help: Option<Vec<String>>,
-    quit: Option<Vec<String>>,
+pub struct KeybindingsFromToml {
+    pub left: Option<Vec<String>>,
+    pub right: Option<Vec<String>>,
+    pub up: Option<Vec<String>>,
+    pub down: Option<Vec<String>>,
+    pub big_up: Option<Vec<String>>,
+    pub big_down: Option<Vec<String>>,
+    pub go_top: Option<Vec<String>>,
+    pub go_bot: Option<Vec<String>>,
+    pub page_up: Option<Vec<String>>,
+    pub page_down: Option<Vec<String>>,
+    pub add_feed: Option<Vec<String>>,
+    pub sync: Option<Vec<String>>,
+    pub sync_all: Option<Vec<String>>,
+    pub play: Option<Vec<String>>,
+    pub mark_played: Option<Vec<String>>,
+    pub mark_all_played: Option<Vec<String>>,
+    pub download: Option<Vec<String>>,
+    pub download_all: Option<Vec<String>>,
+    pub delete: Option<Vec<String>>,
+    pub delete_all: Option<Vec<String>>,
+    pub remove: Option<Vec<String>>,
+    pub remove_all: Option<Vec<String>>,
+    pub help: Option<Vec<String>>,
+    pub quit: Option<Vec<String>>,
 }
 
 
@@ -140,13 +140,14 @@ impl Config {
                     help: None,
                     quit: None,
                 };
+
                 config_toml = ConfigFromToml {
                     download_path: None,
                     play_command: None,
                     download_new_episodes: None,
                     simultaneous_downloads: None,
                     max_retries: None,
-                    keybindings: keybindings,
+                    keybindings: Some(keybindings),
                 };
             }
         }
@@ -160,45 +161,11 @@ impl Config {
 /// settings that were not specified by the user.
 #[allow(clippy::type_complexity)]
 fn config_with_defaults(config_toml: ConfigFromToml) -> Result<Config> {
-    // specify all default keybindings for actions
-    #[rustfmt::skip]
-    let action_map: Vec<(Option<Vec<String>>, UserAction, Vec<String>)> = vec![
-        (config_toml.keybindings.left, UserAction::Left, vec!["Left".to_string(), "h".to_string()]),
-        (config_toml.keybindings.right, UserAction::Right, vec!["Right".to_string(), "l".to_string()]),
-        (config_toml.keybindings.up, UserAction::Up, vec!["Up".to_string(), "k".to_string()]),
-        (config_toml.keybindings.down, UserAction::Down, vec!["Down".to_string(), "j".to_string()]),
-        (config_toml.keybindings.big_up, UserAction::BigUp, vec!["K".to_string()]),
-        (config_toml.keybindings.big_down, UserAction::BigDown, vec!["J".to_string()]),
-        (config_toml.keybindings.page_up, UserAction::PageUp, vec!["PgUp".to_string()]),
-        (config_toml.keybindings.page_down, UserAction::PageDown, vec!["PgDn".to_string()]),
-        (config_toml.keybindings.go_top, UserAction::GoTop, vec!["g".to_string()]),
-        (config_toml.keybindings.go_bot, UserAction::GoBot, vec!["G".to_string()]),
-
-        (config_toml.keybindings.add_feed, UserAction::AddFeed, vec!["a".to_string()]),
-        (config_toml.keybindings.sync, UserAction::Sync, vec!["s".to_string()]),
-        (config_toml.keybindings.sync_all, UserAction::SyncAll, vec!["S".to_string()]),
-
-        (config_toml.keybindings.play, UserAction::Play, vec!["Enter".to_string(), "p".to_string()]),
-        (config_toml.keybindings.mark_played, UserAction::MarkPlayed, vec!["m".to_string()]),
-        (config_toml.keybindings.mark_all_played, UserAction::MarkAllPlayed, vec!["M".to_string()]),
-
-        (config_toml.keybindings.download, UserAction::Download, vec!["d".to_string()]),
-        (config_toml.keybindings.download_all, UserAction::DownloadAll, vec!["D".to_string()]),
-        (config_toml.keybindings.delete, UserAction::Delete, vec!["x".to_string()]),
-        (config_toml.keybindings.delete_all, UserAction::DeleteAll, vec!["X".to_string()]),
-        (config_toml.keybindings.remove, UserAction::Remove, vec!["r".to_string()]),
-        (config_toml.keybindings.remove_all, UserAction::RemoveAll, vec!["R".to_string()]),
-
-        (config_toml.keybindings.help, UserAction::Help, vec!["?".to_string()]),
-        (config_toml.keybindings.quit, UserAction::Quit, vec!["q".to_string()]),
-    ];
-
-    // for each action, if user preference is set, use that, otherwise,
-    // use the default
-    let mut keymap = Keybindings::new();
-    for (config, action, defaults) in action_map.into_iter() {
-        keymap.insert_from_vec(config.unwrap_or(defaults), action);
-    }
+    // specify keybindings
+    let keymap = match config_toml.keybindings {
+        Some(kb) => Keybindings::from_config(kb),
+        None => Keybindings::default(),
+    };
 
     // paths are set by user, or they resolve to OS-specific path as
     // provided by dirs crate
