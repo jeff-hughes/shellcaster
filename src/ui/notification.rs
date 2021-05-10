@@ -61,6 +61,15 @@ impl NotifWin {
         };
     }
 
+    /// Initiates the window -- primarily, sets the background on the
+    /// window.
+    pub fn init(&mut self) {
+        self.window.bkgd(pancurses::ColorPair(
+            self.colors.get(ColorType::Normal) as u8
+        ));
+        self.window.refresh();
+    }
+
     /// Checks if the current notification needs to be changed, and
     /// updates the message window accordingly.
     pub fn check_notifs(&mut self) {

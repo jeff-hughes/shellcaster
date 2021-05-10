@@ -231,7 +231,13 @@ impl<'a> Ui<'a> {
         self.podcast_menu.init();
         self.podcast_menu.activate();
         self.episode_menu.init();
+
+        if let Some(ref panel) = self.details_panel {
+            panel.refresh();
+        }
         self.update_details_panel();
+
+        self.notif_win.init();
 
         // welcome screen if user does not have any podcasts yet
         if self.podcast_menu.items.is_empty() {

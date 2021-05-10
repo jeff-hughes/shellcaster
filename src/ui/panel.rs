@@ -54,14 +54,9 @@ impl Panel {
         };
     }
 
-    /// Initiates the menu -- primarily, draws borders on the window.
-    pub fn init(&self) {
-        self.draw_border();
-    }
-
     /// Redraws borders and refreshes the window to display on terminal.
     pub fn refresh(&self) {
-        self.window.bkgdset(pancurses::ColorPair(
+        self.window.bkgd(pancurses::ColorPair(
             self.colors.get(ColorType::Normal) as u8
         ));
         self.draw_border();

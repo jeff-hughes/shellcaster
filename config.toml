@@ -110,7 +110,7 @@ quit = [ "q" ]
 #    is a value between 0 and 255.
 
 # all regular text
-normal_foreground = "rgb(173, 173, 173)"
+normal_foreground = "white"
 normal_background = "black"
 
 # colors for the currently selected podcast/episode

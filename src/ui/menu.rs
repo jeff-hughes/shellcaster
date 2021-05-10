@@ -52,7 +52,7 @@ impl<T: Clone + Menuable> Menu<T> {
     /// Prints the list of visible items to the pancurses window and
     /// refreshes it.
     pub fn init(&mut self) {
-        self.panel.init();
+        self.panel.refresh();
         self.update_items();
     }
 
