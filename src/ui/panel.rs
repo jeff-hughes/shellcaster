@@ -1,9 +1,7 @@
-use std::rc::Rc;
-
 use chrono::{DateTime, Utc};
 use pancurses::{Attribute, Window};
 
-use super::{ColorType, Colors};
+use super::ColorType;
 
 /// Struct holding the raw data used for building the details panel.
 pub struct Details {
@@ -25,7 +23,6 @@ pub struct Details {
 pub struct Panel {
     window: Window,
     screen_pos: usize,
-    colors: Rc<Colors>,
     title: String,
     n_row: i32,
     n_col: i32,
@@ -36,7 +33,6 @@ impl Panel {
     pub fn new(
         title: String,
         screen_pos: usize,
-        colors: Rc<Colors>,
         n_row: i32,
         n_col: i32,
         start_y: i32,
@@ -47,7 +43,6 @@ impl Panel {
         return Panel {
             window: panel_win,
             screen_pos: screen_pos,
-            colors: colors,
             title: title,
             n_row: n_row,
             n_col: n_col,
@@ -56,9 +51,8 @@ impl Panel {
 
     /// Redraws borders and refreshes the window to display on terminal.
     pub fn refresh(&self) {
-        self.window.bkgd(pancurses::ColorPair(
-            self.colors.get(ColorType::Normal) as u8
-        ));
+        self.window
+            .bkgd(pancurses::ColorPair(ColorType::Normal as u8));
         self.draw_border();
         self.window.refresh();
     }
@@ -95,9 +89,8 @@ impl Panel {
     /// not refresh the screen.
     pub fn erase(&self) {
         self.window.erase();
-        self.window.bkgdset(pancurses::ColorPair(
-            self.colors.get(ColorType::Normal) as u8
-        ));
+        self.window
+            .bkgdset(pancurses::ColorPair(ColorType::Normal as u8));
         self.draw_border();
     }
 
@@ -218,13 +211,8 @@ impl Panel {
         attr: pancurses::chtype,
         color: ColorType,
     ) {
-        self.window.mvchgat(
-            self.abs_y(y),
-            self.abs_x(x),
-            nchars,
-            attr,
-            self.colors.get(color),
-        );
+        self.window
+            .mvchgat(self.abs_y(y), self.abs_x(x), nchars, attr, color as i16);
     }
 
     /// Updates window size

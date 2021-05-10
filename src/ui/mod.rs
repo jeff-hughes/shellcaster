@@ -1,4 +1,3 @@
-use std::rc::Rc;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
@@ -12,7 +11,7 @@ mod menu;
 mod notification;
 mod popup;
 
-use self::colors::{ColorType, Colors};
+use self::colors::ColorType;
 use self::menu::Menu;
 use self::notification::NotifWin;
 use self::panel::{Details, Panel};
@@ -81,7 +80,6 @@ pub struct Ui<'a> {
     n_row: i32,
     n_col: i32,
     keymap: &'a Keybindings,
-    colors: Rc<Colors>,
     podcast_menu: Menu<Podcast>,
     episode_menu: Menu<Episode>,
     active_menu: ActiveMenu,
@@ -158,7 +156,7 @@ impl<'a> Ui<'a> {
                              // key codes
         stdscr.nodelay(true); // getch() will not wait for user input
 
-        let colors = Rc::new(self::colors::set_colors(&config.colors));
+        self::colors::set_colors(&config.colors);
 
         let (n_row, n_col) = stdscr.get_max_yx();
         let (pod_col, ep_col, det_col) = Self::calculate_sizes(n_col);
@@ -171,32 +169,16 @@ impl<'a> Ui<'a> {
             None => LockVec::new(Vec::new()),
         };
 
-        let podcast_panel = Panel::new(
-            "Podcasts".to_string(),
-            0,
-            colors.clone(),
-            n_row - 1,
-            pod_col,
-            0,
-            0,
-        );
+        let podcast_panel = Panel::new("Podcasts".to_string(), 0, n_row - 1, pod_col, 0, 0);
         let podcast_menu = Menu::new(podcast_panel, None, items);
 
-        let episode_panel = Panel::new(
-            "Episodes".to_string(),
-            1,
-            colors.clone(),
-            n_row - 1,
-            ep_col,
-            0,
-            pod_col - 1,
-        );
+        let episode_panel =
+            Panel::new("Episodes".to_string(), 1, n_row - 1, ep_col, 0, pod_col - 1);
 
         let episode_menu = Menu::new(episode_panel, None, first_pod);
 
         let details_panel = if n_col > crate::config::DETAILS_PANEL_LENGTH {
             Some(Self::make_details_panel(
-                colors.clone(),
                 n_row - 1,
                 det_col,
                 0,
@@ -206,15 +188,14 @@ impl<'a> Ui<'a> {
             None
         };
 
-        let notif_win = NotifWin::new(colors.clone(), n_row, n_col);
-        let popup_win = PopupWin::new(colors.clone(), &config.keybindings, n_row, n_col);
+        let notif_win = NotifWin::new(n_row, n_col);
+        let popup_win = PopupWin::new(&config.keybindings, n_row, n_col);
 
         return Ui {
             stdscr: stdscr,
             n_row: n_row,
             n_col: n_col,
             keymap: &config.keybindings,
-            colors: colors,
             podcast_menu: podcast_menu,
             episode_menu: episode_menu,
             active_menu: ActiveMenu::PodcastMenu,
@@ -423,7 +404,6 @@ impl<'a> Ui<'a> {
             }
         } else if det_col > 0 {
             self.details_panel = Some(Self::make_details_panel(
-                self.colors.clone(),
                 n_row - 1,
                 det_col,
                 0,
@@ -821,22 +801,8 @@ impl<'a> Ui<'a> {
     }
 
     /// Create a details panel.
-    pub fn make_details_panel(
-        colors: Rc<Colors>,
-        n_row: i32,
-        n_col: i32,
-        start_y: i32,
-        start_x: i32,
-    ) -> Panel {
-        return Panel::new(
-            "Details".to_string(),
-            2,
-            colors,
-            n_row,
-            n_col,
-            start_y,
-            start_x,
-        );
+    pub fn make_details_panel(n_row: i32, n_col: i32, start_y: i32, start_x: i32) -> Panel {
+        return Panel::new("Details".to_string(), 2, n_row, n_col, start_y, start_x);
     }
 
     /// Updates the details panel with information about the current

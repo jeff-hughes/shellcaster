@@ -382,7 +382,6 @@ impl Menu<NewEpisode> {
 mod tests {
     use super::*;
     use chrono::Utc;
-    use std::rc::Rc;
 
     fn create_menu(n_row: i32, n_col: i32, top_row: i32, selected: i32) -> Menu<Episode> {
         let titles = vec![
@@ -410,17 +409,7 @@ mod tests {
             });
         }
 
-        let panel = Panel::new(
-            "Episodes".to_string(),
-            1,
-            Rc::new(crate::ui::colors::set_colors(
-                &crate::config::AppColors::default(),
-            )),
-            n_row,
-            n_col,
-            0,
-            0,
-        );
+        let panel = Panel::new("Episodes".to_string(), 1, n_row, n_col, 0, 0);
         return Menu {
             panel: panel,
             header: None,

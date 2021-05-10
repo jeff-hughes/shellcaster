@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Result};
-use std::collections::HashMap;
 
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -106,43 +105,20 @@ impl ColorValue {
 
 /// Enum identifying relevant text states that will be associated with
 /// distinct colors.
-#[derive(Eq, PartialEq, Hash, Copy, Clone, Debug)]
+#[derive(Debug, Copy, Clone)]
+#[repr(u8)]
 pub enum ColorType {
-    Normal,
-    Highlighted,
-    HighlightedActive,
-    Error,
+    // Colorpair 0 is reserved in ncurses for white text on black, and
+    // can't be changed, so we just skip it
+    Normal = 1,
+    Highlighted = 2,
+    HighlightedActive = 3,
+    Error = 4,
 }
-
-/// Keeps a hashmap associating ColorTypes with ncurses color pairs.
-#[derive(Debug, Clone)]
-pub struct Colors(HashMap<ColorType, i16>);
-
-impl Colors {
-    pub fn new() -> Self {
-        return Self(HashMap::new());
-    }
-
-    pub fn insert(&mut self, color: ColorType, num: i16) {
-        self.0.insert(color, num);
-    }
-
-    pub fn get(&self, color: ColorType) -> i16 {
-        return *self.0.get(&color).expect("Error retrieving color type.");
-    }
-}
-
 
 /// Sets up hashmap for ColorTypes in app, initiates color palette, and
 /// sets up ncurses color pairs.
-pub fn set_colors(config: &AppColors) -> Colors {
-    // set up a hashmap for easier reference
-    let mut colors = Colors::new();
-    colors.insert(ColorType::Normal, 0);
-    colors.insert(ColorType::Highlighted, 1);
-    colors.insert(ColorType::HighlightedActive, 2);
-    colors.insert(ColorType::Error, 3);
-
+pub fn set_colors(config: &AppColors) {
     // if the user has specified any colors to be "terminal" (i.e., to
     // use their terminal's default foreground and background colors),
     // then we must tell ncurses to allow the use of those colors.
@@ -155,24 +131,18 @@ pub fn set_colors(config: &AppColors) -> Colors {
     // let replace_color_order = vec![ColorValue::Cyan, ColorValue::Magenta, ColorValue::Blue, ColorValue::Green, ColorValue::Yellow, ColorValue::Red, ColorValue::Black, ColorValue::White];
     // }
     let mut replace_counter = 8;
+    replace_counter = set_color_pair(ColorType::Normal as u8, &config.normal, replace_counter);
     replace_counter = set_color_pair(
-        colors.get(ColorType::Normal),
-        &config.normal,
-        replace_counter,
-    );
-    replace_counter = set_color_pair(
-        colors.get(ColorType::HighlightedActive),
+        ColorType::HighlightedActive as u8,
         &config.highlighted_active,
         replace_counter,
     );
     replace_counter = set_color_pair(
-        colors.get(ColorType::Highlighted),
+        ColorType::Highlighted as u8,
         &config.highlighted,
         replace_counter,
     );
-    let _ = set_color_pair(colors.get(ColorType::Error), &config.error, replace_counter);
-
-    return colors;
+    let _ = set_color_pair(ColorType::Error as u8, &config.error, replace_counter);
 }
 
 /// Check for any app colors that are set to "Terminal", which means that
@@ -211,7 +181,7 @@ fn check_for_terminal(app_colors: &AppColors) -> bool {
 /// and background colors, initiates customized colors if necessary, and
 /// adds the pair to ncurses with the key of `pair_index`.
 fn set_color_pair(
-    pair_index: i16,
+    pair_index: u8,
     config: &(ColorValue, ColorValue),
     mut replace_index: i16,
 ) -> i16 {
@@ -241,7 +211,7 @@ fn set_color_pair(
         replace_index += 1;
     }
 
-    pancurses::init_pair(pair_index, c1.unwrap(), c2.unwrap());
+    pancurses::init_pair(pair_index as i16, c1.unwrap(), c2.unwrap());
     return replace_index;
 }
 
