@@ -108,6 +108,9 @@ quit = [ "q" ]
 #    RGB values.
 # 3. Using an RGB value in the format "rgb(255, 0, 0)" where each number
 #    is a value between 0 and 255.
+# Note that, as might be expected, the ability to set colors depends on
+# the capabilities of your terminal. Config options set below are ignored
+# on terminals without the ability to add/change colors.
 
 # all regular text
 normal_foreground = "white"
