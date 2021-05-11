@@ -124,7 +124,7 @@ impl Panel {
     pub fn write_wrap_line(&self, start_y: i32, string: &str) -> i32 {
         let mut row = start_y;
         let max_row = self.get_rows();
-        let wrapper = textwrap::wrap_iter(string, self.get_cols() as usize);
+        let wrapper = textwrap::wrap(string, self.get_cols() as usize);
         for line in wrapper {
             self.window.mvaddstr(self.abs_y(row), self.abs_x(0), line);
             row += 1;
