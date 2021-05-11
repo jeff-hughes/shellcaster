@@ -197,6 +197,10 @@ The sample file above provides comments that should walk you through all the ava
 
 **Note:** Actions can be mapped to more than one key (e.g., "Enter" and "p" both play an episode), but a single key may not do more than one action (e.g., you can't set "d" to both download and delete episodes).
 
+#### Customizable colors
+
+You can set the colors in the app with either built-in terminal colors or (provided your terminal supports it) customizable colors as well. See the "colors" section in the [config.toml](https://github.com/jeff-hughes/shellcaster/blob/master/config.toml) for details about how to specify these colors!
+
 ## Syncing without the UI
 
 Some users may wish to sync their podcasts automatically on a regular basis, e.g., every morning. The `shellcaster sync` subcommand can be used to do this without opening up the UI, and does a full sync of all podcasts in the database. This could be used to set up a cron job or systemd timer, for example. Please refer to the relevant documentation for these systems for setting it up on the schedule of your choice.
