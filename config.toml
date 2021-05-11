@@ -69,6 +69,12 @@ left = [ "Left", "h" ]
 right = [ "Right", "l" ]
 up = [ "Up", "k" ]
 down = [ "Down", "j" ]
+big_up = [ "K" ]
+big_down = [ "J" ]
+page_up = [ "PgUp" ]
+page_down = [ "PgDn" ]
+go_top = [ "g" ]
+go_bot = [ "G" ]
 
 add_feed = [ "a" ]
 sync = [ "s" ]
@@ -87,3 +93,38 @@ remove_all = [ "R" ]
 
 help = [ "?" ]
 quit = [ "q" ]
+
+
+[colors]
+
+# Colors can be identified in three ways:
+# 1. Using color names defined by your terminal:
+#    - black, blue, cyan, green, magenta, red, white, or yellow
+#    - The special color name "terminal" can also be used to specify
+#      your terminal's default foreground or background color; this is
+#      particularly useful if your terminal background is transparent --
+#      use "terminal" for the background colors below.
+# 2. Using a hex code in the format "#ff0000" or "#FF0000" to specify
+#    RGB values.
+# 3. Using an RGB value in the format "rgb(255, 0, 0)" where each number
+#    is a value between 0 and 255.
+# Note that, as might be expected, the ability to set colors depends on
+# the capabilities of your terminal. Config options set below are ignored
+# on terminals without the ability to add/change colors.
+
+# all regular text
+normal_foreground = "white"
+normal_background = "black"
+
+# colors for the currently selected podcast/episode
+highlighted_active_foreground = "rgb(85, 85, 85)"
+highlighted_active_background = "rgb(209, 164, 0)"
+
+# colors for the selected podcast, when the cursor is on the episode
+# menu; podcast is selected, but not currently "active"
+highlighted_foreground = "rgb(85, 85, 85)"
+highlighted_background = "rgb(173, 173, 173)"
+
+# text for error messages
+error_foreground = "red"
+error_background = "black"

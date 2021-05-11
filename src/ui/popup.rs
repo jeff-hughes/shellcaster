@@ -1,8 +1,9 @@
 use pancurses::Input;
 use std::cmp::min;
 
-use super::{ColorType, Colors};
+use super::ColorType;
 use super::{Menu, Panel, UiMsg};
+use crate::config::BIG_SCROLL_AMOUNT;
 use crate::keymap::{Keybindings, UserAction};
 use crate::types::*;
 
@@ -38,7 +39,6 @@ impl ActivePopup {
 pub struct PopupWin<'a> {
     popup: ActivePopup,
     new_episodes: Vec<NewEpisode>,
-    colors: Colors,
     keymap: &'a Keybindings,
     total_rows: i32,
     total_cols: i32,
@@ -49,11 +49,10 @@ pub struct PopupWin<'a> {
 
 impl<'a> PopupWin<'a> {
     /// Set up struct for handling popup windows.
-    pub fn new(colors: Colors, keymap: &'a Keybindings, total_rows: i32, total_cols: i32) -> Self {
+    pub fn new(keymap: &'a Keybindings, total_rows: i32, total_cols: i32) -> Self {
         return Self {
             popup: ActivePopup::None,
             new_episodes: Vec::new(),
-            colors: colors,
             keymap: keymap,
             total_rows: total_rows,
             total_cols: total_cols,
@@ -122,7 +121,6 @@ impl<'a> PopupWin<'a> {
         // confused between panel.rs and mock_panel.rs
         #[allow(unused_mut)]
         let mut welcome_win = Panel::new(
-            self.colors.clone(),
             "Shellcaster".to_string(),
             0,
             self.total_rows - 1,
@@ -132,20 +130,16 @@ impl<'a> PopupWin<'a> {
         );
 
         let mut row = 0;
-        row = welcome_win.write_wrap_line(row + 1, "Welcome to shellcaster!".to_string());
+        row = welcome_win.write_wrap_line(row + 1, "Welcome to shellcaster!");
 
         row = welcome_win.write_wrap_line(row+2,
-            format!("Your podcast list is currently empty. Press {} to add a new podcast feed, {} to quit, or see all available commands by typing {} to get help.", key_strs[0], key_strs[1], key_strs[2]));
+            &format!("Your podcast list is currently empty. Press {} to add a new podcast feed, {} to quit, or see all available commands by typing {} to get help.", key_strs[0], key_strs[1], key_strs[2]));
 
         row = welcome_win.write_wrap_line(
             row + 2,
-            "More details of how to customize shellcaster can be found on the Github repo readme:"
-                .to_string(),
+            "More details of how to customize shellcaster can be found on the Github repo readme:",
         );
-        let _ = welcome_win.write_wrap_line(
-            row + 1,
-            "https://github.com/jeff-hughes/shellcaster".to_string(),
-        );
+        let _ = welcome_win.write_wrap_line(row + 1, "https://github.com/jeff-hughes/shellcaster");
 
         return welcome_win;
     }
@@ -158,11 +152,19 @@ impl<'a> PopupWin<'a> {
 
     /// Create a new Panel holding a help window.
     pub fn make_help_win(&self) -> Panel {
+        let big_scroll_up = format!("Up 1/{} page:", BIG_SCROLL_AMOUNT);
+        let big_scroll_dn = format!("Down 1/{} page:", BIG_SCROLL_AMOUNT);
         let actions = vec![
             (Some(UserAction::Left), "Left:"),
             (Some(UserAction::Right), "Right:"),
             (Some(UserAction::Up), "Up:"),
             (Some(UserAction::Down), "Down:"),
+            (Some(UserAction::BigUp), &big_scroll_up),
+            (Some(UserAction::BigDown), &big_scroll_dn),
+            (Some(UserAction::PageUp), "Page up:"),
+            (Some(UserAction::PageDown), "Page down:"),
+            (Some(UserAction::GoTop), "Go to top:"),
+            (Some(UserAction::GoBot), "Go to bottom:"),
             // (None, ""),
             (Some(UserAction::AddFeed), "Add feed:"),
             (Some(UserAction::Sync), "Sync:"),
@@ -203,7 +205,6 @@ impl<'a> PopupWin<'a> {
         // confused between panel.rs and mock_panel.rs
         #[allow(unused_mut)]
         let mut help_win = Panel::new(
-            self.colors.clone(),
             "Help".to_string(),
             0,
             self.total_rows - 1,
@@ -213,14 +214,18 @@ impl<'a> PopupWin<'a> {
         );
 
         let mut row = 0;
-        row = help_win.write_wrap_line(row + 1, "Available keybindings:".to_string());
+        row = help_win.write_wrap_line(row + 1, "Available keybindings:");
         help_win.change_attr(row, 0, 22, pancurses::A_UNDERLINE, ColorType::Normal);
         row += 1;
 
         // check how long our strings are, and map to two columns
         // if possible; `col_spacing` is the space to leave in between
         // the two columns
-        let longest_line = key_strs.iter().map(|x| x.chars().count()).max().unwrap();
+        let longest_line = key_strs
+            .iter()
+            .map(|x| x.chars().count())
+            .max()
+            .expect("Could not parse keybindings.");
         let col_spacing = 5;
         let n_cols = if help_win.get_cols() > (longest_line * 2 + col_spacing) as i32 {
             2
@@ -252,7 +257,7 @@ impl<'a> PopupWin<'a> {
             row += 1;
         }
 
-        let _ = help_win.write_wrap_line(row + 2, "Press \"q\" to close this window.".to_string());
+        let _ = help_win.write_wrap_line(row + 2, "Press \"q\" to close this window.");
         return help_win;
     }
 
@@ -272,7 +277,6 @@ impl<'a> PopupWin<'a> {
         // confused between panel.rs and mock_panel.rs
         #[allow(unused_mut)]
         let mut download_panel = Panel::new(
-            self.colors.clone(),
             "New episodes".to_string(),
             0,
             self.total_rows - 1,

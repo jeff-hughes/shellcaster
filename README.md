@@ -177,6 +177,10 @@ The sample file above provides comments that should walk you through all the ava
 | ------- | -------------- |
 | ?       | Open help window |
 | Arrow keys / h,j,k,l | Navigate menus |
+| Shift+K | Up 1/4 page |
+| Shift+J | Down 1/4 page |
+| PgUp    | Page up |
+| PgDn    | Page down |
 | a       | Add new feed |
 | q       | Quit program |
 | s       | Synchronize selected feed |
@@ -192,6 +196,10 @@ The sample file above provides comments that should walk you through all the ava
 | Shift+R | Remove all feeds/episodes from list |
 
 **Note:** Actions can be mapped to more than one key (e.g., "Enter" and "p" both play an episode), but a single key may not do more than one action (e.g., you can't set "d" to both download and delete episodes).
+
+#### Customizable colors
+
+You can set the colors in the app with either built-in terminal colors or (provided your terminal supports it) customizable colors as well. See the "colors" section in the [config.toml](https://github.com/jeff-hughes/shellcaster/blob/master/config.toml) for details about how to specify these colors!
 
 ## Syncing without the UI
 

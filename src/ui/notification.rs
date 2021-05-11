@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use super::colors::{ColorType, Colors};
+use super::ColorType;
 use pancurses::{Input, Window};
 
 /// Holds details of a notification message.
@@ -37,7 +37,6 @@ impl Notification {
 #[derive(Debug)]
 pub struct NotifWin {
     window: Window,
-    colors: Colors,
     total_rows: i32,
     total_cols: i32,
     msg_stack: Vec<Notification>,
@@ -47,17 +46,24 @@ pub struct NotifWin {
 
 impl NotifWin {
     /// Creates a new NotifWin.
-    pub fn new(colors: Colors, total_rows: i32, total_cols: i32) -> Self {
+    pub fn new(total_rows: i32, total_cols: i32) -> Self {
         let win = pancurses::newwin(1, total_cols, total_rows - 1, 0);
         return Self {
             window: win,
-            colors: colors,
             total_rows: total_rows,
             total_cols: total_cols,
             msg_stack: Vec::new(),
             persistent_msg: None,
             current_msg: None,
         };
+    }
+
+    /// Initiates the window -- primarily, sets the background on the
+    /// window.
+    pub fn init(&mut self) {
+        self.window
+            .bkgd(pancurses::ColorPair(ColorType::Normal as u8));
+        self.window.refresh();
     }
 
     /// Checks if the current notification needs to be changed, and
@@ -67,39 +73,41 @@ impl NotifWin {
             // compare expiry times of all notifications to current time,
             // remove expired ones
             let now = Instant::now();
-            self.msg_stack.retain(|x| now < x.expiry.unwrap());
+            self.msg_stack.retain(|x| match x.expiry {
+                Some(exp) => now < exp,
+                None => true,
+            });
 
             if !self.msg_stack.is_empty() {
                 // check if last item changed, and update screen if it has
-                let last_item = self.msg_stack[self.msg_stack.len() - 1].clone();
+                let last_item = &self.msg_stack[self.msg_stack.len() - 1];
                 match &self.current_msg {
                     Some(curr) => {
-                        if &last_item != curr {
-                            self.display_notif(last_item.clone());
+                        if last_item != curr {
+                            self.display_notif(last_item);
                         }
                     }
-                    None => self.display_notif(last_item.clone()),
+                    None => self.display_notif(last_item),
                 };
-                self.current_msg = Some(last_item);
+                self.current_msg = Some(last_item.clone());
             } else if let Some(msg) = &self.persistent_msg {
                 // if no other timed notifications exist, display a
                 // persistent notification if there is one
                 match &self.current_msg {
                     Some(curr) => {
                         if msg != curr {
-                            self.display_notif(msg.clone());
+                            self.display_notif(msg);
                         }
                     }
-                    None => self.display_notif(msg.clone()),
+                    None => self.display_notif(msg),
                 };
                 self.current_msg = Some(msg.clone());
             } else {
                 // otherwise, there was a notification before but there
                 // isn't now, so erase
                 self.window.erase();
-                self.window.bkgdset(pancurses::ColorPair(
-                    self.colors.get(ColorType::Normal) as u8
-                ));
+                self.window
+                    .bkgdset(pancurses::ColorPair(ColorType::Normal as u8));
                 self.window.refresh();
                 self.current_msg = None;
             }
@@ -185,20 +193,15 @@ impl NotifWin {
     }
 
     /// Prints a notification to the window.
-    fn display_notif(&self, notif: Notification) {
+    fn display_notif(&self, notif: &Notification) {
         self.window.erase();
         self.window.mv(self.total_rows - 1, 0);
         self.window.attrset(pancurses::A_NORMAL);
-        self.window.addstr(notif.message);
+        self.window.addstr(&notif.message);
 
         if notif.error {
-            self.window.mvchgat(
-                0,
-                0,
-                -1,
-                pancurses::A_BOLD,
-                self.colors.get(ColorType::Error),
-            );
+            self.window
+                .mvchgat(0, 0, -1, pancurses::A_BOLD, ColorType::Error as i16);
         }
         self.window.refresh();
     }
@@ -220,7 +223,7 @@ impl NotifWin {
         let notif = Notification::new(message, error, None);
         self.persistent_msg = Some(notif.clone());
         if self.msg_stack.is_empty() {
-            self.display_notif(notif.clone());
+            self.display_notif(&notif);
             self.current_msg = Some(notif);
         }
     }
@@ -251,11 +254,10 @@ impl NotifWin {
         );
         oldwin.delwin();
 
-        self.window.bkgdset(pancurses::ColorPair(
-            self.colors.get(ColorType::Normal) as u8
-        ));
+        self.window
+            .bkgdset(pancurses::ColorPair(ColorType::Normal as u8));
         if let Some(curr) = &self.current_msg {
-            self.display_notif(curr.clone());
+            self.display_notif(curr);
         }
         self.window.refresh();
     }

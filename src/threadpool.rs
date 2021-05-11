@@ -36,7 +36,9 @@ impl Threadpool {
     pub fn execute<F>(&self, func: F)
     where F: FnOnce() + Send + 'static {
         let job = Box::new(func);
-        self.sender.send(JobMessage::NewJob(job)).unwrap();
+        self.sender
+            .send(JobMessage::NewJob(job))
+            .expect("Thread messaging error");
     }
 }
 
@@ -45,13 +47,15 @@ impl Drop for Threadpool {
     /// all workers but allows them to complete current jobs.
     fn drop(&mut self) {
         for _ in &self.workers {
-            self.sender.send(JobMessage::Terminate).unwrap();
+            self.sender
+                .send(JobMessage::Terminate)
+                .expect("Thread messaging error");
         }
 
         for worker in &mut self.workers {
             if let Some(thread) = worker.thread.take() {
                 // joins to ensure threads finish job before stopping
-                thread.join().unwrap();
+                thread.join().expect("Error dropping threads");
             }
         }
     }
@@ -76,7 +80,11 @@ impl Worker {
     /// Threadpool.
     fn new(receiver: Arc<Mutex<mpsc::Receiver<JobMessage>>>) -> Worker {
         let thread = thread::spawn(move || loop {
-            let message = receiver.lock().unwrap().recv().unwrap();
+            let message = receiver
+                .lock()
+                .expect("Threadpool error")
+                .recv()
+                .expect("Thread messaging error");
 
             match message {
                 JobMessage::NewJob(job) => job(),

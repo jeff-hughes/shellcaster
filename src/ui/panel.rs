@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use pancurses::{Attribute, Window};
 
-use super::{ColorType, Colors};
+use super::ColorType;
 
 /// Struct holding the raw data used for building the details panel.
 pub struct Details {
@@ -23,7 +23,6 @@ pub struct Details {
 pub struct Panel {
     window: Window,
     screen_pos: usize,
-    colors: Colors,
     title: String,
     n_row: i32,
     n_col: i32,
@@ -32,37 +31,28 @@ pub struct Panel {
 impl Panel {
     /// Creates a new panel.
     pub fn new(
-        colors: Colors,
         title: String,
         screen_pos: usize,
         n_row: i32,
         n_col: i32,
         start_y: i32,
         start_x: i32,
-    ) -> Self
-    {
+    ) -> Self {
         let panel_win = pancurses::newwin(n_row, n_col, start_y, start_x);
 
         return Panel {
             window: panel_win,
             screen_pos: screen_pos,
-            colors: colors,
             title: title,
             n_row: n_row,
             n_col: n_col,
         };
     }
 
-    /// Initiates the menu -- primarily, draws borders on the window.
-    pub fn init(&self) {
-        self.draw_border();
-    }
-
     /// Redraws borders and refreshes the window to display on terminal.
     pub fn refresh(&self) {
-        self.window.bkgdset(pancurses::ColorPair(
-            self.colors.get(ColorType::Normal) as u8
-        ));
+        self.window
+            .bkgd(pancurses::ColorPair(ColorType::Normal as u8));
         self.draw_border();
         self.window.refresh();
     }
@@ -92,16 +82,15 @@ impl Panel {
             pancurses::ACS_LRCORNER(),
         );
 
-        self.window.mvaddstr(0, 2, self.title.clone());
+        self.window.mvaddstr(0, 2, &self.title);
     }
 
     /// Erases all content on the window, and redraws the border. Does
     /// not refresh the screen.
     pub fn erase(&self) {
         self.window.erase();
-        self.window.bkgdset(pancurses::ColorPair(
-            self.colors.get(ColorType::Normal) as u8
-        ));
+        self.window
+            .bkgdset(pancurses::ColorPair(ColorType::Normal as u8));
         self.draw_border();
     }
 
@@ -132,13 +121,12 @@ impl Panel {
     /// when necessary. `start_y` refers to the row to start at (word
     /// wrapping makes it unknown where text will end). Returns the row
     /// on which the text ended.
-    pub fn write_wrap_line(&self, start_y: i32, string: String) -> i32 {
+    pub fn write_wrap_line(&self, start_y: i32, string: &str) -> i32 {
         let mut row = start_y;
         let max_row = self.get_rows();
-        let wrapper = textwrap::wrap_iter(&string, self.get_cols() as usize);
+        let wrapper = textwrap::wrap(string, self.get_cols() as usize);
         for line in wrapper {
-            self.window
-                .mvaddstr(self.abs_y(row), self.abs_x(0), line.clone());
+            self.window.mvaddstr(self.abs_y(row), self.abs_x(0), line);
             row += 1;
 
             if row >= max_row {
@@ -156,14 +144,14 @@ impl Panel {
         self.window.attron(Attribute::Bold);
         // podcast title
         match details.pod_title {
-            Some(t) => row = self.write_wrap_line(row + 1, t),
-            None => row = self.write_wrap_line(row + 1, "No title".to_string()),
+            Some(t) => row = self.write_wrap_line(row + 1, &t),
+            None => row = self.write_wrap_line(row + 1, "No title"),
         }
 
         // episode title
         match details.ep_title {
-            Some(t) => row = self.write_wrap_line(row + 1, t),
-            None => row = self.write_wrap_line(row + 1, "No title".to_string()),
+            Some(t) => row = self.write_wrap_line(row + 1, &t),
+            None => row = self.write_wrap_line(row + 1, "No title"),
         }
         self.window.attroff(Attribute::Bold);
 
@@ -173,7 +161,7 @@ impl Panel {
         if let Some(date) = details.pubdate {
             let new_row = self.write_wrap_line(
                 row + 1,
-                format!("Published: {}", date.format("%B %-d, %Y").to_string()),
+                &format!("Published: {}", date.format("%B %-d, %Y")),
             );
             self.change_attr(row + 1, 0, 10, pancurses::A_UNDERLINE, ColorType::Normal);
             row = new_row;
@@ -181,7 +169,7 @@ impl Panel {
 
         // duration
         if let Some(dur) = details.duration {
-            let new_row = self.write_wrap_line(row + 1, format!("Duration: {}", dur));
+            let new_row = self.write_wrap_line(row + 1, &format!("Duration: {}", dur));
             self.change_attr(row + 1, 0, 9, pancurses::A_UNDERLINE, ColorType::Normal);
             row = new_row;
         }
@@ -189,9 +177,9 @@ impl Panel {
         // explicit
         if let Some(exp) = details.explicit {
             let new_row = if exp {
-                self.write_wrap_line(row + 1, "Explicit: Yes".to_string())
+                self.write_wrap_line(row + 1, "Explicit: Yes")
             } else {
-                self.write_wrap_line(row + 1, "Explicit: No".to_string())
+                self.write_wrap_line(row + 1, "Explicit: No")
             };
             self.change_attr(row + 1, 0, 9, pancurses::A_UNDERLINE, ColorType::Normal);
             row = new_row;
@@ -203,12 +191,12 @@ impl Panel {
         match details.description {
             Some(desc) => {
                 self.window.attron(Attribute::Bold);
-                row = self.write_wrap_line(row + 1, "Description:".to_string());
+                row = self.write_wrap_line(row + 1, "Description:");
                 self.window.attroff(Attribute::Bold);
-                let _row = self.write_wrap_line(row + 1, desc);
+                let _row = self.write_wrap_line(row + 1, &desc);
             }
             None => {
-                let _row = self.write_wrap_line(row + 1, "No description.".to_string());
+                let _row = self.write_wrap_line(row + 1, "No description.");
             }
         }
     }
@@ -222,15 +210,9 @@ impl Panel {
         nchars: i32,
         attr: pancurses::chtype,
         color: ColorType,
-    )
-    {
-        self.window.mvchgat(
-            self.abs_y(y),
-            self.abs_x(x),
-            nchars,
-            attr,
-            self.colors.get(color),
-        );
+    ) {
+        self.window
+            .mvchgat(self.abs_y(y), self.abs_x(x), nchars, attr, color as i16);
     }
 
     /// Updates window size

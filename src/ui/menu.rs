@@ -1,3 +1,4 @@
+use std::cmp::max;
 use std::cmp::min;
 use std::collections::hash_map::Entry;
 
@@ -51,7 +52,7 @@ impl<T: Clone + Menuable> Menu<T> {
     /// Prints the list of visible items to the pancurses window and
     /// refreshes it.
     pub fn init(&mut self) {
-        self.panel.init();
+        self.panel.refresh();
         self.update_items();
     }
 
@@ -76,7 +77,7 @@ impl<T: Clone + Menuable> Menu<T> {
             // for visible rows, print strings from list
             for i in self.start_row..self.panel.get_rows() {
                 if let Some(elem_id) = order.get(self.get_menu_idx(i)) {
-                    let elem = map.get(&elem_id).unwrap();
+                    let elem = map.get(&elem_id).expect("Could not retrieve menu item.");
                     self.panel
                         .write_line(i, elem.get_title(self.panel.get_cols() as usize));
 
@@ -107,7 +108,7 @@ impl<T: Clone + Menuable> Menu<T> {
     /// above the menu.
     fn print_header(&mut self) -> i32 {
         if let Some(header) = &self.header {
-            return self.panel.write_wrap_line(0, header.clone()) + 2;
+            return self.panel.write_wrap_line(0, header) + 2;
         } else {
             return 0;
         }
@@ -121,8 +122,9 @@ impl<T: Clone + Menuable> Menu<T> {
     /// represent the new visible list.
     pub fn scroll(&mut self, lines: i32) {
         let mut old_selected;
-        let old_played;
-        let new_played;
+        let checked_lines;
+        let apply_color_played;
+        let get_titles;
 
         let list_len = self.items.len();
         if list_len == 0 {
@@ -130,11 +132,18 @@ impl<T: Clone + Menuable> Menu<T> {
         }
 
         let n_row = self.panel.get_rows();
+        let max_lines = list_len as i32 + self.start_row;
+        let check_max = |lines| min(lines, max_lines);
 
-        // TODO: currently only handles scroll value of 1; need to extend
-        // to be able to scroll multiple lines at a time
+        // check the bounds of lines and adjust accordingly
+        if lines.checked_add(self.top_row + n_row).is_some() {
+            checked_lines = lines;
+        } else {
+            checked_lines = lines - self.top_row - n_row;
+        }
+
         old_selected = self.selected;
-        self.selected += lines;
+        self.selected += checked_lines;
 
         // don't allow scrolling past last item in list (if shorter
         // than self.panel.get_rows())
@@ -143,50 +152,61 @@ impl<T: Clone + Menuable> Menu<T> {
             self.selected = abs_bottom;
         }
 
+        // given a selection, apply correct play status and highlight
+        apply_color_played = |menu: &mut Menu<T>, selected, color: ColorType| {
+            let played = menu
+                .items
+                .map_single_by_index(menu.get_menu_idx(selected), |el| el.is_played())
+                .unwrap_or(false);
+            menu.set_attrs(selected, played, color);
+        };
+
+        // return a vec with sorted titles in range start, end (exclusive)
+        get_titles = |menu: &mut Menu<T>, start, end| {
+            menu.items.map_by_range(start, end, |el| {
+                Some(el.get_title(menu.panel.get_cols() as usize))
+            })
+        };
+
         // scroll list if necessary:
         // scroll down
-        if self.selected > (n_row - 1) {
-            self.selected = n_row - 1;
-            if let Some(title) = self
-                .items
-                .map_single_by_index((self.top_row + n_row) as usize, |el| {
-                    el.get_title(self.panel.get_cols() as usize)
-                })
-            {
+        if (self.selected) > (n_row - 1) {
+            // for scrolls that don't start at the bottom
+            apply_color_played(self, old_selected, ColorType::Normal);
+            let delta = n_row - old_selected - 1;
+
+            let titles = get_titles(
+                self,
+                (self.top_row + n_row) as usize,
+                (check_max(checked_lines + self.top_row + n_row - delta)) as usize,
+            );
+            for title in titles.into_iter() {
                 self.top_row += 1;
                 self.panel.delete_line(self.start_row);
                 old_selected -= 1;
-
                 self.panel.delete_line(n_row - 1);
                 self.panel.write_line(n_row - 1, title);
+                apply_color_played(self, n_row - 1, ColorType::Normal);
             }
+            self.selected = n_row - 1;
 
         // scroll up
         } else if self.selected < self.start_row {
-            self.selected = self.start_row;
-            if let Some(title) = self
-                .items
-                .map_single_by_index((self.top_row - 1) as usize, |el| {
-                    el.get_title(self.panel.get_cols() as usize)
-                })
-            {
+            let titles = get_titles(
+                self,
+                max(0, self.top_row + self.selected) as usize,
+                (self.top_row) as usize,
+            );
+            for title in titles.into_iter().rev() {
                 self.top_row -= 1;
                 self.panel.insert_line(self.start_row, title);
+                apply_color_played(self, 1, ColorType::Normal);
                 old_selected += 1;
             }
+            self.selected = self.start_row;
         }
-
-        old_played = self
-            .items
-            .map_single_by_index(self.get_menu_idx(old_selected), |el| el.is_played())
-            .unwrap();
-        new_played = self
-            .items
-            .map_single_by_index(self.get_menu_idx(self.selected), |el| el.is_played())
-            .unwrap();
-
-        self.set_attrs(old_selected, old_played, ColorType::Normal);
-        self.set_attrs(self.selected, new_played, ColorType::HighlightedActive);
+        apply_color_played(self, old_selected, ColorType::Normal);
+        apply_color_played(self, self.selected, ColorType::HighlightedActive);
         self.panel.refresh();
     }
 
@@ -264,12 +284,13 @@ impl Menu<Podcast> {
     /// currently selected podcast.
     pub fn get_episodes(&self) -> LockVec<Episode> {
         let index = self.get_menu_idx(self.selected);
-        let pod_id = self.items.borrow_order().get(index).copied().unwrap();
-        return self
-            .items
-            .borrow_map()
-            .get(&pod_id)
-            .unwrap()
+        let (borrowed_map, borrowed_order) = self.items.borrow();
+        let pod_id = borrowed_order
+            .get(index)
+            .expect("Could not retrieve podcast.");
+        return borrowed_map
+            .get(pod_id)
+            .expect("Could not retrieve podcast info.")
             .episodes
             .clone();
     }
@@ -388,15 +409,7 @@ mod tests {
             });
         }
 
-        let panel = Panel::new(
-            crate::ui::colors::set_colors(),
-            "Episodes".to_string(),
-            1,
-            n_row,
-            n_col,
-            0,
-            0,
-        );
+        let panel = Panel::new("Episodes".to_string(), 1, n_row, n_col, 0, 0);
         return Menu {
             panel: panel,
             header: None,

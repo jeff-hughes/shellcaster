@@ -1,9 +1,11 @@
+use anyhow::{anyhow, Context, Result};
 use serde::Deserialize;
 use std::fs::File;
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use crate::keymap::{Keybindings, UserAction};
+use crate::keymap::Keybindings;
+use crate::ui::colors::ColorValue;
 
 // Specifies how long, in milliseconds, to display messages at the
 // bottom of the screen in the UI.
@@ -25,6 +27,10 @@ pub const EPISODE_PUBDATE_LENGTH: usize = 60;
 // display the details panel
 pub const DETAILS_PANEL_LENGTH: i32 = 135;
 
+// How many lines will be scrolled by the big scroll,
+// in relation to the rows eg: 4 = 1/4 of the screen
+pub const BIG_SCROLL_AMOUNT: i32 = 4;
+
 
 /// Identifies the user's selection for what to do with new episodes
 /// when syncing.
@@ -45,6 +51,7 @@ pub struct Config {
     pub simultaneous_downloads: usize,
     pub max_retries: usize,
     pub keybindings: Keybindings,
+    pub colors: AppColors,
 }
 
 /// A temporary struct used to deserialize data from the TOML configuration
@@ -56,31 +63,116 @@ struct ConfigFromToml {
     download_new_episodes: Option<String>,
     simultaneous_downloads: Option<usize>,
     max_retries: Option<usize>,
-    keybindings: KeybindingsFromToml,
+    keybindings: Option<KeybindingsFromToml>,
+    colors: Option<AppColorsFromToml>,
 }
 
 /// A temporary struct used to deserialize keybinding data from the TOML
 /// configuration file.
 #[derive(Debug, Deserialize)]
-struct KeybindingsFromToml {
-    left: Option<Vec<String>>,
-    right: Option<Vec<String>>,
-    up: Option<Vec<String>>,
-    down: Option<Vec<String>>,
-    add_feed: Option<Vec<String>>,
-    sync: Option<Vec<String>>,
-    sync_all: Option<Vec<String>>,
-    play: Option<Vec<String>>,
-    mark_played: Option<Vec<String>>,
-    mark_all_played: Option<Vec<String>>,
-    download: Option<Vec<String>>,
-    download_all: Option<Vec<String>>,
-    delete: Option<Vec<String>>,
-    delete_all: Option<Vec<String>>,
-    remove: Option<Vec<String>>,
-    remove_all: Option<Vec<String>>,
-    help: Option<Vec<String>>,
-    quit: Option<Vec<String>>,
+pub struct KeybindingsFromToml {
+    pub left: Option<Vec<String>>,
+    pub right: Option<Vec<String>>,
+    pub up: Option<Vec<String>>,
+    pub down: Option<Vec<String>>,
+    pub big_up: Option<Vec<String>>,
+    pub big_down: Option<Vec<String>>,
+    pub go_top: Option<Vec<String>>,
+    pub go_bot: Option<Vec<String>>,
+    pub page_up: Option<Vec<String>>,
+    pub page_down: Option<Vec<String>>,
+    pub add_feed: Option<Vec<String>>,
+    pub sync: Option<Vec<String>>,
+    pub sync_all: Option<Vec<String>>,
+    pub play: Option<Vec<String>>,
+    pub mark_played: Option<Vec<String>>,
+    pub mark_all_played: Option<Vec<String>>,
+    pub download: Option<Vec<String>>,
+    pub download_all: Option<Vec<String>>,
+    pub delete: Option<Vec<String>>,
+    pub delete_all: Option<Vec<String>>,
+    pub remove: Option<Vec<String>>,
+    pub remove_all: Option<Vec<String>>,
+    pub help: Option<Vec<String>>,
+    pub quit: Option<Vec<String>>,
+}
+
+/// Holds information about the colors to use in the application. Tuple
+/// values represent (foreground, background), respectively.
+#[derive(Debug, Clone)]
+pub struct AppColors {
+    pub normal: (ColorValue, ColorValue),
+    pub highlighted_active: (ColorValue, ColorValue),
+    pub highlighted: (ColorValue, ColorValue),
+    pub error: (ColorValue, ColorValue),
+}
+
+impl AppColors {
+    pub fn default() -> Self {
+        return Self {
+            normal: (ColorValue::White, ColorValue::Black),
+            highlighted_active: (ColorValue::Black, ColorValue::Yellow),
+            highlighted: (ColorValue::Black, ColorValue::White),
+            error: (ColorValue::Red, ColorValue::Black),
+        };
+    }
+
+    pub fn add_from_config(&mut self, config: AppColorsFromToml) {
+        if let Some(val) = config.normal_foreground {
+            if let Ok(v) = ColorValue::from_str(&val) {
+                self.normal.0 = v;
+            }
+        }
+        if let Some(val) = config.normal_background {
+            if let Ok(v) = ColorValue::from_str(&val) {
+                self.normal.1 = v;
+            }
+        }
+        if let Some(val) = config.highlighted_active_foreground {
+            if let Ok(v) = ColorValue::from_str(&val) {
+                self.highlighted_active.0 = v;
+            }
+        }
+        if let Some(val) = config.highlighted_active_background {
+            if let Ok(v) = ColorValue::from_str(&val) {
+                self.highlighted_active.1 = v;
+            }
+        }
+        if let Some(val) = config.highlighted_foreground {
+            if let Ok(v) = ColorValue::from_str(&val) {
+                self.highlighted.0 = v;
+            }
+        }
+        if let Some(val) = config.highlighted_background {
+            if let Ok(v) = ColorValue::from_str(&val) {
+                self.highlighted.1 = v;
+            }
+        }
+        if let Some(val) = config.error_foreground {
+            if let Ok(v) = ColorValue::from_str(&val) {
+                self.error.0 = v;
+            }
+        }
+        if let Some(val) = config.error_background {
+            if let Ok(v) = ColorValue::from_str(&val) {
+                self.error.1 = v;
+            }
+        }
+    }
+}
+
+/// A temporary struct used to deserialize colors data from the TOML
+/// configuration file.
+#[derive(Debug, Deserialize)]
+pub struct AppColorsFromToml {
+    normal_foreground: Option<String>,
+    normal_background: Option<String>,
+    highlighted_active_foreground: Option<String>,
+    highlighted_active_background: Option<String>,
+    highlighted_foreground: Option<String>,
+    highlighted_background: Option<String>,
+    error_foreground: Option<String>,
+    error_background: Option<String>,
 }
 
 
@@ -88,16 +180,17 @@ impl Config {
     /// Given a file path, this reads a TOML config file and returns a
     /// Config struct with keybindings, etc. Inserts defaults if config
     /// file does not exist, or if specific values are not set.
-    pub fn new(path: &PathBuf) -> Config {
+    pub fn new(path: &Path) -> Result<Config> {
         let mut config_string = String::new();
         let config_toml: ConfigFromToml;
 
         match File::open(path) {
             Ok(mut file) => {
-                file.read_to_string(&mut config_string)
-                    .expect("Error reading config.toml. Please ensure file is readable.");
+                file.read_to_string(&mut config_string).with_context(|| {
+                    "Could not read config.toml. Please ensure file is readable."
+                })?;
                 config_toml = toml::from_str(&config_string)
-                    .expect("Error parsing config.toml. Please check file syntax.");
+                    .with_context(|| "Could not parse config.toml. Please check file syntax.")?;
             }
             Err(_) => {
                 // if we can't find the file, set everything to empty
@@ -107,6 +200,12 @@ impl Config {
                     right: None,
                     up: None,
                     down: None,
+                    big_up: None,
+                    big_down: None,
+                    go_top: None,
+                    go_bot: None,
+                    page_up: None,
+                    page_down: None,
                     add_feed: None,
                     sync: None,
                     sync_all: None,
@@ -122,18 +221,30 @@ impl Config {
                     help: None,
                     quit: None,
                 };
+
+                let colors = AppColorsFromToml {
+                    normal_foreground: None,
+                    normal_background: None,
+                    highlighted_active_foreground: None,
+                    highlighted_active_background: None,
+                    highlighted_foreground: None,
+                    highlighted_background: None,
+                    error_foreground: None,
+                    error_background: None,
+                };
                 config_toml = ConfigFromToml {
                     download_path: None,
                     play_command: None,
                     download_new_episodes: None,
                     simultaneous_downloads: None,
                     max_retries: None,
-                    keybindings: keybindings,
+                    keybindings: Some(keybindings),
+                    colors: Some(colors),
                 };
             }
         }
 
-        return config_with_defaults(&config_toml);
+        return config_with_defaults(config_toml);
     }
 }
 
@@ -141,48 +252,27 @@ impl Config {
 /// that specifies user settings where indicated, and defaults for any
 /// settings that were not specified by the user.
 #[allow(clippy::type_complexity)]
-fn config_with_defaults(config_toml: &ConfigFromToml) -> Config {
-    // specify all default keybindings for actions
-    #[rustfmt::skip]
-    let action_map: Vec<(&Option<Vec<String>>, UserAction, Vec<String>)> = vec![
-        (&config_toml.keybindings.left, UserAction::Left, vec!["Left".to_string(), "h".to_string()]),
-        (&config_toml.keybindings.right, UserAction::Right, vec!["Right".to_string(), "l".to_string()]),
-        (&config_toml.keybindings.up, UserAction::Up, vec!["Up".to_string(), "k".to_string()]),
-        (&config_toml.keybindings.down, UserAction::Down, vec!["Down".to_string(), "j".to_string()]),
+fn config_with_defaults(config_toml: ConfigFromToml) -> Result<Config> {
+    // specify keybindings
+    let keymap = match config_toml.keybindings {
+        Some(kb) => Keybindings::from_config(kb),
+        None => Keybindings::default(),
+    };
 
-        (&config_toml.keybindings.add_feed, UserAction::AddFeed, vec!["a".to_string()]),
-        (&config_toml.keybindings.sync, UserAction::Sync, vec!["s".to_string()]),
-        (&config_toml.keybindings.sync_all, UserAction::SyncAll, vec!["S".to_string()]),
-
-        (&config_toml.keybindings.play, UserAction::Play, vec!["Enter".to_string(), "p".to_string()]),
-        (&config_toml.keybindings.mark_played, UserAction::MarkPlayed, vec!["m".to_string()]),
-        (&config_toml.keybindings.mark_all_played, UserAction::MarkAllPlayed, vec!["M".to_string()]),
-
-        (&config_toml.keybindings.download, UserAction::Download, vec!["d".to_string()]),
-        (&config_toml.keybindings.download_all, UserAction::DownloadAll, vec!["D".to_string()]),
-        (&config_toml.keybindings.delete, UserAction::Delete, vec!["x".to_string()]),
-        (&config_toml.keybindings.delete_all, UserAction::DeleteAll, vec!["X".to_string()]),
-        (&config_toml.keybindings.remove, UserAction::Remove, vec!["r".to_string()]),
-        (&config_toml.keybindings.remove_all, UserAction::RemoveAll, vec!["R".to_string()]),
-
-        (&config_toml.keybindings.help, UserAction::Help, vec!["?".to_string()]),
-        (&config_toml.keybindings.quit, UserAction::Quit, vec!["q".to_string()]),
-    ];
-
-    // for each action, if user preference is set, use that, otherwise,
-    // use the default
-    let mut keymap = Keybindings::new();
-    for (config, action, defaults) in action_map.iter() {
-        match config {
-            Some(v) => keymap.insert_from_vec(v, *action),
-            None => keymap.insert_from_vec(&defaults, *action),
+    // specify app colors
+    let colors = match config_toml.colors {
+        Some(clrs) => {
+            let mut colors = AppColors::default();
+            colors.add_from_config(clrs);
+            colors
         }
-    }
+        None => AppColors::default(),
+    };
 
     // paths are set by user, or they resolve to OS-specific path as
     // provided by dirs crate
     let download_path =
-        parse_create_dir(config_toml.download_path.as_deref(), dirs::data_local_dir());
+        parse_create_dir(config_toml.download_path.as_deref(), dirs::data_local_dir())?;
 
     let play_command = match config_toml.play_command.as_deref() {
         Some(cmd) => cmd.to_string(),
@@ -209,14 +299,15 @@ fn config_with_defaults(config_toml: &ConfigFromToml) -> Config {
         None => 3,
     };
 
-    return Config {
+    return Ok(Config {
         download_path: download_path,
         play_command: play_command,
         download_new_episodes: download_new_episodes,
         simultaneous_downloads: simultaneous_downloads,
         max_retries: max_retries,
         keybindings: keymap,
-    };
+        colors: colors,
+    });
 }
 
 
@@ -226,29 +317,35 @@ fn config_with_defaults(config_toml: &ConfigFromToml) -> Config {
 /// variables cannot be found, if OS could not produce the appropriate
 /// default directory, or if the specified directories in the path could
 /// not be created.
-fn parse_create_dir(user_dir: Option<&str>, default: Option<PathBuf>) -> PathBuf {
+fn parse_create_dir(user_dir: Option<&str>, default: Option<PathBuf>) -> Result<PathBuf> {
     let final_path = match user_dir {
-        Some(path) => {
-            match shellexpand::full(path) {
-                Ok(realpath) => PathBuf::from(realpath.as_ref()),
-                Err(err) => panic!("Could not parse environment variable {} in config.toml. Reason: {}", err.var_name, err.cause),
+        Some(path) => match shellexpand::full(path) {
+            Ok(realpath) => PathBuf::from(realpath.as_ref()),
+            Err(err) => {
+                return Err(anyhow!(
+                    "Could not parse environment variable {} in config.toml. Reason: {}",
+                    err.var_name,
+                    err.cause
+                ))
             }
         },
         None => {
-            match default {
-                Some(mut path) => {
-                    path.push("shellcaster");
-                    path
-                },
-                None => panic!("Could not identify a default directory for your OS. Please specify paths manually in config.toml."),
+            if let Some(mut path) = default {
+                path.push("shellcaster");
+                path
+            } else {
+                return Err(anyhow!("Could not identify a default directory for your OS. Please specify paths manually in config.toml."));
             }
-        },
+        }
     };
 
     // create directories if they do not exist
-    if let Err(err) = std::fs::create_dir_all(&final_path) {
-        panic!("Could not create filepath: {}", err);
-    }
+    std::fs::create_dir_all(&final_path).with_context(|| {
+        format!(
+            "Could not create filepath: {}",
+            final_path.to_string_lossy()
+        )
+    })?;
 
-    return final_path;
+    return Ok(final_path);
 }

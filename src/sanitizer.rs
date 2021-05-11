@@ -27,11 +27,11 @@ pub fn sanitize_rfc822_like_date<S: Into<String>>(s: S) -> String {
 /// Pad HH:MM:SS with exta zeros if needed.
 fn pad_zeros(s: String) -> String {
     lazy_static! {
-        /// If it matchers a pattern of 2:2:2, return.
-        static ref OK_RGX: Regex = Regex::new(r"(\d{2}):(\d{2}):(\d{2})").unwrap();
+        /// If it matches a pattern of 2:2:2, return.
+        static ref OK_RGX: Regex = Regex::new(r"(\d{2}):(\d{2}):(\d{2})").expect("Regex error");
 
         /// hours, minutes, seconds = cap[1], cap[2], cap[3]
-        static ref RE_RGX: Regex = Regex::new(r"(\d{1,2}):(\d{1,2}):(\d{1,2})").unwrap();
+        static ref RE_RGX: Regex = Regex::new(r"(\d{1,2}):(\d{1,2}):(\d{1,2})").expect("Regex error");
     }
 
     if OK_RGX.is_match(&s) {
@@ -48,8 +48,8 @@ fn pad_zeros(s: String) -> String {
             tm.push_str(m_str);
             tm.push(':');
         });
-        tm.pop(); // Pop leftover last separator (at no penalty, since we only allocate once
-                  // either way)
+        tm.pop(); // Pop leftover last separator (at no penalty, since
+                  // we only allocate once either way)
 
         return s.replace(&cap[0], &tm);
     }

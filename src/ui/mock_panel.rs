@@ -1,4 +1,4 @@
-use super::{ColorType, Colors};
+use super::ColorType;
 use chrono::{DateTime, Utc};
 
 /// Struct holding the raw data used for building the details panel.
@@ -15,7 +15,6 @@ pub struct Details {
 pub struct Panel {
     pub window: Vec<(String, pancurses::chtype, ColorType)>,
     pub screen_pos: usize,
-    pub colors: Colors,
     pub title: String,
     pub n_row: i32,
     pub n_col: i32,
@@ -23,15 +22,13 @@ pub struct Panel {
 
 impl Panel {
     pub fn new(
-        colors: Colors,
         title: String,
         screen_pos: usize,
         n_row: i32,
         n_col: i32,
         _start_y: i32,
         _start_x: i32,
-    ) -> Self
-    {
+    ) -> Self {
         // we represent the window as a vector of Strings instead of
         // the pancurses window
         let panel_win =
@@ -40,14 +37,11 @@ impl Panel {
         return Panel {
             window: panel_win,
             screen_pos: screen_pos,
-            colors: colors,
             title: title,
             n_row: n_row,
             n_col: n_col,
         };
     }
-
-    pub fn init(&self) {}
 
     pub fn refresh(&self) {}
 
@@ -74,10 +68,10 @@ impl Panel {
             .push((String::new(), pancurses::A_NORMAL, ColorType::Normal));
     }
 
-    pub fn write_wrap_line(&mut self, start_y: i32, string: String) -> i32 {
+    pub fn write_wrap_line(&mut self, start_y: i32, string: &str) -> i32 {
         let mut row = start_y;
         let max_row = self.get_rows();
-        let wrapper = textwrap::wrap_iter(&string, self.get_cols() as usize);
+        let wrapper = textwrap::wrap(&string, self.get_cols() as usize);
         for line in wrapper {
             self.write_line(row, line.to_string());
             row += 1;
@@ -94,14 +88,14 @@ impl Panel {
 
         // podcast title
         match details.pod_title {
-            Some(t) => row = self.write_wrap_line(row + 1, t),
-            None => row = self.write_wrap_line(row + 1, "No title".to_string()),
+            Some(t) => row = self.write_wrap_line(row + 1, &t),
+            None => row = self.write_wrap_line(row + 1, "No title"),
         }
 
         // episode title
         match details.ep_title {
-            Some(t) => row = self.write_wrap_line(row + 1, t),
-            None => row = self.write_wrap_line(row + 1, "No title".to_string()),
+            Some(t) => row = self.write_wrap_line(row + 1, &t),
+            None => row = self.write_wrap_line(row + 1, "No title"),
         }
 
         row += 1; // blank line
@@ -110,7 +104,7 @@ impl Panel {
         if let Some(date) = details.pubdate {
             let new_row = self.write_wrap_line(
                 row + 1,
-                format!("Published: {}", date.format("%B %-d, %Y").to_string()),
+                &format!("Published: {}", date.format("%B %-d, %Y")),
             );
             self.change_attr(row + 1, 0, 10, pancurses::A_UNDERLINE, ColorType::Normal);
             row = new_row;
@@ -118,7 +112,7 @@ impl Panel {
 
         // duration
         if let Some(dur) = details.duration {
-            let new_row = self.write_wrap_line(row + 1, format!("Duration: {}", dur));
+            let new_row = self.write_wrap_line(row + 1, &format!("Duration: {}", dur));
             self.change_attr(row + 1, 0, 9, pancurses::A_UNDERLINE, ColorType::Normal);
             row = new_row;
         }
@@ -126,9 +120,9 @@ impl Panel {
         // explicit
         if let Some(exp) = details.explicit {
             let new_row = if exp {
-                self.write_wrap_line(row + 1, "Explicit: Yes".to_string())
+                self.write_wrap_line(row + 1, "Explicit: Yes")
             } else {
-                self.write_wrap_line(row + 1, "Explicit: No".to_string())
+                self.write_wrap_line(row + 1, "Explicit: No")
             };
             self.change_attr(row + 1, 0, 9, pancurses::A_UNDERLINE, ColorType::Normal);
             row = new_row;
@@ -139,11 +133,11 @@ impl Panel {
         // description
         match details.description {
             Some(desc) => {
-                row = self.write_wrap_line(row + 1, "Description:".to_string());
-                let _row = self.write_wrap_line(row + 1, desc);
+                row = self.write_wrap_line(row + 1, "Description:");
+                let _row = self.write_wrap_line(row + 1, &desc);
             }
             None => {
-                let _row = self.write_wrap_line(row + 1, "No description.".to_string());
+                let _row = self.write_wrap_line(row + 1, "No description.");
             }
         }
     }
@@ -159,8 +153,7 @@ impl Panel {
         _nchars: i32,
         attr: pancurses::chtype,
         color: ColorType,
-    )
-    {
+    ) {
         let current = &self.window[y as usize];
         self.window[y as usize] = (current.0.clone(), attr, color);
     }

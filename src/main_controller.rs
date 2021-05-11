@@ -1,6 +1,7 @@
+use anyhow::Result;
 use std::collections::HashSet;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 
 use sanitize_filename::{sanitize_with_options, Options};
@@ -12,7 +13,7 @@ use crate::feeds::{self, FeedMsg, PodcastFeed};
 use crate::play_file;
 use crate::threadpool::Threadpool;
 use crate::types::*;
-use crate::ui::{UiMsg, UI};
+use crate::ui::{Ui, UiMsg};
 
 /// Enum used for communicating with other threads.
 #[derive(Debug)]
@@ -45,13 +46,13 @@ impl MainController {
     /// Instantiates the main controller (used during app startup), which
     /// sets up the connection to the database, download manager, and UI
     /// thread, and reads the list of podcasts from the database.
-    pub fn new(config: Config, db_path: &PathBuf) -> MainController {
+    pub fn new(config: Config, db_path: &Path) -> Result<MainController> {
         // create transmitters and receivers for passing messages between threads
         let (tx_to_ui, rx_from_main) = mpsc::channel();
         let (tx_to_main, rx_to_main) = mpsc::channel();
 
         // get connection to the database
-        let db_inst = Database::connect(&db_path);
+        let db_inst = Database::connect(&db_path)?;
 
         // set up threadpool
         let threadpool = Threadpool::new(config.simultaneous_downloads);
@@ -61,11 +62,11 @@ impl MainController {
         // "ground truth" list of podcasts, and it must be mutable, but
         // UI needs to check this list and update the screen when
         // necessary
-        let podcast_list = LockVec::new(db_inst.get_podcasts());
+        let podcast_list = LockVec::new(db_inst.get_podcasts()?);
 
         // set up UI in new thread
         let tx_ui_to_main = mpsc::Sender::clone(&tx_to_main);
-        let ui_thread = UI::spawn(
+        let ui_thread = Ui::spawn(
             config.clone(),
             podcast_list.clone(),
             rx_from_main,
@@ -73,7 +74,7 @@ impl MainController {
         );
         // TODO: Can we do this without cloning the config?
 
-        return MainController {
+        return Ok(MainController {
             config: config,
             db: db_inst,
             threadpool: threadpool,
@@ -85,7 +86,7 @@ impl MainController {
             tx_to_ui: tx_to_ui,
             tx_to_main: tx_to_main,
             rx_to_main: rx_to_main,
-        };
+        });
     }
 
     /// Initiates the main loop where the controller waits for messages coming in from the UI and other threads, and processes them.
@@ -173,7 +174,7 @@ impl MainController {
                 error,
                 crate::config::MESSAGE_TIME,
             ))
-            .unwrap();
+            .expect("Thread messaging error");
     }
 
     /// Sends a persistent notification to the UI, which will display at
@@ -181,14 +182,14 @@ impl MainController {
     pub fn persistent_notif_to_ui(&self, message: String, error: bool) {
         self.tx_to_ui
             .send(MainMessage::UiSpawnPersistentNotif(message, error))
-            .unwrap();
+            .expect("Thread messaging error");
     }
 
     /// Clears persistent notifications in the UI.
     pub fn clear_persistent_notif(&self) {
         self.tx_to_ui
             .send(MainMessage::UiClearPersistentNotif)
-            .unwrap();
+            .expect("Thread messaging error");
     }
 
     /// Updates the persistent notification about syncing podcasts and
@@ -283,9 +284,15 @@ impl MainController {
         match db_result {
             Ok(result) => {
                 {
-                    self.podcasts.replace_all(self.db.get_podcasts());
+                    self.podcasts.replace_all(
+                        self.db
+                            .get_podcasts()
+                            .expect("Error retrieving info from database."),
+                    );
                 }
-                self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
+                self.tx_to_ui
+                    .send(MainMessage::UiUpdateMenus)
+                    .expect("Thread messaging error");
 
                 if pod_id.is_some() {
                     self.sync_tracker.push(result);
@@ -324,12 +331,12 @@ impl MainController {
                                 DownloadNewEpisodes::AskSelected => {
                                     self.tx_to_ui
                                         .send(MainMessage::UiSpawnDownloadPopup(new_eps, true))
-                                        .unwrap();
+                                        .expect("Thread messaging error");
                                 }
                                 DownloadNewEpisodes::AskUnselected => {
                                     self.tx_to_ui
                                         .send(MainMessage::UiSpawnDownloadPopup(new_eps, false))
-                                        .unwrap();
+                                        .expect("Thread messaging error");
                                 }
                                 _ => (),
                             }
@@ -385,11 +392,13 @@ impl MainController {
         let mut episode = podcast.episodes.clone_episode(ep_id).unwrap();
         episode.played = played;
 
-        self.db.set_played_status(episode.id, played);
+        let _ = self.db.set_played_status(episode.id, played);
         podcast.episodes.replace(ep_id, episode);
 
         self.podcasts.replace(pod_id, podcast);
-        self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
+        self.tx_to_ui
+            .send(MainMessage::UiUpdateMenus)
+            .expect("Thread messaging error");
     }
 
     /// Given a podcast, it marks all episodes for that podcast as
@@ -400,15 +409,19 @@ impl MainController {
         {
             let borrowed_ep_list = podcast.episodes.borrow_order();
             for ep in borrowed_ep_list.iter() {
-                self.db.set_played_status(*ep, played);
+                let _ = self.db.set_played_status(*ep, played);
             }
         }
-        podcast
-            .episodes
-            .replace_all(self.db.get_episodes(podcast.id));
+        podcast.episodes.replace_all(
+            self.db
+                .get_episodes(podcast.id, false)
+                .expect("Error retrieving info from database."),
+        );
 
         self.podcasts.replace(pod_id, podcast);
-        self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
+        self.tx_to_ui
+            .send(MainMessage::UiUpdateMenus)
+            .expect("Thread messaging error");
     }
 
     /// Given a podcast index (and not an episode index), this will send
@@ -437,6 +450,7 @@ impl MainController {
                                     pod_id: ep.pod_id,
                                     title: ep.title.clone(),
                                     url: ep.url.clone(),
+                                    pubdate: ep.pubdate,
                                     file_path: None,
                                 },
                                 ep.path.is_none(),
@@ -456,6 +470,7 @@ impl MainController {
                                 pod_id: ep.pod_id,
                                 title: ep.title.clone(),
                                 url: ep.url.clone(),
+                                pubdate: ep.pubdate,
                                 file_path: None,
                             })
                         } else {
@@ -499,7 +514,17 @@ impl MainController {
     /// Handles logic for what to do when a download successfully completes.
     pub fn download_complete(&mut self, ep_data: EpData) {
         let file_path = ep_data.file_path.unwrap();
-        let _ = self.db.insert_file(ep_data.id, &file_path);
+        let res = self.db.insert_file(ep_data.id, &file_path);
+        if res.is_err() {
+            self.notif_to_ui(
+                format!(
+                    "Could not add episode file to database: {}",
+                    file_path.to_string_lossy()
+                ),
+                true,
+            );
+            return;
+        }
         {
             // TODO: Try to do this without cloning the podcast...
             let podcast = self.podcasts.clone_podcast(ep_data.pod_id).unwrap();
@@ -514,7 +539,9 @@ impl MainController {
             self.notif_to_ui("Downloads complete.".to_string(), false);
         }
 
-        self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
+        self.tx_to_ui
+            .send(MainMessage::UiUpdateMenus)
+            .expect("Thread messaging error");
     }
 
     /// Given a podcast title, creates a download directory for that
@@ -539,11 +566,20 @@ impl MainController {
             let title = episode.title.clone();
             match fs::remove_file(episode.path.unwrap()) {
                 Ok(_) => {
-                    self.db.remove_file(episode.id);
+                    let res = self.db.remove_file(episode.id);
+                    if res.is_err() {
+                        self.notif_to_ui(
+                            format!("Could not remove file from database: {}", title),
+                            true,
+                        );
+                        return;
+                    }
                     episode.path = None;
                     podcast.episodes.replace(ep_id, episode);
 
-                    self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
+                    self.tx_to_ui
+                        .send(MainMessage::UiUpdateMenus)
+                        .expect("Thread messaging error");
                     self.notif_to_ui(format!("Deleted \"{}\"", title), false);
                 }
                 Err(_) => self.notif_to_ui(format!("Error deleting \"{}\"", title), true),
@@ -576,8 +612,13 @@ impl MainController {
             }
         }
 
-        self.db.remove_files(&eps_to_remove);
-        self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
+        let res = self.db.remove_files(&eps_to_remove);
+        if res.is_err() {
+            success = false;
+        }
+        self.tx_to_ui
+            .send(MainMessage::UiUpdateMenus)
+            .expect("Thread messaging error");
 
         if success {
             self.notif_to_ui("Files successfully deleted.".to_string(), false);
@@ -594,11 +635,21 @@ impl MainController {
         }
 
         let pod_id = self.podcasts.map_single(pod_id, |pod| pod.id).unwrap();
-        self.db.remove_podcast(pod_id);
-        {
-            self.podcasts.replace_all(self.db.get_podcasts());
+        let res = self.db.remove_podcast(pod_id);
+        if res.is_err() {
+            self.notif_to_ui("Could not remove podcast from database".to_string(), true);
+            return;
         }
-        self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
+        {
+            self.podcasts.replace_all(
+                self.db
+                    .get_podcasts()
+                    .expect("Error retrieving info from database."),
+            );
+        }
+        self.tx_to_ui
+            .send(MainMessage::UiUpdateMenus)
+            .expect("Thread messaging error");
     }
 
     /// Removes an episode from the list, optionally deleting local files
@@ -608,13 +659,19 @@ impl MainController {
             self.delete_file(pod_id, ep_id);
         }
 
-        self.db.hide_episode(ep_id, true);
+        let _ = self.db.hide_episode(ep_id, true);
         {
             let mut borrowed_map = self.podcasts.borrow_map();
             let podcast = borrowed_map.get_mut(&pod_id).unwrap();
-            podcast.episodes.replace_all(self.db.get_episodes(pod_id));
+            podcast.episodes.replace_all(
+                self.db
+                    .get_episodes(pod_id, false)
+                    .expect("Error retrieving info from database."),
+            );
         }
-        self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
+        self.tx_to_ui
+            .send(MainMessage::UiUpdateMenus)
+            .expect("Thread messaging error");
     }
 
     /// Removes all episodes for a podcast from the list, optionally
@@ -626,11 +683,13 @@ impl MainController {
 
         let mut podcast = self.podcasts.clone_podcast(pod_id).unwrap();
         podcast.episodes.map(|ep| {
-            self.db.hide_episode(ep.id, true);
+            let _ = self.db.hide_episode(ep.id, true);
         });
         podcast.episodes = LockVec::new(Vec::new());
         self.podcasts.replace(pod_id, podcast);
 
-        self.tx_to_ui.send(MainMessage::UiUpdateMenus).unwrap();
+        self.tx_to_ui
+            .send(MainMessage::UiUpdateMenus)
+            .expect("Thread messaging error");
     }
 }

@@ -6,12 +6,12 @@ use std::time::Duration;
 #[cfg_attr(test, path = "mock_panel.rs")]
 mod panel;
 
-mod colors;
+pub mod colors;
 mod menu;
 mod notification;
 mod popup;
 
-use self::colors::{ColorType, Colors};
+use self::colors::ColorType;
 use self::menu::Menu;
 use self::notification::NotifWin;
 use self::panel::{Details, Panel};
@@ -29,13 +29,13 @@ use crate::types::*;
 lazy_static! {
     /// Regex for finding <br/> tags -- also captures any surrounding
     /// line breaks
-    static ref RE_BR_TAGS: Regex = Regex::new(r"((\r\n)|\r|\n)*<br */?>((\r\n)|\r|\n)*").unwrap();
+    static ref RE_BR_TAGS: Regex = Regex::new(r"((\r\n)|\r|\n)*<br */?>((\r\n)|\r|\n)*").expect("Regex error");
 
     /// Regex for finding HTML tags
-    static ref RE_HTML_TAGS: Regex = Regex::new(r"<[^<>]*>").unwrap();
+    static ref RE_HTML_TAGS: Regex = Regex::new(r"<[^<>]*>").expect("Regex error");
 
     /// Regex for finding more than two line breaks
-    static ref RE_MULT_LINE_BREAKS: Regex = Regex::new(r"((\r\n)|\r|\n){3,}").unwrap();
+    static ref RE_MULT_LINE_BREAKS: Regex = Regex::new(r"((\r\n)|\r|\n){3,}").expect("Regex error");
 }
 
 
@@ -75,12 +75,11 @@ enum ActiveMenu {
 /// encapsulates the pancurses windows, and holds data about the size of
 /// the screen.
 #[derive(Debug)]
-pub struct UI<'a> {
+pub struct Ui<'a> {
     stdscr: Window,
     n_row: i32,
     n_col: i32,
     keymap: &'a Keybindings,
-    colors: Colors,
     podcast_menu: Menu<Podcast>,
     episode_menu: Menu<Episode>,
     active_menu: ActiveMenu,
@@ -89,7 +88,7 @@ pub struct UI<'a> {
     popup_win: PopupWin<'a>,
 }
 
-impl<'a> UI<'a> {
+impl<'a> Ui<'a> {
     /// Spawns a UI object in a new thread, with message channels to send
     /// and receive messages
     pub fn spawn(
@@ -97,10 +96,9 @@ impl<'a> UI<'a> {
         items: LockVec<Podcast>,
         rx_from_main: mpsc::Receiver<MainMessage>,
         tx_to_main: mpsc::Sender<Message>,
-    ) -> thread::JoinHandle<()>
-    {
+    ) -> thread::JoinHandle<()> {
         return thread::spawn(move || {
-            let mut ui = UI::new(&config, &items);
+            let mut ui = Ui::new(&config, items);
             ui.init();
             let mut message_iter = rx_from_main.try_iter();
             // this is the main event loop: on each loop, we update
@@ -111,7 +109,9 @@ impl<'a> UI<'a> {
 
                 match ui.getch() {
                     UiMsg::Noop => (),
-                    input => tx_to_main.send(Message::Ui(input)).unwrap(),
+                    input => tx_to_main
+                        .send(Message::Ui(input))
+                        .expect("Thread messaging error"),
                 }
 
                 if let Some(message) = message_iter.next() {
@@ -143,45 +143,22 @@ impl<'a> UI<'a> {
     /// Initializes the UI with a list of podcasts and podcast episodes,
     /// creates the pancurses window and draws it to the screen, and
     /// returns a UI object for future manipulation.
-    pub fn new(config: &'a Config, items: &LockVec<Podcast>) -> UI<'a> {
+    pub fn new(config: &'a Config, items: LockVec<Podcast>) -> Ui<'a> {
         let stdscr = pancurses::initscr();
 
         // set some options
         pancurses::cbreak(); // allows characters to be read one by one
         pancurses::noecho(); // turns off automatic echoing of characters
                              // to the screen as they are input
-        pancurses::start_color(); // allows colours if available
         pancurses::curs_set(0); // turn off cursor
         stdscr.keypad(true); // returns special characters as single
                              // key codes
         stdscr.nodelay(true); // getch() will not wait for user input
 
-        // set colors
-        let colors = self::colors::set_colors();
+        self::colors::set_colors(&config.colors);
 
         let (n_row, n_col) = stdscr.get_max_yx();
         let (pod_col, ep_col, det_col) = Self::calculate_sizes(n_col);
-
-        let podcast_panel = Panel::new(
-            colors.clone(),
-            "Podcasts".to_string(),
-            0,
-            n_row - 1,
-            pod_col,
-            0,
-            0,
-        );
-        let podcast_menu = Menu::new(podcast_panel, None, items.clone());
-
-        let episode_panel = Panel::new(
-            colors.clone(),
-            "Episodes".to_string(),
-            1,
-            n_row - 1,
-            ep_col,
-            0,
-            pod_col - 1,
-        );
 
         let first_pod = match items.borrow_order().get(0) {
             Some(first_id) => match items.borrow_map().get(first_id) {
@@ -191,11 +168,16 @@ impl<'a> UI<'a> {
             None => LockVec::new(Vec::new()),
         };
 
+        let podcast_panel = Panel::new("Podcasts".to_string(), 0, n_row - 1, pod_col, 0, 0);
+        let podcast_menu = Menu::new(podcast_panel, None, items);
+
+        let episode_panel =
+            Panel::new("Episodes".to_string(), 1, n_row - 1, ep_col, 0, pod_col - 1);
+
         let episode_menu = Menu::new(episode_panel, None, first_pod);
 
         let details_panel = if n_col > crate::config::DETAILS_PANEL_LENGTH {
             Some(Self::make_details_panel(
-                colors.clone(),
                 n_row - 1,
                 det_col,
                 0,
@@ -205,15 +187,14 @@ impl<'a> UI<'a> {
             None
         };
 
-        let notif_win = NotifWin::new(colors.clone(), n_row, n_col);
-        let popup_win = PopupWin::new(colors.clone(), &config.keybindings, n_row, n_col);
+        let notif_win = NotifWin::new(n_row, n_col);
+        let popup_win = PopupWin::new(&config.keybindings, n_row, n_col);
 
-        return UI {
-            stdscr,
-            n_row,
-            n_col,
+        return Ui {
+            stdscr: stdscr,
+            n_row: n_row,
+            n_col: n_col,
             keymap: &config.keybindings,
-            colors: colors,
             podcast_menu: podcast_menu,
             episode_menu: episode_menu,
             active_menu: ActiveMenu::PodcastMenu,
@@ -230,7 +211,13 @@ impl<'a> UI<'a> {
         self.podcast_menu.init();
         self.podcast_menu.activate();
         self.episode_menu.init();
+
+        if let Some(ref panel) = self.details_panel {
+            panel.refresh();
+        }
         self.update_details_panel();
+
+        self.notif_win.init();
 
         // welcome screen if user does not have any podcasts yet
         if self.podcast_menu.items.is_empty() {
@@ -281,7 +268,13 @@ impl<'a> UI<'a> {
                         Some(a @ UserAction::Down)
                         | Some(a @ UserAction::Up)
                         | Some(a @ UserAction::Left)
-                        | Some(a @ UserAction::Right) => {
+                        | Some(a @ UserAction::Right)
+                        | Some(a @ UserAction::PageUp)
+                        | Some(a @ UserAction::PageDown)
+                        | Some(a @ UserAction::BigUp)
+                        | Some(a @ UserAction::BigDown)
+                        | Some(a @ UserAction::GoTop)
+                        | Some(a @ UserAction::GoBot) => {
                             self.move_cursor(a, curr_pod_id, curr_ep_id)
                         }
 
@@ -410,7 +403,6 @@ impl<'a> UI<'a> {
             }
         } else if det_col > 0 {
             self.details_panel = Some(Self::make_details_panel(
-                self.colors.clone(),
                 n_row - 1,
                 det_col,
                 0,
@@ -444,55 +436,14 @@ impl<'a> UI<'a> {
         action: &UserAction,
         curr_pod_id: Option<i64>,
         curr_ep_id: Option<i64>,
-    )
-    {
+    ) {
         match action {
             UserAction::Down => {
-                match self.active_menu {
-                    ActiveMenu::PodcastMenu => {
-                        if curr_pod_id.is_some() {
-                            self.podcast_menu.scroll(1);
-
-                            self.episode_menu.top_row = 0;
-                            self.episode_menu.selected = 0;
-
-                            // update episodes menu with new list
-                            self.episode_menu.items = self.podcast_menu.get_episodes();
-                            self.episode_menu.update_items();
-                            self.update_details_panel();
-                        }
-                    }
-                    ActiveMenu::EpisodeMenu => {
-                        if curr_ep_id.is_some() {
-                            self.episode_menu.scroll(1);
-                            self.update_details_panel();
-                        }
-                    }
-                }
+                self.scroll_current_window(curr_pod_id, 1);
             }
 
             UserAction::Up => {
-                match self.active_menu {
-                    ActiveMenu::PodcastMenu => {
-                        if curr_pod_id.is_some() {
-                            self.podcast_menu.scroll(-1);
-
-                            self.episode_menu.top_row = 0;
-                            self.episode_menu.selected = 0;
-
-                            // update episodes menu with new list
-                            self.episode_menu.items = self.podcast_menu.get_episodes();
-                            self.episode_menu.update_items();
-                            self.update_details_panel();
-                        }
-                    }
-                    ActiveMenu::EpisodeMenu => {
-                        if curr_pod_id.is_some() {
-                            self.episode_menu.scroll(-1);
-                            self.update_details_panel();
-                        }
-                    }
-                }
+                self.scroll_current_window(curr_pod_id, -1);
             }
 
             UserAction::Left => {
@@ -527,9 +478,68 @@ impl<'a> UI<'a> {
                 }
             }
 
+            UserAction::PageUp => {
+                self.scroll_current_window(curr_pod_id, -self.n_row + 3);
+            }
+
+            UserAction::PageDown => {
+                self.scroll_current_window(curr_pod_id, self.n_row - 3);
+            }
+
+            UserAction::BigUp => {
+                self.scroll_current_window(
+                    curr_pod_id,
+                    -self.n_row / crate::config::BIG_SCROLL_AMOUNT,
+                );
+            }
+
+            UserAction::BigDown => {
+                self.scroll_current_window(
+                    curr_pod_id,
+                    self.n_row / crate::config::BIG_SCROLL_AMOUNT,
+                );
+            }
+
+            UserAction::GoTop => {
+                self.scroll_current_window(curr_pod_id, -i32::MAX);
+            }
+
+            UserAction::GoBot => {
+                self.scroll_current_window(curr_pod_id, i32::MAX);
+            }
+
             // this shouldn't occur because we only trigger this
-            // function when the UserAction is Up, Down, Left, or Right.
+            // function when the UserAction is Up, Down, Left, Right,
+            // BigUp, BigDown, PageUp, PageDown, GoBot and GoTop
             _ => (),
+        }
+    }
+
+    /// Scrolls the current active menu by
+    /// the specified amount and refreshes
+    /// the window.
+    /// Positive Scroll is down.
+    pub fn scroll_current_window(&mut self, pod_id: Option<i64>, scroll: i32) {
+        match self.active_menu {
+            ActiveMenu::PodcastMenu => {
+                if pod_id.is_some() {
+                    self.podcast_menu.scroll(scroll);
+
+                    self.episode_menu.top_row = 0;
+                    self.episode_menu.selected = 0;
+
+                    // update episodes menu with new list
+                    self.episode_menu.items = self.podcast_menu.get_episodes();
+                    self.episode_menu.update_items();
+                    self.update_details_panel();
+                }
+            }
+            ActiveMenu::EpisodeMenu => {
+                if pod_id.is_some() {
+                    self.episode_menu.scroll(scroll);
+                    self.update_details_panel();
+                }
+            }
         }
     }
 
@@ -539,8 +549,7 @@ impl<'a> UI<'a> {
         &mut self,
         curr_pod_id: Option<i64>,
         curr_ep_id: Option<i64>,
-    ) -> Option<UiMsg>
-    {
+    ) -> Option<UiMsg> {
         if let Some(pod_id) = curr_pod_id {
             if let Some(ep_id) = curr_ep_id {
                 if let Some(played) = self
@@ -586,10 +595,7 @@ impl<'a> UI<'a> {
             // to delete those too
             if self.check_for_local_files(pod_id) {
                 let ask_delete = self.spawn_yes_no_notif("Delete local files too?");
-                delete = match ask_delete {
-                    Some(val) => val,
-                    None => false, // default not to delete
-                };
+                delete = ask_delete.unwrap_or(false); // default not to delete
             }
 
             return Some(UiMsg::RemovePodcast(pod_id, delete));
@@ -602,8 +608,7 @@ impl<'a> UI<'a> {
         &mut self,
         curr_pod_id: Option<i64>,
         curr_ep_id: Option<i64>,
-    ) -> Option<UiMsg>
-    {
+    ) -> Option<UiMsg> {
         let confirm = self.ask_for_confirmation("Are you sure you want to remove the episode?");
         // If we don't get a confirmation to delete, then don't remove
         if !confirm {
@@ -617,13 +622,10 @@ impl<'a> UI<'a> {
                     .episode_menu
                     .items
                     .map_single(ep_id, |ep| ep.path.is_some())
-                    .unwrap();
+                    .unwrap_or(false);
                 if is_downloaded {
                     let ask_delete = self.spawn_yes_no_notif("Delete local file too?");
-                    delete = match ask_delete {
-                        Some(val) => val,
-                        None => false, // default not to delete
-                    };
+                    delete = ask_delete.unwrap_or(false); // default not to delete
                 }
 
                 return Some(UiMsg::RemoveEpisode(pod_id, ep_id, delete));
@@ -641,10 +643,7 @@ impl<'a> UI<'a> {
             // to delete those too
             if self.check_for_local_files(pod_id) {
                 let ask_delete = self.spawn_yes_no_notif("Delete local files too?");
-                delete = match ask_delete {
-                    Some(val) => val,
-                    None => false, // default not to delete
-                };
+                delete = ask_delete.unwrap_or(false); // default not to delete
             }
             return Some(UiMsg::RemoveAllEpisodes(pod_id, delete));
         }
@@ -700,7 +699,9 @@ impl<'a> UI<'a> {
     pub fn check_for_local_files(&self, pod_id: i64) -> bool {
         let mut any_downloaded = false;
         let borrowed_map = self.podcast_menu.items.borrow_map();
-        let borrowed_pod = borrowed_map.get(&pod_id).unwrap();
+        let borrowed_pod = borrowed_map
+            .get(&pod_id)
+            .expect("Could not retrieve podcast info.");
 
         let borrowed_ep_list = borrowed_pod.episodes.borrow_map();
 
@@ -718,10 +719,7 @@ impl<'a> UI<'a> {
     /// 'y', then the function returns `true`, and 'n' returns
     /// `false`. Cancelling the action returns `false` as well.
     pub fn ask_for_confirmation(&self, message: &str) -> bool {
-        match self.spawn_yes_no_notif(message) {
-            Some(val) => val,
-            None => false,
-        }
+        self.spawn_yes_no_notif(message).unwrap_or(false)
     }
 
     /// Adds a notification to the bottom of the screen that solicits
@@ -802,23 +800,8 @@ impl<'a> UI<'a> {
     }
 
     /// Create a details panel.
-    pub fn make_details_panel(
-        colors: Colors,
-        n_row: i32,
-        n_col: i32,
-        start_y: i32,
-        start_x: i32,
-    ) -> Panel
-    {
-        return Panel::new(
-            colors,
-            "Details".to_string(),
-            2,
-            n_row,
-            n_col,
-            start_y,
-            start_x,
-        );
+    pub fn make_details_panel(n_row: i32, n_col: i32, start_y: i32, start_x: i32) -> Panel {
+        return Panel::new("Details".to_string(), 2, n_row, n_col, start_y, start_x);
     }
 
     /// Updates the details panel with information about the current
