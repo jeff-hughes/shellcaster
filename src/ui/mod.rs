@@ -150,7 +150,6 @@ impl<'a> Ui<'a> {
         pancurses::cbreak(); // allows characters to be read one by one
         pancurses::noecho(); // turns off automatic echoing of characters
                              // to the screen as they are input
-        pancurses::start_color(); // allows colours if available
         pancurses::curs_set(0); // turn off cursor
         stdscr.keypad(true); // returns special characters as single
                              // key codes

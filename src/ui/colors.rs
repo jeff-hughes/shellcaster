@@ -119,30 +119,78 @@ pub enum ColorType {
 /// Sets up hashmap for ColorTypes in app, initiates color palette, and
 /// sets up ncurses color pairs.
 pub fn set_colors(config: &AppColors) {
-    // if the user has specified any colors to be "terminal" (i.e., to
-    // use their terminal's default foreground and background colors),
-    // then we must tell ncurses to allow the use of those colors.
-    if check_for_terminal(config) {
-        pancurses::use_default_colors();
-    }
+    pancurses::start_color(); // allows colours if available
+    if pancurses::has_colors() {
+        // if the user has specified any colors to be "terminal" (i.e.,
+        // to use their terminal's default foreground and background
+        // colors), then we must tell ncurses to allow the use of those
+        // colors.
+        if check_for_terminal(config) {
+            pancurses::use_default_colors();
+        }
 
-    // check if we have any RGB-specified values
-    // if count_app_colors(config, ColorValue::Rgb(0, 0, 0)) > 0 {
-    // let replace_color_order = vec![ColorValue::Cyan, ColorValue::Magenta, ColorValue::Blue, ColorValue::Green, ColorValue::Yellow, ColorValue::Red, ColorValue::Black, ColorValue::White];
-    // }
-    let mut replace_counter = 8;
-    replace_counter = set_color_pair(ColorType::Normal as u8, &config.normal, replace_counter);
-    replace_counter = set_color_pair(
-        ColorType::HighlightedActive as u8,
-        &config.highlighted_active,
-        replace_counter,
-    );
-    replace_counter = set_color_pair(
-        ColorType::Highlighted as u8,
-        &config.highlighted,
-        replace_counter,
-    );
-    let _ = set_color_pair(ColorType::Error as u8, &config.error, replace_counter);
+        if pancurses::can_change_color() {
+            // set customized colors
+            let mut replace_counter = 10;
+            replace_counter =
+                set_color_pair(ColorType::Normal as u8, &config.normal, replace_counter);
+            replace_counter = set_color_pair(
+                ColorType::HighlightedActive as u8,
+                &config.highlighted_active,
+                replace_counter,
+            );
+            replace_counter = set_color_pair(
+                ColorType::Highlighted as u8,
+                &config.highlighted,
+                replace_counter,
+            );
+            let _ = set_color_pair(ColorType::Error as u8, &config.error, replace_counter);
+        } else {
+            // we have color, but we're limited to the built-in ones
+            pancurses::init_pair(
+                ColorType::Normal as i16,
+                pancurses::COLOR_WHITE,
+                pancurses::COLOR_BLACK,
+            );
+            pancurses::init_pair(
+                ColorType::HighlightedActive as i16,
+                pancurses::COLOR_BLACK,
+                pancurses::COLOR_YELLOW,
+            );
+            pancurses::init_pair(
+                ColorType::Highlighted as i16,
+                pancurses::COLOR_BLACK,
+                pancurses::COLOR_WHITE,
+            );
+            pancurses::init_pair(
+                ColorType::Error as i16,
+                pancurses::COLOR_RED,
+                pancurses::COLOR_BLACK,
+            );
+        }
+    } else {
+        // cap'n, we got no color!
+        pancurses::init_pair(
+            ColorType::Normal as i16,
+            pancurses::COLOR_WHITE,
+            pancurses::COLOR_BLACK,
+        );
+        pancurses::init_pair(
+            ColorType::HighlightedActive as i16,
+            pancurses::COLOR_BLACK,
+            pancurses::COLOR_WHITE,
+        );
+        pancurses::init_pair(
+            ColorType::Highlighted as i16,
+            pancurses::COLOR_BLACK,
+            pancurses::COLOR_WHITE,
+        );
+        pancurses::init_pair(
+            ColorType::Error as i16,
+            pancurses::COLOR_WHITE,
+            pancurses::COLOR_BLACK,
+        );
+    }
 }
 
 /// Check for any app colors that are set to "Terminal", which means that
