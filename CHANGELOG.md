@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.2.0 (2021-05-11)
+- Adds new keybindings for scrolling up/down a quarter of the page,
+  scrolling a full page up/down, and scrolling to the top or bottom
+  (thanks to contributor [a-kenji](https://github.com/a-kenji))
+- Adds support for customizable colors
+    - This is a backwards-compatible change and does not require any
+      modification; however, if you wish to customize the colors after
+      upgrading, you will need to [update your config.toml file](https://github.com/jeff-hughes/shellcaster/blob/master/config.toml)
+      to add the new options under the "colors" section
+- Filenames of downloaded files now include the publication date, which
+  reduces potential conflicts with rebroadcasted episodes
+- Bug fix:
+    - Fixed issue with "removed" episodes reappearing after syncing the
+      podcast again
+- Some minor performance improvements, particularly when loading the app
+
 ## v1.1.0 (2020-12-01)
 - Help menu showing the current keybindings (accessible by pressing
   "?" by default)
