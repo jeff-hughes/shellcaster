@@ -6,6 +6,13 @@ use super::ColorType;
 use super::Panel;
 use crate::types::*;
 
+/// Holds a value for how much to scroll the menu up or down, without
+/// having to deal with positive/negative values.
+pub enum Scroll {
+    Up(u16),
+    Down(u16),
+}
+
 /// Generic struct holding details about a list menu. These menus are
 /// contained by the UI, and hold the list of podcasts or podcast
 /// episodes. They also hold the pancurses window used to display the menu
@@ -31,9 +38,9 @@ where T: Clone + Menuable
     pub panel: Panel,
     pub header: Option<String>,
     pub items: LockVec<T>,
-    pub start_row: i32, // beginning of first row of menu
-    pub top_row: i32,   // top row of text shown in window
-    pub selected: i32,  // which line of text is highlighted
+    pub start_row: u16, // beginning of first row of menu
+    pub top_row: u16,   // top row of text shown in window
+    pub selected: u16,  // which line of text is highlighted
 }
 
 impl<T: Clone + Menuable> Menu<T> {
@@ -49,64 +56,61 @@ impl<T: Clone + Menuable> Menu<T> {
         };
     }
 
-    /// Prints the list of visible items to the pancurses window and
-    /// refreshes it.
-    pub fn init(&mut self) {
-        self.panel.refresh();
+    /// Clears the terminal, and then prints the list of visible items
+    /// to the terminal.
+    pub fn redraw(&mut self) {
+        self.panel.redraw();
         self.update_items();
     }
 
-    /// Prints or reprints the list of visible items to the pancurses
-    /// window and refreshes it.
+    /// Prints the list of visible items to the terminal.
     pub fn update_items(&mut self) {
-        self.panel.erase();
-        self.start_row = self.print_header();
-        if self.selected < self.start_row {
-            self.selected = self.start_row;
-        }
+        // self.start_row = self.print_header();
+        // if self.selected < self.start_row {
+        //     self.selected = self.start_row;
+        // }
 
-        let (map, order) = self.items.borrow();
-        if !order.is_empty() {
-            // update selected item if list has gotten shorter
-            let current_selected = self.get_menu_idx(self.selected) as i32;
-            let list_len = order.len() as i32;
-            if current_selected >= list_len {
-                self.selected = self.selected - (current_selected - list_len) - 1;
-            }
+        // let (map, order) = self.items.borrow();
+        // if !order.is_empty() {
+        //     // update selected item if list has gotten shorter
+        //     let current_selected = self.get_menu_idx(self.selected);
+        //     let list_len = order.len();
+        //     if current_selected >= list_len {
+        //         self.selected = (self.selected as usize - (current_selected - list_len) - 1) as u16;
+        //     }
 
-            // for visible rows, print strings from list
-            for i in self.start_row..self.panel.get_rows() {
-                if let Some(elem_id) = order.get(self.get_menu_idx(i)) {
-                    let elem = map.get(&elem_id).expect("Could not retrieve menu item.");
-                    self.panel
-                        .write_line(i, elem.get_title(self.panel.get_cols() as usize));
+        //     // for visible rows, print strings from list
+        //     for i in self.start_row..self.panel.get_rows() {
+        //         if let Some(elem_id) = order.get(self.get_menu_idx(i)) {
+        //             let elem = map.get(&elem_id).expect("Could not retrieve menu item.");
+        //             self.panel
+        //                 .write_line(i, elem.get_title(self.panel.get_cols() as usize));
 
-                    // this is literally the same logic as
-                    // self.set_attrs(), but it's complaining about
-                    // immutable borrows, so...
-                    let attr = if elem.is_played() {
-                        pancurses::A_NORMAL
-                    } else {
-                        pancurses::A_BOLD
-                    };
-                    self.panel.change_attr(
-                        i,
-                        -1,
-                        self.panel.get_cols() + 3,
-                        attr,
-                        ColorType::Normal,
-                    );
-                } else {
-                    break;
-                }
-            }
-        }
-        self.panel.refresh();
+        //             // this is literally the same logic as
+        //             // self.set_attrs(), but it's complaining about
+        //             // immutable borrows, so...
+        //             let attr = if elem.is_played() {
+        //                 pancurses::A_NORMAL
+        //             } else {
+        //                 pancurses::A_BOLD
+        //             };
+        //             self.panel.change_attr(
+        //                 i as i16,
+        //                 -1,
+        //                 self.panel.get_cols() + 3,
+        //                 attr,
+        //                 ColorType::Normal,
+        //             );
+        //         } else {
+        //             break;
+        //         }
+        //     }
+        // }
     }
 
     /// If a header exists, prints lines of text to the panel to appear
     /// above the menu.
-    fn print_header(&mut self) -> i32 {
+    fn print_header(&mut self) -> u16 {
         if let Some(header) = &self.header {
             return self.panel.write_wrap_line(0, header) + 2;
         } else {
@@ -114,100 +118,121 @@ impl<T: Clone + Menuable> Menu<T> {
         }
     }
 
-    /// Scrolls the menu up or down by `lines` lines. Negative values of
-    /// `lines` will scroll the menu up.
+    /// Scrolls the menu up or down by `lines` lines.
     ///
     /// This function examines the new selected value, ensures it does
-    /// not fall out of bounds, and then updates the pancurses window to
+    /// not fall out of bounds, and then updates the panel to
     /// represent the new visible list.
-    pub fn scroll(&mut self, lines: i32) {
-        let mut old_selected;
-        let checked_lines;
-        let apply_color_played;
-        let get_titles;
-
-        let list_len = self.items.len();
-        if list_len == 0 {
-            return;
-        }
-
-        let n_row = self.panel.get_rows();
-        let max_lines = list_len as i32 + self.start_row;
-        let check_max = |lines| min(lines, max_lines);
-
-        // check the bounds of lines and adjust accordingly
-        if lines.checked_add(self.top_row + n_row).is_some() {
-            checked_lines = lines;
-        } else {
-            checked_lines = lines - self.top_row - n_row;
-        }
-
-        old_selected = self.selected;
-        self.selected += checked_lines;
-
-        // don't allow scrolling past last item in list (if shorter
-        // than self.panel.get_rows())
-        let abs_bottom = min(self.panel.get_rows(), list_len as i32 + self.start_row - 1);
-        if self.selected > abs_bottom {
-            self.selected = abs_bottom;
-        }
-
-        // given a selection, apply correct play status and highlight
-        apply_color_played = |menu: &mut Menu<T>, selected, color: ColorType| {
-            let played = menu
-                .items
-                .map_single_by_index(menu.get_menu_idx(selected), |el| el.is_played())
-                .unwrap_or(false);
-            menu.set_attrs(selected, played, color);
-        };
-
-        // return a vec with sorted titles in range start, end (exclusive)
-        get_titles = |menu: &mut Menu<T>, start, end| {
-            menu.items.map_by_range(start, end, |el| {
-                Some(el.get_title(menu.panel.get_cols() as usize))
-            })
-        };
-
-        // scroll list if necessary:
-        // scroll down
-        if (self.selected) > (n_row - 1) {
-            // for scrolls that don't start at the bottom
-            apply_color_played(self, old_selected, ColorType::Normal);
-            let delta = n_row - old_selected - 1;
-
-            let titles = get_titles(
-                self,
-                (self.top_row + n_row) as usize,
-                (check_max(checked_lines + self.top_row + n_row - delta)) as usize,
-            );
-            for title in titles.into_iter() {
-                self.top_row += 1;
-                self.panel.delete_line(self.start_row);
-                old_selected -= 1;
-                self.panel.delete_line(n_row - 1);
-                self.panel.write_line(n_row - 1, title);
-                apply_color_played(self, n_row - 1, ColorType::Normal);
+    pub fn scroll(&mut self, lines: Scroll) {
+        match lines {
+            Scroll::Up(v) => {
+                if v <= self.selected {
+                    self.selected -= v;
+                } else {
+                    let list_scroll_amount = v - self.selected;
+                    self.top_row = min(0, self.top_row - list_scroll_amount);
+                    self.selected = 0;
+                }
             }
-            self.selected = n_row - 1;
-
-        // scroll up
-        } else if self.selected < self.start_row {
-            let titles = get_titles(
-                self,
-                max(0, self.top_row + self.selected) as usize,
-                (self.top_row) as usize,
-            );
-            for title in titles.into_iter().rev() {
-                self.top_row -= 1;
-                self.panel.insert_line(self.start_row, title);
-                apply_color_played(self, 1, ColorType::Normal);
-                old_selected += 1;
+            Scroll::Down(v) => {
+                let n_row = self.panel.get_rows();
+                if v < (n_row - self.selected) {
+                    self.selected += v;
+                } else {
+                    let list_len = self.items.len() as u16;
+                    let list_scroll_amount = v - (n_row - self.selected - 1);
+                    self.top_row = max(list_scroll_amount, list_len - n_row);
+                    self.selected = n_row - 1;
+                }
             }
-            self.selected = self.start_row;
         }
-        apply_color_played(self, old_selected, ColorType::Normal);
-        apply_color_played(self, self.selected, ColorType::HighlightedActive);
-        self.panel.refresh();
+
+        // let mut old_selected;
+        // let checked_lines;
+        // let apply_color_played;
+        // let get_titles;
+
+        // let list_len = self.items.len();
+        // if list_len == 0 {
+        //     return;
+        // }
+
+        // let n_row = self.panel.get_rows();
+        // let max_lines = list_len as u16 + self.start_row;
+        // let check_max = |lines| min(lines, max_lines);
+
+        // // check the bounds of lines and adjust accordingly
+        // if lines.checked_add((self.top_row + n_row) as i32).is_some() {
+        //     checked_lines = lines;
+        // } else {
+        //     checked_lines = lines - self.top_row - n_row;
+        // }
+
+        // old_selected = self.selected;
+        // self.selected = self.selected.checked_add(checked_lines).unwrap();
+
+        // // don't allow scrolling past last item in list (if shorter
+        // // than self.panel.get_rows())
+        // let abs_bottom = min(self.panel.get_rows(), list_len as u16 + self.start_row - 1);
+        // if self.selected > abs_bottom {
+        //     self.selected = abs_bottom;
+        // }
+
+        // // given a selection, apply correct play status and highlight
+        // apply_color_played = |menu: &mut Menu<T>, selected, color: ColorType| {
+        //     let played = menu
+        //         .items
+        //         .map_single_by_index(menu.get_menu_idx(selected), |el| el.is_played())
+        //         .unwrap_or(false);
+        //     menu.set_attrs(selected, played, color);
+        // };
+
+        // // return a vec with sorted titles in range start, end (exclusive)
+        // get_titles = |menu: &mut Menu<T>, start, end| {
+        //     menu.items.map_by_range(start, end, |el| {
+        //         Some(el.get_title(menu.panel.get_cols() as usize))
+        //     })
+        // };
+
+        // // scroll list if necessary:
+        // // scroll down
+        // if (self.selected) > (n_row - 1) {
+        //     // for scrolls that don't start at the bottom
+        //     apply_color_played(self, old_selected, ColorType::Normal);
+        //     let delta = n_row - old_selected - 1;
+
+        //     let titles = get_titles(
+        //         self,
+        //         (self.top_row + n_row) as usize,
+        //         (check_max(checked_lines + self.top_row + n_row - delta)) as usize,
+        //     );
+        //     for title in titles.into_iter() {
+        //         self.top_row += 1;
+        //         self.panel.delete_line(self.start_row);
+        //         old_selected -= 1;
+        //         self.panel.delete_line(n_row - 1);
+        //         self.panel.write_line(n_row - 1, title);
+        //         apply_color_played(self, n_row - 1, ColorType::Normal);
+        //     }
+        //     self.selected = n_row - 1;
+
+        // // scroll up
+        // } else if self.selected < self.start_row {
+        //     let titles = get_titles(
+        //         self,
+        //         max(0, self.top_row + self.selected) as usize,
+        //         (self.top_row) as usize,
+        //     );
+        //     for title in titles.into_iter().rev() {
+        //         self.top_row -= 1;
+        //         self.panel.insert_line(self.start_row, title);
+        //         apply_color_played(self, 1, ColorType::Normal);
+        //         old_selected += 1;
+        //     }
+        //     self.selected = self.start_row;
+        // }
+        // apply_color_played(self, old_selected, ColorType::Normal);
+        // apply_color_played(self, self.selected, ColorType::HighlightedActive);
     }
 
     /// Sets font style and color of menu item. `index` is the position
@@ -215,31 +240,30 @@ impl<T: Clone + Menuable> Menu<T> {
     /// whether that item has been played or not. `color` is a ColorType
     /// representing the appropriate state of the item (e.g., Normal,
     /// Highlighted).
-    pub fn set_attrs(&mut self, index: i32, played: bool, color: ColorType) {
-        let attr = if played {
-            pancurses::A_NORMAL
-        } else {
-            pancurses::A_BOLD
-        };
-        self.panel
-            .change_attr(index, -1, self.panel.get_cols() + 3, attr, color);
+    pub fn set_attrs(&mut self, index: u16, played: bool, color: ColorType) {
+        // let attr = if played {
+        //     pancurses::A_NORMAL
+        // } else {
+        //     pancurses::A_BOLD
+        // };
+        // self.panel
+        //     .change_attr(index, -1, self.panel.get_cols() + 3, attr, color);
     }
 
     /// Highlights the currently selected item in the menu, based on
     /// whether the menu is currently active or not.
     pub fn highlight_selected(&mut self, active_menu: bool) {
-        let is_played = self
-            .items
-            .map_single_by_index(self.get_menu_idx(self.selected), |el| el.is_played());
+        // let is_played = self
+        //     .items
+        //     .map_single_by_index(self.get_menu_idx(self.selected), |el| el.is_played());
 
-        if let Some(played) = is_played {
-            if active_menu {
-                self.set_attrs(self.selected, played, ColorType::HighlightedActive);
-            } else {
-                self.set_attrs(self.selected, played, ColorType::Highlighted);
-            }
-            self.panel.refresh();
-        }
+        // if let Some(played) = is_played {
+        //     if active_menu {
+        //         self.set_attrs(self.selected, played, ColorType::HighlightedActive);
+        //     } else {
+        //         self.set_attrs(self.selected, played, ColorType::Highlighted);
+        //     }
+        // }
     }
 
     /// Controls how the window changes when it is active (i.e., available
@@ -251,12 +275,11 @@ impl<T: Clone + Menuable> Menu<T> {
             .map_single_by_index(self.get_menu_idx(self.selected), |el| el.is_played())
         {
             self.set_attrs(self.selected, played, ColorType::HighlightedActive);
-            self.panel.refresh();
         }
     }
 
     /// Updates window size
-    pub fn resize(&mut self, n_row: i32, n_col: i32, start_y: i32, start_x: i32) {
+    pub fn resize(&mut self, n_row: u16, n_col: u16, start_y: u16, start_x: u16) {
         self.panel.resize(n_row, n_col, start_y, start_x);
         let n_row = self.panel.get_rows();
 
@@ -273,7 +296,7 @@ impl<T: Clone + Menuable> Menu<T> {
     /// do any checks to ensure `screen_y` is between 0 and `n_rows`,
     /// or that the resulting menu index is between 0 and `n_items`.
     /// It's merely a straight translation.
-    pub fn get_menu_idx(&self, screen_y: i32) -> usize {
+    pub fn get_menu_idx(&self, screen_y: u16) -> usize {
         return (self.top_row + screen_y - self.start_row) as usize;
     }
 }
@@ -304,7 +327,6 @@ impl Menu<Podcast> {
             .map_single_by_index(self.get_menu_idx(self.selected), |el| el.is_played())
         {
             self.set_attrs(self.selected, played, ColorType::Highlighted);
-            self.panel.refresh();
         }
     }
 }
@@ -319,7 +341,6 @@ impl Menu<Episode> {
             .map_single_by_index(self.get_menu_idx(self.selected), |el| el.is_played())
         {
             self.set_attrs(self.selected, played, ColorType::Normal);
-            self.panel.refresh();
         }
     }
 }
@@ -378,169 +399,169 @@ impl Menu<NewEpisode> {
 
 
 // TESTS ----------------------------------------------------------------
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use chrono::Utc;
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use chrono::Utc;
 
-    fn create_menu(n_row: i32, n_col: i32, top_row: i32, selected: i32) -> Menu<Episode> {
-        let titles = vec![
-            "A Very Cool Episode",
-            "This is a very long episode title but we'll get through it together",
-            "An episode with le Unicodé",
-            "How does an episode with emoji sound? 😉",
-            "Here's another title",
-            "Un titre, c'est moi!",
-            "One more just for good measure",
-        ];
-        let mut items = Vec::new();
-        for (i, t) in titles.iter().enumerate() {
-            let played = i % 2 == 0;
-            items.push(Episode {
-                id: i as _,
-                pod_id: 1,
-                title: t.to_string(),
-                url: String::new(),
-                description: String::new(),
-                pubdate: Some(Utc::now()),
-                duration: Some(12345),
-                path: None,
-                played: played,
-            });
-        }
+//     fn create_menu(n_row: u16, n_col: u16, top_row: u16, selected: u16) -> Menu<Episode> {
+//         let titles = vec![
+//             "A Very Cool Episode",
+//             "This is a very long episode title but we'll get through it together",
+//             "An episode with le Unicodé",
+//             "How does an episode with emoji sound? 😉",
+//             "Here's another title",
+//             "Un titre, c'est moi!",
+//             "One more just for good measure",
+//         ];
+//         let mut items = Vec::new();
+//         for (i, t) in titles.iter().enumerate() {
+//             let played = i % 2 == 0;
+//             items.push(Episode {
+//                 id: i as _,
+//                 pod_id: 1,
+//                 title: t.to_string(),
+//                 url: String::new(),
+//                 description: String::new(),
+//                 pubdate: Some(Utc::now()),
+//                 duration: Some(12345),
+//                 path: None,
+//                 played: played,
+//             });
+//         }
 
-        let panel = Panel::new("Episodes".to_string(), 1, n_row, n_col, 0, 0);
-        return Menu {
-            panel: panel,
-            header: None,
-            items: LockVec::new(items),
-            start_row: 0,
-            top_row: top_row,
-            selected: selected,
-        };
-    }
+//         let panel = Panel::new("Episodes".to_string(), 1, n_row, n_col, 0);
+//         return Menu {
+//             panel: panel,
+//             header: None,
+//             items: LockVec::new(items),
+//             start_row: 0,
+//             top_row: top_row,
+//             selected: selected,
+//         };
+//     }
 
-    #[test]
-    fn scroll_up() {
-        let real_rows = 5;
-        let real_cols = 65;
-        let mut menu = create_menu(real_rows + 2, real_cols + 5, 2, 0);
-        menu.update_items();
+//     #[test]
+//     fn scroll_up() {
+//         let real_rows = 5;
+//         let real_cols = 65;
+//         let mut menu = create_menu(real_rows + 2, real_cols + 5, 2, 0);
+//         menu.update_items();
 
-        menu.scroll(-1);
+//         menu.scroll(Scroll::Up(1));
 
-        let expected_top = menu
-            .items
-            .map_single_by_index(1, |ep| ep.get_title(real_cols as usize))
-            .unwrap();
-        let expected_bot = menu
-            .items
-            .map_single_by_index(5, |ep| ep.get_title(real_cols as usize))
-            .unwrap();
+//         let expected_top = menu
+//             .items
+//             .map_single_by_index(1, |ep| ep.get_title(real_cols as usize))
+//             .unwrap();
+//         let expected_bot = menu
+//             .items
+//             .map_single_by_index(5, |ep| ep.get_title(real_cols as usize))
+//             .unwrap();
 
-        assert_eq!(menu.panel.get_row(0).0, expected_top);
-        assert_eq!(menu.panel.get_row(4).0, expected_bot);
-    }
+//         assert_eq!(menu.panel.get_row(0).0, expected_top);
+//         assert_eq!(menu.panel.get_row(4).0, expected_bot);
+//     }
 
-    #[test]
-    fn scroll_down() {
-        let real_rows = 5;
-        let real_cols = 65;
-        let mut menu = create_menu(real_rows + 2, real_cols + 5, 0, 4);
-        menu.update_items();
+//     #[test]
+//     fn scroll_down() {
+//         let real_rows = 5;
+//         let real_cols = 65;
+//         let mut menu = create_menu(real_rows + 2, real_cols + 5, 0, 4);
+//         menu.update_items();
 
-        menu.scroll(1);
+//         menu.scroll(Scroll::Down(1));
 
-        let expected_top = menu
-            .items
-            .map_single_by_index(1, |ep| ep.get_title(real_cols as usize))
-            .unwrap();
-        let expected_bot = menu
-            .items
-            .map_single_by_index(5, |ep| ep.get_title(real_cols as usize))
-            .unwrap();
+//         let expected_top = menu
+//             .items
+//             .map_single_by_index(1, |ep| ep.get_title(real_cols as usize))
+//             .unwrap();
+//         let expected_bot = menu
+//             .items
+//             .map_single_by_index(5, |ep| ep.get_title(real_cols as usize))
+//             .unwrap();
 
-        assert_eq!(menu.panel.get_row(0).0, expected_top);
-        assert_eq!(menu.panel.get_row(4).0, expected_bot);
-    }
+//         assert_eq!(menu.panel.get_row(0).0, expected_top);
+//         assert_eq!(menu.panel.get_row(4).0, expected_bot);
+//     }
 
-    #[test]
-    fn resize_bigger() {
-        let real_rows = 5;
-        let real_cols = 65;
-        let mut menu = create_menu(real_rows + 2, real_cols + 5, 0, 4);
-        menu.update_items();
+//     #[test]
+//     fn resize_bigger() {
+//         let real_rows = 5;
+//         let real_cols = 65;
+//         let mut menu = create_menu(real_rows + 2, real_cols + 5, 0, 4);
+//         menu.update_items();
 
-        menu.resize(real_rows + 2 + 5, real_cols + 5 + 5, 0, 0);
-        menu.update_items();
+//         menu.resize(real_rows + 2 + 5, real_cols + 5 + 5, 0, 0);
+//         menu.update_items();
 
-        assert_eq!(menu.top_row, 0);
-        assert_eq!(menu.selected, 4);
+//         assert_eq!(menu.top_row, 0);
+//         assert_eq!(menu.selected, 4);
 
-        let non_empty: Vec<String> = menu
-            .panel
-            .window
-            .iter()
-            .filter_map(|x| {
-                if x.0.is_empty() {
-                    None
-                } else {
-                    Some(x.0.clone())
-                }
-            })
-            .collect();
-        assert_eq!(non_empty.len(), menu.items.len());
-    }
+//         let non_empty: Vec<String> = menu
+//             .panel
+//             .window
+//             .iter()
+//             .filter_map(|x| {
+//                 if x.0.is_empty() {
+//                     None
+//                 } else {
+//                     Some(x.0.clone())
+//                 }
+//             })
+//             .collect();
+//         assert_eq!(non_empty.len(), menu.items.len());
+//     }
 
-    #[test]
-    fn resize_smaller() {
-        let real_rows = 7;
-        let real_cols = 65;
-        let mut menu = create_menu(real_rows + 2, real_cols + 5, 0, 6);
-        menu.update_items();
+//     #[test]
+//     fn resize_smaller() {
+//         let real_rows = 7;
+//         let real_cols = 65;
+//         let mut menu = create_menu(real_rows + 2, real_cols + 5, 0, 6);
+//         menu.update_items();
 
-        menu.resize(real_rows + 2 - 2, real_cols + 5 - 5, 0, 0);
-        menu.update_items();
+//         menu.resize(real_rows + 2 - 2, real_cols + 5 - 5, 0, 0);
+//         menu.update_items();
 
-        assert_eq!(menu.top_row, 2);
-        assert_eq!(menu.selected, 4);
+//         assert_eq!(menu.top_row, 2);
+//         assert_eq!(menu.selected, 4);
 
-        let non_empty: Vec<String> = menu
-            .panel
-            .window
-            .iter()
-            .filter_map(|x| {
-                if x.0.is_empty() {
-                    None
-                } else {
-                    Some(x.0.clone())
-                }
-            })
-            .collect();
-        assert_eq!(non_empty.len(), (real_rows - 2) as usize);
-    }
+//         let non_empty: Vec<String> = menu
+//             .panel
+//             .window
+//             .iter()
+//             .filter_map(|x| {
+//                 if x.0.is_empty() {
+//                     None
+//                 } else {
+//                     Some(x.0.clone())
+//                 }
+//             })
+//             .collect();
+//         assert_eq!(non_empty.len(), (real_rows - 2) as usize);
+//     }
 
-    #[test]
-    fn chop_accent() {
-        let real_rows = 5;
-        let real_cols = 25;
-        let mut menu = create_menu(real_rows + 2, real_cols + 5, 0, 0);
-        menu.update_items();
+//     #[test]
+//     fn chop_accent() {
+//         let real_rows = 5;
+//         let real_cols = 25;
+//         let mut menu = create_menu(real_rows + 2, real_cols + 5, 0, 0);
+//         menu.update_items();
 
-        let expected = "An episode with le Unicod".to_string();
+//         let expected = "An episode with le Unicod".to_string();
 
-        assert_eq!(menu.panel.get_row(2).0, expected);
-    }
+//         assert_eq!(menu.panel.get_row(2).0, expected);
+//     }
 
-    #[test]
-    fn chop_emoji() {
-        let real_rows = 5;
-        let real_cols = 38;
-        let mut menu = create_menu(real_rows + 2, real_cols + 5, 0, 0);
-        menu.update_items();
+//     #[test]
+//     fn chop_emoji() {
+//         let real_rows = 5;
+//         let real_cols = 38;
+//         let mut menu = create_menu(real_rows + 2, real_cols + 5, 0, 0);
+//         menu.update_items();
 
-        let expected = "How does an episode with emoji sound? ".to_string();
+//         let expected = "How does an episode with emoji sound? ".to_string();
 
-        assert_eq!(menu.panel.get_row(3).0, expected);
-    }
-}
+//         assert_eq!(menu.panel.get_row(3).0, expected);
+//     }
+// }

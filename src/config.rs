@@ -25,11 +25,11 @@ pub const EPISODE_PUBDATE_LENGTH: usize = 60;
 
 // How many columns we need (total terminal window width) before we
 // display the details panel
-pub const DETAILS_PANEL_LENGTH: i32 = 135;
+pub const DETAILS_PANEL_LENGTH: u16 = 135;
 
 // How many lines will be scrolled by the big scroll,
 // in relation to the rows eg: 4 = 1/4 of the screen
-pub const BIG_SCROLL_AMOUNT: i32 = 4;
+pub const BIG_SCROLL_AMOUNT: u16 = 4;
 
 
 /// Identifies the user's selection for what to do with new episodes

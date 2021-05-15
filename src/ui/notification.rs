@@ -1,7 +1,8 @@
+use std::io;
 use std::time::{Duration, Instant};
 
 use super::ColorType;
-use pancurses::{Input, Window};
+use crossterm::{cursor, queue, style};
 
 /// Holds details of a notification message.
 #[derive(Debug, Clone, PartialEq)]
@@ -36,9 +37,9 @@ impl Notification {
 /// not necessarily.
 #[derive(Debug)]
 pub struct NotifWin {
-    window: Window,
-    total_rows: i32,
-    total_cols: i32,
+    start_y: u16,
+    total_rows: u16,
+    total_cols: u16,
     msg_stack: Vec<Notification>,
     persistent_msg: Option<Notification>,
     current_msg: Option<Notification>,
@@ -46,10 +47,9 @@ pub struct NotifWin {
 
 impl NotifWin {
     /// Creates a new NotifWin.
-    pub fn new(total_rows: i32, total_cols: i32) -> Self {
-        let win = pancurses::newwin(1, total_cols, total_rows - 1, 0);
+    pub fn new(start_y: u16, total_rows: u16, total_cols: u16) -> Self {
         return Self {
-            window: win,
+            start_y: start_y,
             total_rows: total_rows,
             total_cols: total_cols,
             msg_stack: Vec::new(),
@@ -60,10 +60,19 @@ impl NotifWin {
 
     /// Initiates the window -- primarily, sets the background on the
     /// window.
-    pub fn init(&mut self) {
-        self.window
-            .bkgd(pancurses::ColorPair(ColorType::Normal as u8));
-        self.window.refresh();
+    pub fn redraw(&mut self) {
+        // clear the panel
+        // TODO: Set the background color first
+        let empty = vec![" "; self.total_cols as usize];
+        let empty_string = empty.join("");
+        for r in 0..(self.total_rows - 1) {
+            queue!(
+                io::stdout(),
+                cursor::MoveTo(0, self.start_y + r),
+                style::Print(&empty_string),
+            )
+            .unwrap();
+        }
     }
 
     /// Checks if the current notification needs to be changed, and
@@ -105,10 +114,7 @@ impl NotifWin {
             } else {
                 // otherwise, there was a notification before but there
                 // isn't now, so erase
-                self.window.erase();
-                self.window
-                    .bkgdset(pancurses::ColorPair(ColorType::Normal as u8));
-                self.window.refresh();
+                self.redraw();
                 self.current_msg = None;
             }
         }
@@ -119,100 +125,101 @@ impl NotifWin {
     /// input line. This returns the user's input; if the user cancels
     /// their input, the String will be empty.
     pub fn input_notif(&self, prefix: &str) -> String {
-        self.window.mv(self.total_rows - 1, 0);
-        self.window.addstr(&prefix);
-        self.window.keypad(true);
-        self.window.refresh();
-        pancurses::curs_set(2);
+        // self.window.mv(self.total_rows - 1, 0);
+        // self.window.addstr(&prefix);
+        // self.window.keypad(true);
+        // self.window.refresh();
+        // pancurses::curs_set(2);
 
-        let mut inputs = String::new();
-        let mut cancelled = false;
+        // let mut inputs = String::new();
+        // let mut cancelled = false;
 
-        let min_x = prefix.len() as i32;
-        let mut current_x = prefix.len() as i32;
-        let mut cursor_x = prefix.len() as i32;
-        loop {
-            match self.window.getch() {
-                // Cancel input
-                Some(Input::KeyExit) | Some(Input::Character('\u{1b}')) => {
-                    cancelled = true;
-                    break;
-                }
-                // Complete input
-                Some(Input::KeyEnter) | Some(Input::Character('\n')) => {
-                    break;
-                }
-                Some(Input::KeyBackspace) | Some(Input::Character('\u{7f}')) => {
-                    if current_x > min_x {
-                        current_x -= 1;
-                        cursor_x -= 1;
-                        let _ = inputs.remove((cursor_x as usize) - prefix.len());
-                        self.window.mv(0, cursor_x);
-                        self.window.delch();
-                    }
-                }
-                Some(Input::KeyDC) => {
-                    if cursor_x < current_x {
-                        let _ = inputs.remove((cursor_x as usize) - prefix.len());
-                        self.window.delch();
-                    }
-                }
-                Some(Input::KeyLeft) => {
-                    if cursor_x > min_x {
-                        cursor_x -= 1;
-                        self.window.mv(0, cursor_x);
-                    }
-                }
-                Some(Input::KeyRight) => {
-                    if cursor_x < current_x {
-                        cursor_x += 1;
-                        self.window.mv(0, cursor_x);
-                    }
-                }
-                Some(Input::Character(c)) => {
-                    current_x += 1;
-                    cursor_x += 1;
-                    self.window.insch(c);
-                    self.window.mv(0, cursor_x);
-                    inputs.push(c);
-                }
-                Some(_) => (),
-                None => (),
-            }
-            self.window.refresh();
-        }
+        // let min_x = prefix.len() as i32;
+        // let mut current_x = prefix.len() as i32;
+        // let mut cursor_x = prefix.len() as i32;
+        // loop {
+        //     match self.window.getch() {
+        //         // Cancel input
+        //         Some(Input::KeyExit) | Some(Input::Character('\u{1b}')) => {
+        //             cancelled = true;
+        //             break;
+        //         }
+        //         // Complete input
+        //         Some(Input::KeyEnter) | Some(Input::Character('\n')) => {
+        //             break;
+        //         }
+        //         Some(Input::KeyBackspace) | Some(Input::Character('\u{7f}')) => {
+        //             if current_x > min_x {
+        //                 current_x -= 1;
+        //                 cursor_x -= 1;
+        //                 let _ = inputs.remove((cursor_x as usize) - prefix.len());
+        //                 self.window.mv(0, cursor_x);
+        //                 self.window.delch();
+        //             }
+        //         }
+        //         Some(Input::KeyDC) => {
+        //             if cursor_x < current_x {
+        //                 let _ = inputs.remove((cursor_x as usize) - prefix.len());
+        //                 self.window.delch();
+        //             }
+        //         }
+        //         Some(Input::KeyLeft) => {
+        //             if cursor_x > min_x {
+        //                 cursor_x -= 1;
+        //                 self.window.mv(0, cursor_x);
+        //             }
+        //         }
+        //         Some(Input::KeyRight) => {
+        //             if cursor_x < current_x {
+        //                 cursor_x += 1;
+        //                 self.window.mv(0, cursor_x);
+        //             }
+        //         }
+        //         Some(Input::Character(c)) => {
+        //             current_x += 1;
+        //             cursor_x += 1;
+        //             self.window.insch(c);
+        //             self.window.mv(0, cursor_x);
+        //             inputs.push(c);
+        //         }
+        //         Some(_) => (),
+        //         None => (),
+        //     }
+        //     self.window.refresh();
+        // }
 
-        pancurses::curs_set(0);
-        self.window.clear();
-        self.window.refresh();
+        // pancurses::curs_set(0);
+        // self.window.clear();
+        // self.window.refresh();
 
-        if cancelled {
-            return String::from("");
-        }
-        return inputs;
+        // if cancelled {
+        //     return String::from("");
+        // }
+        // return inputs;
+        return "".to_string();
     }
 
     /// Prints a notification to the window.
     fn display_notif(&self, notif: &Notification) {
-        self.window.erase();
-        self.window.mv(self.total_rows - 1, 0);
-        self.window.attrset(pancurses::A_NORMAL);
-        self.window.addstr(&notif.message);
+        // self.window.erase();
+        // self.window.mv(self.total_rows - 1, 0);
+        // self.window.attrset(pancurses::A_NORMAL);
+        // self.window.addstr(&notif.message);
 
-        if notif.error {
-            self.window
-                .mvchgat(0, 0, -1, pancurses::A_BOLD, ColorType::Error as i16);
-        }
-        self.window.refresh();
+        // if notif.error {
+        //     self.window
+        //         .mvchgat(0, 0, -1, pancurses::A_BOLD, ColorType::Error as i16);
+        // }
+        // self.window.refresh();
     }
 
     /// Adds a notification to the user. `duration` indicates how long
     /// (in milliseconds) this message will remain on screen. Useful for
     /// presenting error messages, among other things.
     pub fn timed_notif(&mut self, message: String, duration: u64, error: bool) {
-        let expiry = Instant::now() + Duration::from_millis(duration);
-        self.msg_stack
-            .push(Notification::new(message, error, Some(expiry)));
+        // let expiry = Instant::now() + Duration::from_millis(duration);
+        // self.msg_stack
+        //     .push(Notification::new(message, error, Some(expiry)));
     }
 
     /// Adds a notification that will stay on screen indefinitely. Must
@@ -220,45 +227,45 @@ impl NotifWin {
     /// notification is already being displayed, this method will
     /// overwrite that message.
     pub fn persistent_notif(&mut self, message: String, error: bool) {
-        let notif = Notification::new(message, error, None);
-        self.persistent_msg = Some(notif.clone());
-        if self.msg_stack.is_empty() {
-            self.display_notif(&notif);
-            self.current_msg = Some(notif);
-        }
+        // let notif = Notification::new(message, error, None);
+        // self.persistent_msg = Some(notif.clone());
+        // if self.msg_stack.is_empty() {
+        //     self.display_notif(&notif);
+        //     self.current_msg = Some(notif);
+        // }
     }
 
     /// Clears any persistent notification that is being displayed. Does
     /// not affect timed notifications, user input notifications, etc.
     pub fn clear_persistent_notif(&mut self) {
-        self.persistent_msg = None;
-        if self.msg_stack.is_empty() {
-            self.window.erase();
-            self.window.refresh();
-            self.current_msg = None;
-        }
+        // self.persistent_msg = None;
+        // if self.msg_stack.is_empty() {
+        //     self.window.erase();
+        //     self.window.refresh();
+        //     self.current_msg = None;
+        // }
     }
 
     /// Updates window size/location
-    pub fn resize(&mut self, total_rows: i32, total_cols: i32) {
-        self.total_rows = total_rows;
-        self.total_cols = total_cols;
+    pub fn resize(&mut self, total_rows: u16, total_cols: u16) {
+        // self.total_rows = total_rows;
+        // self.total_cols = total_cols;
 
-        // apparently pancurses does not implement `wresize()`
-        // from ncurses, so instead we create an entirely new
-        // window every time the terminal is resized...not ideal,
-        // but c'est la vie
-        let oldwin = std::mem::replace(
-            &mut self.window,
-            pancurses::newwin(1, total_cols, total_rows - 1, 0),
-        );
-        oldwin.delwin();
+        // // apparently pancurses does not implement `wresize()`
+        // // from ncurses, so instead we create an entirely new
+        // // window every time the terminal is resized...not ideal,
+        // // but c'est la vie
+        // let oldwin = std::mem::replace(
+        //     &mut self.window,
+        //     pancurses::newwin(1, total_cols, total_rows - 1, 0),
+        // );
+        // oldwin.delwin();
 
-        self.window
-            .bkgdset(pancurses::ColorPair(ColorType::Normal as u8));
-        if let Some(curr) = &self.current_msg {
-            self.display_notif(curr);
-        }
-        self.window.refresh();
+        // self.window
+        //     .bkgdset(pancurses::ColorPair(ColorType::Normal as u8));
+        // if let Some(curr) = &self.current_msg {
+        //     self.display_notif(curr);
+        // }
+        // self.window.refresh();
     }
 }

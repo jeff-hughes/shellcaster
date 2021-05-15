@@ -1,30 +1,38 @@
+use std::io::{self, Write};
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
-#[cfg_attr(not(test), path = "panel.rs")]
-#[cfg_attr(test, path = "mock_panel.rs")]
+use crossterm::{
+    self, cursor,
+    event::{self, Event},
+    execute, style, terminal,
+};
+use lazy_static::lazy_static;
+use regex::Regex;
+
+// #[cfg_attr(not(test), path = "panel.rs")]
+// #[cfg_attr(test, path = "mock_panel.rs")]
 mod panel;
 
 pub mod colors;
 mod menu;
 mod notification;
-mod popup;
+// mod popup;
 
 use self::colors::ColorType;
-use self::menu::Menu;
+use self::menu::{Menu, Scroll};
 use self::notification::NotifWin;
 use self::panel::{Details, Panel};
-use self::popup::PopupWin;
-
-use lazy_static::lazy_static;
-use pancurses::{Input, Window};
-use regex::Regex;
+// use self::popup::PopupWin;
 
 use super::MainMessage;
 use crate::config::Config;
 use crate::keymap::{Keybindings, UserAction};
 use crate::types::*;
+
+/// Amount of time between ticks in the event loop
+const TICK_RATE: u64 = 10;
 
 lazy_static! {
     /// Regex for finding <br/> tags -- also captures any surrounding
@@ -76,16 +84,15 @@ enum ActiveMenu {
 /// the screen.
 #[derive(Debug)]
 pub struct Ui<'a> {
-    stdscr: Window,
-    n_row: i32,
-    n_col: i32,
+    n_row: u16,
+    n_col: u16,
     keymap: &'a Keybindings,
     podcast_menu: Menu<Podcast>,
     episode_menu: Menu<Episode>,
     active_menu: ActiveMenu,
     details_panel: Option<Panel>,
     notif_win: NotifWin,
-    popup_win: PopupWin<'a>,
+    // popup_win: PopupWin<'a>,
 }
 
 impl<'a> Ui<'a> {
@@ -105,7 +112,7 @@ impl<'a> Ui<'a> {
             // any messages at the bottom, check for user input, and
             // then process any messages from the main thread
             loop {
-                ui.notif_win.check_notifs();
+                // ui.notif_win.check_notifs();
 
                 match ui.getch() {
                     UiMsg::Noop => (),
@@ -129,13 +136,15 @@ impl<'a> Ui<'a> {
                             break;
                         }
                         MainMessage::UiSpawnDownloadPopup(episodes, selected) => {
-                            ui.popup_win.spawn_download_win(episodes, selected);
+                            // ui.popup_win.spawn_download_win(episodes, selected);
                         }
                     }
                 }
 
+                io::stdout().flush().unwrap();
+
                 // slight delay to avoid excessive CPU usage
-                thread::sleep(Duration::from_millis(10));
+                thread::sleep(Duration::from_millis(TICK_RATE));
             }
         });
     }
@@ -144,20 +153,17 @@ impl<'a> Ui<'a> {
     /// creates the pancurses window and draws it to the screen, and
     /// returns a UI object for future manipulation.
     pub fn new(config: &'a Config, items: LockVec<Podcast>) -> Ui<'a> {
-        let stdscr = pancurses::initscr();
-
-        // set some options
-        pancurses::cbreak(); // allows characters to be read one by one
-        pancurses::noecho(); // turns off automatic echoing of characters
-                             // to the screen as they are input
-        pancurses::curs_set(0); // turn off cursor
-        stdscr.keypad(true); // returns special characters as single
-                             // key codes
-        stdscr.nodelay(true); // getch() will not wait for user input
+        terminal::enable_raw_mode().expect("Terminal can't run in raw mode.");
+        execute!(
+            io::stdout(),
+            terminal::Clear(terminal::ClearType::All),
+            cursor::Hide
+        )
+        .expect("Can't draw to screen.");
 
         self::colors::set_colors(&config.colors);
 
-        let (n_row, n_col) = stdscr.get_max_yx();
+        let (n_col, n_row) = terminal::size().expect("Can't get terminal size");
         let (pod_col, ep_col, det_col) = Self::calculate_sizes(n_col);
 
         let first_pod = match items.borrow_order().get(0) {
@@ -168,11 +174,10 @@ impl<'a> Ui<'a> {
             None => LockVec::new(Vec::new()),
         };
 
-        let podcast_panel = Panel::new("Podcasts".to_string(), 0, n_row - 1, pod_col, 0, 0);
+        let podcast_panel = Panel::new("Podcasts".to_string(), 0, n_row - 1, pod_col, 0);
         let podcast_menu = Menu::new(podcast_panel, None, items);
 
-        let episode_panel =
-            Panel::new("Episodes".to_string(), 1, n_row - 1, ep_col, 0, pod_col - 1);
+        let episode_panel = Panel::new("Episodes".to_string(), 1, n_row - 1, ep_col, pod_col - 1);
 
         let episode_menu = Menu::new(episode_panel, None, first_pod);
 
@@ -180,18 +185,16 @@ impl<'a> Ui<'a> {
             Some(Self::make_details_panel(
                 n_row - 1,
                 det_col,
-                0,
                 pod_col + ep_col - 2,
             ))
         } else {
             None
         };
 
-        let notif_win = NotifWin::new(n_row, n_col);
-        let popup_win = PopupWin::new(&config.keybindings, n_row, n_col);
+        let notif_win = NotifWin::new(n_row - 1, n_row, n_col);
+        // let popup_win = PopupWin::new(&config.keybindings, n_row, n_col);
 
         return Ui {
-            stdscr: stdscr,
             n_row: n_row,
             n_col: n_col,
             keymap: &config.keybindings,
@@ -200,29 +203,29 @@ impl<'a> Ui<'a> {
             active_menu: ActiveMenu::PodcastMenu,
             details_panel: details_panel,
             notif_win: notif_win,
-            popup_win: popup_win,
+            // popup_win: popup_win,
         };
     }
 
     /// This should be called immediately after creating the UI, in order
     /// to draw everything to the screen.
     pub fn init(&mut self) {
-        self.stdscr.refresh();
-        self.podcast_menu.init();
         self.podcast_menu.activate();
-        self.episode_menu.init();
+        self.podcast_menu.redraw();
+        self.episode_menu.redraw();
 
         if let Some(ref panel) = self.details_panel {
-            panel.refresh();
+            panel.redraw();
         }
         self.update_details_panel();
 
-        self.notif_win.init();
+        self.notif_win.redraw();
 
         // welcome screen if user does not have any podcasts yet
         if self.podcast_menu.items.is_empty() {
-            self.popup_win.spawn_welcome_win();
+            // self.popup_win.spawn_welcome_win();
         }
+        io::stdout().flush().unwrap();
     }
 
     /// Waits for user input and, where necessary, provides UiMsgs
@@ -234,37 +237,37 @@ impl<'a> Ui<'a> {
     /// podcast feed spawns a UI window to capture the feed URL, and only
     /// then passes this data back to the main controller.
     pub fn getch(&mut self) -> UiMsg {
-        match self.stdscr.getch() {
-            Some(Input::KeyResize) => self.resize(),
+        if event::poll(Duration::from_secs(0)).expect("Can't poll for inputs") {
+            match event::read().expect("Can't read inputs") {
+                Event::Resize(_, _) => self.resize(),
+                Event::Key(input) => {
+                    let (curr_pod_id, curr_ep_id) = self.get_current_ids();
 
-            Some(input) => {
-                let (curr_pod_id, curr_ep_id) = self.get_current_ids();
+                    // get rid of the "welcome" window once the podcast list
+                    // is no longer empty
+                    // if self.popup_win.welcome_win && !self.podcast_menu.items.is_empty() {
+                    //     self.popup_win.turn_off_welcome_win();
+                    // }
 
-                // get rid of the "welcome" window once the podcast list
-                // is no longer empty
-                if self.popup_win.welcome_win && !self.podcast_menu.items.is_empty() {
-                    self.popup_win.turn_off_welcome_win();
-                }
+                    // if there is a popup window active (apart from the
+                    // welcome window which takes no input), then
+                    // redirect user input there
+                    // if self.popup_win.is_non_welcome_popup_active() {
+                    //     let popup_msg = self.popup_win.handle_input(input);
 
-                // if there is a popup window active (apart from the
-                // welcome window which takes no input), then
-                // redirect user input there
-                if self.popup_win.is_non_welcome_popup_active() {
-                    let popup_msg = self.popup_win.handle_input(input);
-
-                    // need to check if popup window is still active, as
-                    // handling character input above may involve
-                    // closing the popup window
-                    if !self.popup_win.is_popup_active() {
-                        self.stdscr.refresh();
-                        self.update_menus();
-                        if self.details_panel.is_some() {
-                            self.update_details_panel();
-                        }
-                    }
-                    return popup_msg;
-                } else {
-                    match self.keymap.get_from_input(input) {
+                    //     // need to check if popup window is still active, as
+                    //     // handling character input above may involve
+                    //     // closing the popup window
+                    //     if !self.popup_win.is_popup_active() {
+                    //         self.update_menus();
+                    //         if self.details_panel.is_some() {
+                    //             self.update_details_panel();
+                    //         }
+                    //         io::stdout().flush();
+                    //     }
+                    //     return popup_msg;
+                    // } else {
+                    match self.keymap.get_from_input(input.code) {
                         Some(a @ UserAction::Down)
                         | Some(a @ UserAction::Up)
                         | Some(a @ UserAction::Left)
@@ -368,66 +371,68 @@ impl<'a> Ui<'a> {
                             }
                         }
 
-                        Some(UserAction::Help) => self.popup_win.spawn_help_win(),
+                        // Some(UserAction::Help) => self.popup_win.spawn_help_win(),
+                        Some(UserAction::Help) => (),
 
                         Some(UserAction::Quit) => {
                             return UiMsg::Quit;
                         }
                         None => (),
                     } // end of input match
+                      // }
                 }
+                _ => (),
             }
-            None => (),
-        }; // end of getch() match
+        } // end of poll()
         return UiMsg::Noop;
     }
 
     /// Resize all the windows on the screen and refresh.
     pub fn resize(&mut self) {
-        pancurses::resize_term(0, 0);
-        let (n_row, n_col) = self.stdscr.get_max_yx();
-        self.n_row = n_row;
-        self.n_col = n_col;
+        // pancurses::resize_term(0, 0);
+        // let (n_row, n_col) = self.stdscr.get_max_yx();
+        // self.n_row = n_row;
+        // self.n_col = n_col;
 
-        let (pod_col, ep_col, det_col) = Self::calculate_sizes(n_col);
+        // let (pod_col, ep_col, det_col) = Self::calculate_sizes(n_col);
 
-        self.podcast_menu.resize(n_row - 1, pod_col, 0, 0);
-        self.episode_menu.resize(n_row - 1, ep_col, 0, pod_col - 1);
+        // self.podcast_menu.resize(n_row - 1, pod_col, 0, 0);
+        // self.episode_menu.resize(n_row - 1, ep_col, 0, pod_col - 1);
 
-        if self.details_panel.is_some() {
-            if det_col > 0 {
-                let det = self.details_panel.as_mut().unwrap();
-                det.resize(n_row - 1, det_col, 0, pod_col + ep_col - 2);
-            } else {
-                self.details_panel = None;
-            }
-        } else if det_col > 0 {
-            self.details_panel = Some(Self::make_details_panel(
-                n_row - 1,
-                det_col,
-                0,
-                pod_col + ep_col - 2,
-            ));
-        }
+        // if self.details_panel.is_some() {
+        //     if det_col > 0 {
+        //         let det = self.details_panel.as_mut().unwrap();
+        //         det.resize(n_row - 1, det_col, 0, pod_col + ep_col - 2);
+        //     } else {
+        //         self.details_panel = None;
+        //     }
+        // } else if det_col > 0 {
+        //     self.details_panel = Some(Self::make_details_panel(
+        //         n_row - 1,
+        //         det_col,
+        //         0,
+        //         pod_col + ep_col - 2,
+        //     ));
+        // }
 
-        self.stdscr.refresh();
-        self.update_menus();
+        // self.stdscr.refresh();
+        // self.update_menus();
 
-        match self.active_menu {
-            ActiveMenu::PodcastMenu => self.podcast_menu.activate(),
-            ActiveMenu::EpisodeMenu => {
-                self.podcast_menu.activate();
-                self.episode_menu.activate();
-            }
-        }
+        // match self.active_menu {
+        //     ActiveMenu::PodcastMenu => self.podcast_menu.activate(),
+        //     ActiveMenu::EpisodeMenu => {
+        //         self.podcast_menu.activate();
+        //         self.episode_menu.activate();
+        //     }
+        // }
 
-        if self.details_panel.is_some() {
-            self.update_details_panel();
-        }
+        // if self.details_panel.is_some() {
+        //     self.update_details_panel();
+        // }
 
-        self.popup_win.resize(n_row, n_col);
-        self.notif_win.resize(n_row, n_col);
-        self.stdscr.refresh();
+        // self.popup_win.resize(n_row, n_col);
+        // self.notif_win.resize(n_row, n_col);
+        // self.stdscr.refresh();
     }
 
     /// Move the menu cursor around and refresh menus when necessary.
@@ -439,11 +444,11 @@ impl<'a> Ui<'a> {
     ) {
         match action {
             UserAction::Down => {
-                self.scroll_current_window(curr_pod_id, 1);
+                self.scroll_current_window(curr_pod_id, Scroll::Down(1));
             }
 
             UserAction::Up => {
-                self.scroll_current_window(curr_pod_id, -1);
+                self.scroll_current_window(curr_pod_id, Scroll::Up(1));
             }
 
             UserAction::Left => {
@@ -458,7 +463,7 @@ impl<'a> Ui<'a> {
                     }
                 }
                 if let Some(det) = &self.details_panel {
-                    det.refresh();
+                    det.redraw();
                 }
             }
 
@@ -474,38 +479,38 @@ impl<'a> Ui<'a> {
                     }
                 }
                 if let Some(det) = &self.details_panel {
-                    det.refresh();
+                    det.redraw();
                 }
             }
 
             UserAction::PageUp => {
-                self.scroll_current_window(curr_pod_id, -self.n_row + 3);
+                self.scroll_current_window(curr_pod_id, Scroll::Up(self.n_row + 3));
             }
 
             UserAction::PageDown => {
-                self.scroll_current_window(curr_pod_id, self.n_row - 3);
+                self.scroll_current_window(curr_pod_id, Scroll::Down(self.n_row - 3));
             }
 
             UserAction::BigUp => {
                 self.scroll_current_window(
                     curr_pod_id,
-                    -self.n_row / crate::config::BIG_SCROLL_AMOUNT,
+                    Scroll::Up(self.n_row / crate::config::BIG_SCROLL_AMOUNT),
                 );
             }
 
             UserAction::BigDown => {
                 self.scroll_current_window(
                     curr_pod_id,
-                    self.n_row / crate::config::BIG_SCROLL_AMOUNT,
+                    Scroll::Down(self.n_row / crate::config::BIG_SCROLL_AMOUNT),
                 );
             }
 
             UserAction::GoTop => {
-                self.scroll_current_window(curr_pod_id, -i32::MAX);
+                self.scroll_current_window(curr_pod_id, Scroll::Up(u16::MAX));
             }
 
             UserAction::GoBot => {
-                self.scroll_current_window(curr_pod_id, i32::MAX);
+                self.scroll_current_window(curr_pod_id, Scroll::Down(u16::MAX));
             }
 
             // this shouldn't occur because we only trigger this
@@ -519,7 +524,7 @@ impl<'a> Ui<'a> {
     /// the specified amount and refreshes
     /// the window.
     /// Positive Scroll is down.
-    pub fn scroll_current_window(&mut self, pod_id: Option<i64>, scroll: i32) {
+    pub fn scroll_current_window(&mut self, pod_id: Option<i64>, scroll: Scroll) {
         match self.active_menu {
             ActiveMenu::PodcastMenu => {
                 if pod_id.is_some() {
@@ -678,17 +683,17 @@ impl<'a> Ui<'a> {
     /// the screen is too small to display the details panel, this size
     /// will be 0
     #[allow(clippy::useless_let_if_seq)]
-    pub fn calculate_sizes(n_col: i32) -> (i32, i32, i32) {
+    pub fn calculate_sizes(n_col: u16) -> (u16, u16, u16) {
         let pod_col;
         let ep_col;
         let det_col;
         if n_col > crate::config::DETAILS_PANEL_LENGTH {
-            pod_col = n_col / 3;
-            ep_col = n_col / 3 + 1;
-            det_col = n_col - pod_col - ep_col + 2;
+            pod_col = (n_col + 2) / 3;
+            ep_col = (n_col + 2) / 3;
+            det_col = n_col + 2 - pod_col - ep_col;
         } else {
-            pod_col = n_col / 2;
-            ep_col = n_col - pod_col + 1;
+            pod_col = (n_col + 1) / 2;
+            ep_col = n_col + 1 - pod_col;
             det_col = 0;
         }
         return (pod_col, ep_col, det_col);
@@ -800,8 +805,8 @@ impl<'a> Ui<'a> {
     }
 
     /// Create a details panel.
-    pub fn make_details_panel(n_row: i32, n_col: i32, start_y: i32, start_x: i32) -> Panel {
-        return Panel::new("Details".to_string(), 2, n_row, n_col, start_y, start_x);
+    pub fn make_details_panel(n_row: u16, n_col: u16, start_x: u16) -> Panel {
+        return Panel::new("Details".to_string(), 2, n_row, n_col, start_x);
     }
 
     /// Updates the details panel with information about the current
@@ -810,7 +815,6 @@ impl<'a> Ui<'a> {
         if self.details_panel.is_some() {
             let (curr_pod_id, curr_ep_id) = self.get_current_ids();
             let det = self.details_panel.as_mut().unwrap();
-            det.erase();
             if let Some(pod_id) = curr_pod_id {
                 if let Some(ep_id) = curr_ep_id {
                     // get a couple details from the current podcast
@@ -864,8 +868,6 @@ impl<'a> Ui<'a> {
                         };
                         det.details_template(0, details);
                     };
-
-                    det.refresh();
                 }
             }
         }
