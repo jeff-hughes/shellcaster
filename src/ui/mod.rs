@@ -18,13 +18,13 @@ mod panel;
 pub mod colors;
 mod menu;
 mod notification;
-// mod popup;
+mod popup;
 
 use self::colors::ColorType;
 use self::menu::{Menu, Scroll};
 use self::notification::NotifWin;
 use self::panel::{Details, Panel};
-// use self::popup::PopupWin;
+use self::popup::PopupWin;
 
 use super::MainMessage;
 use crate::config::Config;
@@ -92,7 +92,7 @@ pub struct Ui<'a> {
     active_menu: ActiveMenu,
     details_panel: Option<Panel>,
     notif_win: NotifWin,
-    // popup_win: PopupWin<'a>,
+    popup_win: PopupWin<'a>,
 }
 
 impl<'a> Ui<'a> {
@@ -136,7 +136,7 @@ impl<'a> Ui<'a> {
                             break;
                         }
                         MainMessage::UiSpawnDownloadPopup(episodes, selected) => {
-                            // ui.popup_win.spawn_download_win(episodes, selected);
+                            ui.popup_win.spawn_download_win(episodes, selected);
                         }
                     }
                 }
@@ -192,7 +192,7 @@ impl<'a> Ui<'a> {
         };
 
         let notif_win = NotifWin::new(n_row - 1, n_row, n_col);
-        // let popup_win = PopupWin::new(&config.keybindings, n_row, n_col);
+        let popup_win = PopupWin::new(&config.keybindings, n_row, n_col);
 
         return Ui {
             n_row: n_row,
@@ -203,7 +203,7 @@ impl<'a> Ui<'a> {
             active_menu: ActiveMenu::PodcastMenu,
             details_panel: details_panel,
             notif_win: notif_win,
-            // popup_win: popup_win,
+            popup_win: popup_win,
         };
     }
 
@@ -218,9 +218,9 @@ impl<'a> Ui<'a> {
         self.notif_win.redraw();
 
         // welcome screen if user does not have any podcasts yet
-        // if self.podcast_menu.items.is_empty() {
-        //     self.popup_win.spawn_welcome_win();
-        // }
+        if self.podcast_menu.items.is_empty() {
+            self.popup_win.spawn_welcome_win();
+        }
         io::stdout().flush().unwrap();
     }
 
@@ -241,141 +241,145 @@ impl<'a> Ui<'a> {
 
                     // get rid of the "welcome" window once the podcast list
                     // is no longer empty
-                    // if self.popup_win.welcome_win && !self.podcast_menu.items.is_empty() {
-                    //     self.popup_win.turn_off_welcome_win();
-                    // }
+                    if self.popup_win.welcome_win && !self.podcast_menu.items.is_empty() {
+                        self.popup_win.turn_off_welcome_win();
+                    }
 
                     // if there is a popup window active (apart from the
                     // welcome window which takes no input), then
                     // redirect user input there
-                    // if self.popup_win.is_non_welcome_popup_active() {
-                    //     let popup_msg = self.popup_win.handle_input(input);
+                    if self.popup_win.is_non_welcome_popup_active() {
+                        let popup_msg = self.popup_win.handle_input(input);
 
-                    //     // need to check if popup window is still active, as
-                    //     // handling character input above may involve
-                    //     // closing the popup window
-                    //     if !self.popup_win.is_popup_active() {
-                    //         self.update_menus();
-                    //         if self.details_panel.is_some() {
-                    //             self.update_details_panel();
-                    //         }
-                    //         io::stdout().flush();
-                    //     }
-                    //     return popup_msg;
-                    // } else {
-                    match self.keymap.get_from_input(input) {
-                        Some(a @ UserAction::Down)
-                        | Some(a @ UserAction::Up)
-                        | Some(a @ UserAction::Left)
-                        | Some(a @ UserAction::Right)
-                        | Some(a @ UserAction::PageUp)
-                        | Some(a @ UserAction::PageDown)
-                        | Some(a @ UserAction::BigUp)
-                        | Some(a @ UserAction::BigDown)
-                        | Some(a @ UserAction::GoTop)
-                        | Some(a @ UserAction::GoBot) => {
-                            self.move_cursor(a, curr_pod_id, curr_ep_id)
-                        }
-
-                        Some(UserAction::AddFeed) => {
-                            let url = &self.spawn_input_notif("Feed URL: ");
-                            if !url.is_empty() {
-                                return UiMsg::AddFeed(url.to_string());
+                        // need to check if popup window is still active, as
+                        // handling character input above may involve
+                        // closing the popup window
+                        if !self.popup_win.is_popup_active() {
+                            self.update_menus();
+                            if self.details_panel.is_some() {
+                                self.update_details_panel();
                             }
+                            io::stdout().flush().unwrap();
                         }
-
-                        Some(UserAction::Sync) => {
-                            if let Some(pod_id) = curr_pod_id {
-                                return UiMsg::Sync(pod_id);
+                        return popup_msg;
+                    } else {
+                        match self.keymap.get_from_input(input) {
+                            Some(a @ UserAction::Down)
+                            | Some(a @ UserAction::Up)
+                            | Some(a @ UserAction::Left)
+                            | Some(a @ UserAction::Right)
+                            | Some(a @ UserAction::PageUp)
+                            | Some(a @ UserAction::PageDown)
+                            | Some(a @ UserAction::BigUp)
+                            | Some(a @ UserAction::BigDown)
+                            | Some(a @ UserAction::GoTop)
+                            | Some(a @ UserAction::GoBot) => {
+                                self.move_cursor(a, curr_pod_id, curr_ep_id)
                             }
-                        }
-                        Some(UserAction::SyncAll) => {
-                            if curr_pod_id.is_some() {
-                                return UiMsg::SyncAll;
-                            }
-                        }
 
-                        Some(UserAction::Play) => {
-                            if let Some(pod_id) = curr_pod_id {
-                                if let Some(ep_id) = curr_ep_id {
-                                    return UiMsg::Play(pod_id, ep_id);
+                            Some(UserAction::AddFeed) => {
+                                let url = &self.spawn_input_notif("Feed URL: ");
+                                if !url.is_empty() {
+                                    return UiMsg::AddFeed(url.to_string());
                                 }
                             }
-                        }
-                        Some(UserAction::MarkPlayed) => match self.active_menu {
-                            ActiveMenu::PodcastMenu => (),
-                            ActiveMenu::EpisodeMenu => {
-                                if let Some(ui_msg) = self.mark_played(curr_pod_id, curr_ep_id) {
-                                    return ui_msg;
+
+                            Some(UserAction::Sync) => {
+                                if let Some(pod_id) = curr_pod_id {
+                                    return UiMsg::Sync(pod_id);
                                 }
                             }
-                        },
-                        Some(UserAction::MarkAllPlayed) => {
-                            if let Some(ui_msg) = self.mark_all_played(curr_pod_id) {
-                                return ui_msg;
-                            }
-                        }
-
-                        Some(UserAction::Download) => {
-                            if let Some(pod_id) = curr_pod_id {
-                                if let Some(ep_id) = curr_ep_id {
-                                    return UiMsg::Download(pod_id, ep_id);
+                            Some(UserAction::SyncAll) => {
+                                if curr_pod_id.is_some() {
+                                    return UiMsg::SyncAll;
                                 }
                             }
-                        }
-                        Some(UserAction::DownloadAll) => {
-                            if let Some(pod_id) = curr_pod_id {
-                                return UiMsg::DownloadAll(pod_id);
-                            }
-                        }
 
-                        Some(UserAction::Delete) => match self.active_menu {
-                            ActiveMenu::PodcastMenu => (),
-                            ActiveMenu::EpisodeMenu => {
+                            Some(UserAction::Play) => {
                                 if let Some(pod_id) = curr_pod_id {
                                     if let Some(ep_id) = curr_ep_id {
-                                        return UiMsg::Delete(pod_id, ep_id);
+                                        return UiMsg::Play(pod_id, ep_id);
                                     }
                                 }
                             }
-                        },
-                        Some(UserAction::DeleteAll) => {
-                            if let Some(pod_id) = curr_pod_id {
-                                return UiMsg::DeleteAll(pod_id);
-                            }
-                        }
-
-                        Some(UserAction::Remove) => match self.active_menu {
-                            ActiveMenu::PodcastMenu => {
-                                if let Some(ui_msg) = self.remove_podcast(curr_pod_id) {
+                            Some(UserAction::MarkPlayed) => match self.active_menu {
+                                ActiveMenu::PodcastMenu => (),
+                                ActiveMenu::EpisodeMenu => {
+                                    if let Some(ui_msg) = self.mark_played(curr_pod_id, curr_ep_id)
+                                    {
+                                        return ui_msg;
+                                    }
+                                }
+                            },
+                            Some(UserAction::MarkAllPlayed) => {
+                                if let Some(ui_msg) = self.mark_all_played(curr_pod_id) {
                                     return ui_msg;
                                 }
                             }
-                            ActiveMenu::EpisodeMenu => {
-                                if let Some(ui_msg) = self.remove_episode(curr_pod_id, curr_ep_id) {
+
+                            Some(UserAction::Download) => {
+                                if let Some(pod_id) = curr_pod_id {
+                                    if let Some(ep_id) = curr_ep_id {
+                                        return UiMsg::Download(pod_id, ep_id);
+                                    }
+                                }
+                            }
+                            Some(UserAction::DownloadAll) => {
+                                if let Some(pod_id) = curr_pod_id {
+                                    return UiMsg::DownloadAll(pod_id);
+                                }
+                            }
+
+                            Some(UserAction::Delete) => match self.active_menu {
+                                ActiveMenu::PodcastMenu => (),
+                                ActiveMenu::EpisodeMenu => {
+                                    if let Some(pod_id) = curr_pod_id {
+                                        if let Some(ep_id) = curr_ep_id {
+                                            return UiMsg::Delete(pod_id, ep_id);
+                                        }
+                                    }
+                                }
+                            },
+                            Some(UserAction::DeleteAll) => {
+                                if let Some(pod_id) = curr_pod_id {
+                                    return UiMsg::DeleteAll(pod_id);
+                                }
+                            }
+
+                            Some(UserAction::Remove) => match self.active_menu {
+                                ActiveMenu::PodcastMenu => {
+                                    if let Some(ui_msg) = self.remove_podcast(curr_pod_id) {
+                                        return ui_msg;
+                                    }
+                                }
+                                ActiveMenu::EpisodeMenu => {
+                                    if let Some(ui_msg) =
+                                        self.remove_episode(curr_pod_id, curr_ep_id)
+                                    {
+                                        return ui_msg;
+                                    }
+                                }
+                            },
+                            Some(UserAction::RemoveAll) => {
+                                let ui_msg = match self.active_menu {
+                                    ActiveMenu::PodcastMenu => self.remove_podcast(curr_pod_id),
+                                    ActiveMenu::EpisodeMenu => {
+                                        self.remove_all_episodes(curr_pod_id)
+                                    }
+                                };
+                                if let Some(ui_msg) = ui_msg {
                                     return ui_msg;
                                 }
                             }
-                        },
-                        Some(UserAction::RemoveAll) => {
-                            let ui_msg = match self.active_menu {
-                                ActiveMenu::PodcastMenu => self.remove_podcast(curr_pod_id),
-                                ActiveMenu::EpisodeMenu => self.remove_all_episodes(curr_pod_id),
-                            };
-                            if let Some(ui_msg) = ui_msg {
-                                return ui_msg;
+
+                            Some(UserAction::Help) => self.popup_win.spawn_help_win(),
+
+                            Some(UserAction::Quit) => {
+                                return UiMsg::Quit;
                             }
-                        }
-
-                        // Some(UserAction::Help) => self.popup_win.spawn_help_win(),
-                        Some(UserAction::Help) => (),
-
-                        Some(UserAction::Quit) => {
-                            return UiMsg::Quit;
-                        }
-                        None => (),
-                    } // end of input match
-                      // }
+                            None => (),
+                        } // end of input match
+                    }
                 }
                 _ => (),
             }
@@ -510,10 +514,8 @@ impl<'a> Ui<'a> {
         }
     }
 
-    /// Scrolls the current active menu by
-    /// the specified amount and refreshes
-    /// the window.
-    /// Positive Scroll is down.
+    /// Scrolls the current active menu by the specified amount and
+    /// refreshes the window.
     pub fn scroll_current_window(&mut self, pod_id: Option<i64>, scroll: Scroll) {
         match self.active_menu {
             ActiveMenu::PodcastMenu => {
@@ -772,14 +774,14 @@ impl<'a> Ui<'a> {
     /// Forces the menus to check the list of podcasts/episodes again and
     /// update.
     pub fn update_menus(&mut self) {
-        self.podcast_menu.update_items();
+        self.podcast_menu.redraw();
 
         self.episode_menu.items = if !self.podcast_menu.items.is_empty() {
             self.podcast_menu.get_episodes()
         } else {
             LockVec::new(Vec::new())
         };
-        self.episode_menu.update_items();
+        self.episode_menu.redraw();
 
         match self.active_menu {
             ActiveMenu::PodcastMenu => self.podcast_menu.highlight_selected(true),
