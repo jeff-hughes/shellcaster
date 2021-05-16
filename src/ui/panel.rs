@@ -123,114 +123,204 @@ impl Panel {
 
     /// Writes a line of text to the window. Note that this does not do
     /// checking for line length, so strings that are too long will end
-    /// up wrapping and may mess up the format. use `write_wrap_line()`
+    /// up wrapping and may mess up the format. Use `write_wrap_line()`
     /// if you need line wrapping.
-    pub fn write_line(&self, y: u16, string: String) {
+    pub fn write_line(&self, y: u16, string: String, style: Option<style::ContentStyle>) {
+        match style {
+            Some(style) => {
+                let styled = style.apply(string);
+                queue!(
+                    io::stdout(),
+                    cursor::MoveTo(self.abs_x(0), self.abs_y(y as i16)),
+                    style::PrintStyledContent(styled)
+                )
+                .unwrap();
+            }
+            None => {
+                queue!(
+                    io::stdout(),
+                    cursor::MoveTo(self.abs_x(0), self.abs_y(y as i16)),
+                    style::Print(string)
+                )
+                .unwrap();
+            }
+        }
+    }
+
+    /// Writes a line of styled text to the window, representing a key
+    /// and value. The text will be shown as "key: value", and styled
+    /// with the provided styles. Note that this does not do checking
+    /// for line length, so strings that are too long will end up
+    /// wrapping and may mess up the format. Use `write_wrap_line()` if
+    /// you need line wrapping.
+    pub fn write_key_value_line(
+        &self,
+        y: u16,
+        mut key: String,
+        mut value: String,
+        key_style: Option<style::ContentStyle>,
+        value_style: Option<style::ContentStyle>,
+    ) {
+        key.push(':');
+        value.insert(0, ' ');
+
         queue!(
             io::stdout(),
-            cursor::MoveTo(self.abs_x(0), self.abs_y(y as i16)),
-            style::Print(string)
+            cursor::MoveTo(self.abs_x(0), self.abs_y(y as i16))
         )
         .unwrap();
+
+        match key_style {
+            Some(kstyle) => {
+                let styled = kstyle.apply(key);
+                queue!(io::stdout(), style::PrintStyledContent(styled)).unwrap();
+            }
+            None => {
+                queue!(io::stdout(), style::Print(key)).unwrap();
+            }
+        }
+        match value_style {
+            Some(vstyle) => {
+                let styled = vstyle.apply(value);
+                queue!(io::stdout(), style::PrintStyledContent(styled)).unwrap();
+            }
+            None => {
+                queue!(io::stdout(), style::Print(value)).unwrap();
+            }
+        }
     }
 
     /// Writes one or more lines of text from a String, word wrapping
     /// when necessary. `start_y` refers to the row to start at (word
     /// wrapping makes it unknown where text will end). Returns the row
     /// on which the text ended.
-    pub fn write_wrap_line(&self, start_y: u16, string: &str) -> u16 {
-        // let mut row = start_y;
-        // let max_row = self.get_rows();
-        // let wrapper = textwrap::wrap(string, self.get_cols() as usize);
-        // for line in wrapper {
-        //     self.window.mvaddstr(self.abs_y(row), self.abs_x(0), line);
-        //     row += 1;
+    pub fn write_wrap_line(
+        &self,
+        start_y: u16,
+        string: &str,
+        style: Option<style::ContentStyle>,
+    ) -> u16 {
+        let mut row = start_y;
+        let max_row = self.get_rows();
+        let wrapper = textwrap::wrap(string, self.get_cols() as usize);
+        for line in wrapper {
+            match style {
+                Some(style) => {
+                    let styled = style.apply(line);
+                    queue!(
+                        io::stdout(),
+                        cursor::MoveTo(self.abs_x(0), self.abs_y(row as i16)),
+                        style::PrintStyledContent(styled)
+                    )
+                    .unwrap();
+                }
+                None => {
+                    queue!(
+                        io::stdout(),
+                        cursor::MoveTo(self.abs_x(0), self.abs_y(row as i16)),
+                        style::Print(line)
+                    )
+                    .unwrap();
+                }
+            }
+            row += 1;
 
-        //     if row >= max_row {
-        //         break;
-        //     }
-        // }
-        // return row - 1;
-        return 0;
+            if row >= max_row {
+                break;
+            }
+        }
+        return row - 1;
     }
 
     /// Write the specific template used for the details panel. This is
     /// not the most elegant code, but it works.
     pub fn details_template(&self, start_y: u16, details: Details) {
-        // let mut row = start_y - 1;
+        let mut row = start_y;
+        let bold = style::ContentStyle::new().attribute(style::Attribute::Bold);
 
-        // self.window.attron(Attribute::Bold);
-        // // podcast title
-        // match details.pod_title {
-        //     Some(t) => row = self.write_wrap_line(row + 1, &t),
-        //     None => row = self.write_wrap_line(row + 1, "No title"),
-        // }
+        // podcast title
+        match details.pod_title {
+            Some(t) => row = self.write_wrap_line(row, &t, Some(bold)),
+            None => row = self.write_wrap_line(row, "No title", Some(bold)),
+        }
 
-        // // episode title
-        // match details.ep_title {
-        //     Some(t) => row = self.write_wrap_line(row + 1, &t),
-        //     None => row = self.write_wrap_line(row + 1, "No title"),
-        // }
-        // self.window.attroff(Attribute::Bold);
+        // episode title
+        match details.ep_title {
+            Some(t) => row = self.write_wrap_line(row + 1, &t, Some(bold)),
+            None => row = self.write_wrap_line(row + 1, "No title", Some(bold)),
+        }
 
-        // row += 1; // blank line
+        row += 1; // blank line
 
-        // // published date
-        // if let Some(date) = details.pubdate {
-        //     let new_row = self.write_wrap_line(
-        //         row + 1,
-        //         &format!("Published: {}", date.format("%B %-d, %Y")),
-        //     );
-        //     self.change_attr(row + 1, 0, 10, pancurses::A_UNDERLINE, ColorType::Normal);
-        //     row = new_row;
-        // }
+        // published date
+        if let Some(date) = details.pubdate {
+            self.write_key_value_line(
+                row + 1,
+                "Published".to_string(),
+                format!("{}", date.format("%B %-d, %Y")),
+                Some(style::ContentStyle::new().attribute(style::Attribute::Underlined)),
+                None,
+            );
+            // let new_row = self.write_wrap_line(
+            //     row + 1,
+            //     &format!("Published: {}", date.format("%B %-d, %Y")),
+            //     None,
+            // );
+            // self.change_attr(row + 1, 0, 10, pancurses::A_UNDERLINE, ColorType::Normal);
+            row = row + 1;
+        }
 
-        // // duration
-        // if let Some(dur) = details.duration {
-        //     let new_row = self.write_wrap_line(row + 1, &format!("Duration: {}", dur));
-        //     self.change_attr(row + 1, 0, 9, pancurses::A_UNDERLINE, ColorType::Normal);
-        //     row = new_row;
-        // }
+        // duration
+        if let Some(dur) = details.duration {
+            self.write_key_value_line(
+                row + 1,
+                "Duration".to_string(),
+                dur,
+                Some(style::ContentStyle::new().attribute(style::Attribute::Underlined)),
+                None,
+            );
+            // let new_row = self.write_wrap_line(row + 1, &format!("Duration: {}", dur), None);
+            // self.change_attr(row + 1, 0, 9, pancurses::A_UNDERLINE, ColorType::Normal);
+            row = row + 1;
+        }
 
-        // // explicit
-        // if let Some(exp) = details.explicit {
-        //     let new_row = if exp {
-        //         self.write_wrap_line(row + 1, "Explicit: Yes")
-        //     } else {
-        //         self.write_wrap_line(row + 1, "Explicit: No")
-        //     };
-        //     self.change_attr(row + 1, 0, 9, pancurses::A_UNDERLINE, ColorType::Normal);
-        //     row = new_row;
-        // }
+        // explicit
+        if let Some(exp) = details.explicit {
+            let exp_string = if exp {
+                "Yes".to_string()
+            } else {
+                "No".to_string()
+            };
+            self.write_key_value_line(
+                row + 1,
+                "Explicit".to_string(),
+                exp_string,
+                Some(style::ContentStyle::new().attribute(style::Attribute::Underlined)),
+                None,
+            );
+            // let new_row = if exp {
+            //     self.write_wrap_line(row + 1, "Explicit: Yes", None)
+            // } else {
+            //     self.write_wrap_line(row + 1, "Explicit: No", None)
+            // };
+            // self.change_attr(row + 1, 0, 9, pancurses::A_UNDERLINE, ColorType::Normal);
+            row = row + 1;
+        }
 
-        // row += 1; // blank line
+        row += 1; // blank line
 
-        // // description
-        // match details.description {
-        //     Some(desc) => {
-        //         self.window.attron(Attribute::Bold);
-        //         row = self.write_wrap_line(row + 1, "Description:");
-        //         self.window.attroff(Attribute::Bold);
-        //         let _row = self.write_wrap_line(row + 1, &desc);
-        //     }
-        //     None => {
-        //         let _row = self.write_wrap_line(row + 1, "No description.");
-        //     }
-        // }
-    }
-
-    /// Changes the attributes (text style and color) for a line of
-    /// text.
-    pub fn change_attr(
-        &self,
-        y: i16,
-        x: i16,
-        nchars: u16,
-        attr: pancurses::chtype,
-        color: ColorType,
-    ) {
-        // self.window
-        //     .mvchgat(self.abs_y(y), self.abs_x(x), nchars, attr, color as i16);
+        // description
+        match details.description {
+            Some(desc) => {
+                // self.window.attron(Attribute::Bold);
+                row = self.write_wrap_line(row + 1, "Description:", None);
+                // self.window.attroff(Attribute::Bold);
+                let _row = self.write_wrap_line(row + 1, &desc, None);
+            }
+            None => {
+                let _row = self.write_wrap_line(row + 1, "No description.", None);
+            }
+        }
     }
 
     /// Updates window size

@@ -6,7 +6,7 @@ use std::time::Duration;
 use crossterm::{
     self, cursor,
     event::{self, Event},
-    execute, style, terminal,
+    execute, terminal,
 };
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -213,18 +213,14 @@ impl<'a> Ui<'a> {
         self.podcast_menu.activate();
         self.podcast_menu.redraw();
         self.episode_menu.redraw();
-
-        if let Some(ref panel) = self.details_panel {
-            panel.redraw();
-        }
         self.update_details_panel();
 
         self.notif_win.redraw();
 
         // welcome screen if user does not have any podcasts yet
-        if self.podcast_menu.items.is_empty() {
-            // self.popup_win.spawn_welcome_win();
-        }
+        // if self.podcast_menu.items.is_empty() {
+        //     self.popup_win.spawn_welcome_win();
+        // }
         io::stdout().flush().unwrap();
     }
 
@@ -462,9 +458,6 @@ impl<'a> Ui<'a> {
                         }
                     }
                 }
-                if let Some(det) = &self.details_panel {
-                    det.redraw();
-                }
             }
 
             UserAction::Right => {
@@ -477,9 +470,6 @@ impl<'a> Ui<'a> {
                         }
                         ActiveMenu::EpisodeMenu => (),
                     }
-                }
-                if let Some(det) = &self.details_panel {
-                    det.redraw();
                 }
             }
 
@@ -529,19 +519,21 @@ impl<'a> Ui<'a> {
             ActiveMenu::PodcastMenu => {
                 if pod_id.is_some() {
                     self.podcast_menu.scroll(scroll);
+                    self.podcast_menu.redraw();
 
                     self.episode_menu.top_row = 0;
                     self.episode_menu.selected = 0;
 
                     // update episodes menu with new list
                     self.episode_menu.items = self.podcast_menu.get_episodes();
-                    self.episode_menu.update_items();
+                    self.episode_menu.redraw();
                     self.update_details_panel();
                 }
             }
             ActiveMenu::EpisodeMenu => {
                 if pod_id.is_some() {
                     self.episode_menu.scroll(scroll);
+                    self.episode_menu.redraw();
                     self.update_details_panel();
                 }
             }
@@ -801,7 +793,15 @@ impl<'a> Ui<'a> {
     /// When the program is ending, this performs tear-down functions so
     /// that the terminal is properly restored to its prior settings.
     pub fn tear_down(&self) {
-        pancurses::endwin();
+        terminal::disable_raw_mode().unwrap();
+        execute!(
+            io::stdout(),
+            terminal::Clear(terminal::ClearType::All),
+            terminal::LeaveAlternateScreen,
+            event::DisableMouseCapture,
+            cursor::Show
+        )
+        .unwrap();
     }
 
     /// Create a details panel.
@@ -866,6 +866,7 @@ impl<'a> Ui<'a> {
                             explicit: pod_explicit,
                             description: desc,
                         };
+                        det.redraw();
                         det.details_template(0, details);
                     };
                 }

@@ -1,6 +1,7 @@
 use std::cmp::max;
-use std::cmp::min;
 use std::collections::hash_map::Entry;
+
+use crossterm::style;
 
 use super::ColorType;
 use super::Panel;
@@ -65,54 +66,59 @@ impl<T: Clone + Menuable> Menu<T> {
 
     /// Prints the list of visible items to the terminal.
     pub fn update_items(&mut self) {
-        // self.start_row = self.print_header();
-        // if self.selected < self.start_row {
-        //     self.selected = self.start_row;
-        // }
+        self.start_row = self.print_header();
+        if self.selected < self.start_row {
+            self.selected = self.start_row;
+        }
 
-        // let (map, order) = self.items.borrow();
-        // if !order.is_empty() {
-        //     // update selected item if list has gotten shorter
-        //     let current_selected = self.get_menu_idx(self.selected);
-        //     let list_len = order.len();
-        //     if current_selected >= list_len {
-        //         self.selected = (self.selected as usize - (current_selected - list_len) - 1) as u16;
-        //     }
+        let (map, order) = self.items.borrow();
+        if !order.is_empty() {
+            // update selected item if list has gotten shorter
+            let current_selected = self.get_menu_idx(self.selected);
+            let list_len = order.len();
+            if current_selected >= list_len {
+                self.selected = (self.selected as usize - (current_selected - list_len) - 1) as u16;
+            }
 
-        //     // for visible rows, print strings from list
-        //     for i in self.start_row..self.panel.get_rows() {
-        //         if let Some(elem_id) = order.get(self.get_menu_idx(i)) {
-        //             let elem = map.get(&elem_id).expect("Could not retrieve menu item.");
-        //             self.panel
-        //                 .write_line(i, elem.get_title(self.panel.get_cols() as usize));
+            // for visible rows, print strings from list
+            for i in self.start_row..self.panel.get_rows() {
+                if let Some(elem_id) = order.get(self.get_menu_idx(i)) {
+                    let elem = map.get(&elem_id).expect("Could not retrieve menu item.");
 
-        //             // this is literally the same logic as
-        //             // self.set_attrs(), but it's complaining about
-        //             // immutable borrows, so...
-        //             let attr = if elem.is_played() {
-        //                 pancurses::A_NORMAL
-        //             } else {
-        //                 pancurses::A_BOLD
-        //             };
-        //             self.panel.change_attr(
-        //                 i as i16,
-        //                 -1,
-        //                 self.panel.get_cols() + 3,
-        //                 attr,
-        //                 ColorType::Normal,
-        //             );
-        //         } else {
-        //             break;
-        //         }
-        //     }
-        // }
+                    if i == self.selected || !elem.is_played() {
+                        let mut style = style::ContentStyle::new();
+                        if i == self.selected {
+                            style = style
+                                .foreground(style::Color::White)
+                                .background(style::Color::DarkYellow);
+                        }
+                        if !elem.is_played() {
+                            style = style.attribute(style::Attribute::Bold);
+                        }
+                        self.panel.write_line(
+                            i,
+                            elem.get_title(self.panel.get_cols() as usize),
+                            Some(style),
+                        );
+                    } else {
+                        self.panel.write_line(
+                            i,
+                            elem.get_title(self.panel.get_cols() as usize),
+                            None,
+                        );
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
     }
 
     /// If a header exists, prints lines of text to the panel to appear
     /// above the menu.
     fn print_header(&mut self) -> u16 {
         if let Some(header) = &self.header {
-            return self.panel.write_wrap_line(0, header) + 2;
+            return self.panel.write_wrap_line(0, header, None) + 2;
         } else {
             return 0;
         }
@@ -130,7 +136,11 @@ impl<T: Clone + Menuable> Menu<T> {
                     self.selected -= v;
                 } else {
                     let list_scroll_amount = v - self.selected;
-                    self.top_row = min(0, self.top_row - list_scroll_amount);
+                    if let Some(top) = self.top_row.checked_sub(list_scroll_amount) {
+                        self.top_row = top;
+                    } else {
+                        self.top_row = 0;
+                    }
                     self.selected = 0;
                 }
             }
