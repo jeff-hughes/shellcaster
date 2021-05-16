@@ -1,4 +1,4 @@
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::collections::HashMap;
 
 use crate::config::KeybindingsFromToml;
@@ -104,7 +104,7 @@ impl Keybindings {
 
     /// Takes an Input object from pancurses and returns the associated
     /// user action, if one exists.
-    pub fn get_from_input(&self, input: KeyCode) -> Option<&UserAction> {
+    pub fn get_from_input(&self, input: KeyEvent) -> Option<&UserAction> {
         match input_to_str(input) {
             Some(code) => self.0.get(&code),
             None => None,
@@ -185,43 +185,55 @@ impl Keybindings {
 /// This function is a bit ridiculous, given that 95% of keyboards
 /// probably don't even have half these special keys, but at any rate...
 /// they're mapped, if anyone wants them.
-pub fn input_to_str(input: KeyCode) -> Option<String> {
+pub fn input_to_str(input: KeyEvent) -> Option<String> {
+    let ctrl = if input.modifiers.intersects(KeyModifiers::CONTROL) {
+        "Ctrl+"
+    } else {
+        ""
+    };
+    let alt = if input.modifiers.intersects(KeyModifiers::ALT) {
+        "Alt+"
+    } else {
+        ""
+    };
+    let shift = if input.modifiers.intersects(KeyModifiers::SHIFT) {
+        "Shift+"
+    } else {
+        ""
+    };
     let mut tmp = [0; 4];
-    let code = match input {
-        KeyCode::Backspace => "Backspace".to_string(),
-        KeyCode::Enter => "Enter".to_string(),
-        KeyCode::Left => "Left".to_string(),
-        KeyCode::Right => "Right".to_string(),
-        KeyCode::Up => "Up".to_string(),
-        KeyCode::Down => "Down".to_string(),
-        KeyCode::Home => "Home".to_string(),
-        KeyCode::End => "End".to_string(),
-        KeyCode::PageUp => "PgUp".to_string(),
-        KeyCode::PageDown => "PgDn".to_string(),
-        KeyCode::Tab => "Tab".to_string(),
-        KeyCode::BackTab => "S_Tab".to_string(),
-        KeyCode::Delete => "Del".to_string(),
-        KeyCode::Insert => "Ins".to_string(),
-        KeyCode::Esc => "Esc".to_string(),
-        KeyCode::F(num) => format!("F{}", num), // Function keys
+    return match input.code {
+        KeyCode::Backspace => Some(format!("{}{}{}Backspace", ctrl, alt, shift)),
+        KeyCode::Enter => Some(format!("{}{}{}Enter", ctrl, alt, shift)),
+        KeyCode::Left => Some(format!("{}{}{}Left", ctrl, alt, shift)),
+        KeyCode::Right => Some(format!("{}{}{}Right", ctrl, alt, shift)),
+        KeyCode::Up => Some(format!("{}{}{}Up", ctrl, alt, shift)),
+        KeyCode::Down => Some(format!("{}{}{}Down", ctrl, alt, shift)),
+        KeyCode::Home => Some(format!("{}{}{}Home", ctrl, alt, shift)),
+        KeyCode::End => Some(format!("{}{}{}End", ctrl, alt, shift)),
+        KeyCode::PageUp => Some(format!("{}{}{}PgUp", ctrl, alt, shift)),
+        KeyCode::PageDown => Some(format!("{}{}{}PgDn", ctrl, alt, shift)),
+        KeyCode::Tab => Some(format!("{}{}{}Tab", ctrl, alt, shift)),
+        KeyCode::BackTab => Some(format!("{}{}{}Tab", ctrl, alt, shift)),
+        KeyCode::Delete => Some(format!("{}{}{}Del", ctrl, alt, shift)),
+        KeyCode::Insert => Some(format!("{}{}{}Ins", ctrl, alt, shift)),
+        KeyCode::Esc => Some(format!("{}{}{}Esc", ctrl, alt, shift)),
+        KeyCode::F(num) => Some(format!("{}{}{}F{}", ctrl, alt, shift, num)), // Function keys
         KeyCode::Char(c) => {
             if c == '\u{7f}' {
-                "Backspace".to_string()
+                Some(format!("{}{}{}Backspace", ctrl, alt, shift))
             } else if c == '\u{1b}' {
-                "Escape".to_string()
+                Some(format!("{}{}{}Esc", ctrl, alt, shift))
             } else if c == '\n' {
-                "Enter".to_string()
+                Some(format!("{}{}{}Enter", ctrl, alt, shift))
             } else if c == '\t' {
-                "Tab".to_string()
+                Some(format!("{}{}{}Tab", ctrl, alt, shift))
             } else {
-                c.encode_utf8(&mut tmp).to_string()
+                // here we don't include "shift" because that will
+                // already be encoded in the character itself
+                Some(format!("{}{}{}", ctrl, alt, c.encode_utf8(&mut tmp)))
             }
         }
-        _ => "".to_string(),
+        _ => None,
     };
-    if code.is_empty() {
-        return None;
-    } else {
-        return Some(code);
-    }
 }

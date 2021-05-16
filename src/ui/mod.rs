@@ -263,7 +263,7 @@ impl<'a> Ui<'a> {
                     //     }
                     //     return popup_msg;
                     // } else {
-                    match self.keymap.get_from_input(input.code) {
+                    match self.keymap.get_from_input(input) {
                         Some(a @ UserAction::Down)
                         | Some(a @ UserAction::Up)
                         | Some(a @ UserAction::Left)
