@@ -112,7 +112,7 @@ impl<'a> Ui<'a> {
             // any messages at the bottom, check for user input, and
             // then process any messages from the main thread
             loop {
-                // ui.notif_win.check_notifs();
+                ui.notif_win.check_notifs();
 
                 match ui.getch() {
                     UiMsg::Noop => (),
