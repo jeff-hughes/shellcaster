@@ -42,6 +42,7 @@ where T: Clone + Menuable
     pub start_row: u16, // beginning of first row of menu
     pub top_row: u16,   // top row of text shown in window
     pub selected: u16,  // which line of text is highlighted
+    pub active: bool,
 }
 
 impl<T: Clone + Menuable> Menu<T> {
@@ -54,6 +55,7 @@ impl<T: Clone + Menuable> Menu<T> {
             start_row: 0,
             top_row: 0,
             selected: 0,
+            active: false,
         };
     }
 
@@ -62,6 +64,7 @@ impl<T: Clone + Menuable> Menu<T> {
     pub fn redraw(&mut self) {
         self.panel.redraw();
         self.update_items();
+        self.highlight_selected();
     }
 
     /// Prints the list of visible items to the terminal.
@@ -87,11 +90,11 @@ impl<T: Clone + Menuable> Menu<T> {
 
                     if i == self.selected || !elem.is_played() {
                         let mut style = style::ContentStyle::new();
-                        if i == self.selected {
-                            style = style
-                                .foreground(style::Color::White)
-                                .background(style::Color::DarkYellow);
-                        }
+                        // if i == self.selected {
+                        //     style = style
+                        //         .foreground(style::Color::White)
+                        //         .background(style::Color::DarkYellow);
+                        // }
                         if !elem.is_played() {
                             style = style.attribute(style::Attribute::Bold);
                         }
@@ -245,47 +248,43 @@ impl<T: Clone + Menuable> Menu<T> {
         // apply_color_played(self, self.selected, ColorType::HighlightedActive);
     }
 
-    /// Sets font style and color of menu item. `index` is the position
-    /// of the menu item to be changed. `played` is an indicator of
-    /// whether that item has been played or not. `color` is a ColorType
-    /// representing the appropriate state of the item (e.g., Normal,
-    /// Highlighted).
-    pub fn set_attrs(&mut self, index: u16, played: bool, color: ColorType) {
-        // let attr = if played {
-        //     pancurses::A_NORMAL
-        // } else {
-        //     pancurses::A_BOLD
-        // };
-        // self.panel
-        //     .change_attr(index, -1, self.panel.get_cols() + 3, attr, color);
-    }
-
     /// Highlights the currently selected item in the menu, based on
     /// whether the menu is currently active or not.
-    pub fn highlight_selected(&mut self, active_menu: bool) {
-        // let is_played = self
-        //     .items
-        //     .map_single_by_index(self.get_menu_idx(self.selected), |el| el.is_played());
+    pub fn highlight_selected(&mut self) {
+        let el_details = self
+            .items
+            .map_single_by_index(self.get_menu_idx(self.selected), |el| {
+                (el.get_title(self.panel.get_cols() as usize), el.is_played())
+            });
 
-        // if let Some(played) = is_played {
-        //     if active_menu {
-        //         self.set_attrs(self.selected, played, ColorType::HighlightedActive);
-        //     } else {
-        //         self.set_attrs(self.selected, played, ColorType::Highlighted);
-        //     }
-        // }
+        if let Some((title, is_played)) = el_details {
+            let mut style = style::ContentStyle::new();
+            if self.active {
+                style = style
+                    .foreground(style::Color::White)
+                    .background(style::Color::DarkYellow);
+            }
+            style = if is_played {
+                style.attribute(style::Attribute::NormalIntensity)
+            } else {
+                style.attribute(style::Attribute::Bold)
+            };
+            self.panel.write_line(self.selected, title, Some(style));
+        }
     }
 
     /// Controls how the window changes when it is active (i.e., available
     /// for user input to modify state).
     pub fn activate(&mut self) {
         // if list is empty, will return None
-        if let Some(played) = self
-            .items
-            .map_single_by_index(self.get_menu_idx(self.selected), |el| el.is_played())
-        {
-            self.set_attrs(self.selected, played, ColorType::HighlightedActive);
-        }
+        // if let Some(played) = self
+        //     .items
+        //     .map_single_by_index(self.get_menu_idx(self.selected), |el| el.is_played())
+        // {
+        //     self.set_attrs(self.selected, played, ColorType::HighlightedActive);
+        // }
+        self.active = true;
+        self.highlight_selected();
     }
 
     /// Updates window size
@@ -332,11 +331,28 @@ impl Menu<Podcast> {
     /// available for user input to modify state).
     pub fn deactivate(&mut self) {
         // if list is empty, will return None
-        if let Some(played) = self
+        // if let Some(played) = self
+        //     .items
+        //     .map_single_by_index(self.get_menu_idx(self.selected), |el| el.is_played())
+        // {
+        //     self.set_attrs(self.selected, played, ColorType::Highlighted);
+        // }
+        self.active = false;
+        let el_details = self
             .items
-            .map_single_by_index(self.get_menu_idx(self.selected), |el| el.is_played())
-        {
-            self.set_attrs(self.selected, played, ColorType::Highlighted);
+            .map_single_by_index(self.get_menu_idx(self.selected), |el| {
+                (el.get_title(self.panel.get_cols() as usize), el.is_played())
+            });
+        if let Some((title, is_played)) = el_details {
+            let mut style = style::ContentStyle::new()
+                .foreground(style::Color::Black)
+                .background(style::Color::Grey);
+            style = if is_played {
+                style.attribute(style::Attribute::NormalIntensity)
+            } else {
+                style.attribute(style::Attribute::Bold)
+            };
+            self.panel.write_line(self.selected, title, Some(style));
         }
     }
 }
@@ -346,11 +362,28 @@ impl Menu<Episode> {
     /// available for user input to modify state).
     pub fn deactivate(&mut self) {
         // if list is empty, will return None
-        if let Some(played) = self
+        // if let Some(played) = self
+        //     .items
+        //     .map_single_by_index(self.get_menu_idx(self.selected), |el| el.is_played())
+        // {
+        //     self.set_attrs(self.selected, played, ColorType::Normal);
+        // }
+        self.active = false;
+        let el_details = self
             .items
-            .map_single_by_index(self.get_menu_idx(self.selected), |el| el.is_played())
-        {
-            self.set_attrs(self.selected, played, ColorType::Normal);
+            .map_single_by_index(self.get_menu_idx(self.selected), |el| {
+                (el.get_title(self.panel.get_cols() as usize), el.is_played())
+            });
+        if let Some((title, is_played)) = el_details {
+            let mut style = style::ContentStyle::new()
+                .foreground(style::Color::Reset)
+                .background(style::Color::Reset);
+            style = if is_played {
+                style.attribute(style::Attribute::NormalIntensity)
+            } else {
+                style.attribute(style::Attribute::Bold)
+            };
+            self.panel.write_line(self.selected, title, Some(style));
         }
     }
 }
@@ -363,7 +396,7 @@ impl Menu<NewEpisode> {
         let changed = self.change_item_selections(vec![self.get_menu_idx(self.selected)], None);
         if changed {
             self.update_items();
-            self.highlight_selected(true);
+            self.highlight_selected();
         }
     }
 
@@ -377,7 +410,7 @@ impl Menu<NewEpisode> {
             self.change_item_selections((0..self.items.len()).collect(), Some(!all_selected));
         if changed {
             self.update_items();
-            self.highlight_selected(true);
+            self.highlight_selected();
         }
     }
 

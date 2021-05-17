@@ -3,7 +3,7 @@ use std::{convert::TryInto, io};
 use chrono::{DateTime, Utc};
 use crossterm::{cursor, queue, style};
 
-use super::ColorType;
+// use super::ColorType;
 
 
 pub const VERTICAL: &str = "│";

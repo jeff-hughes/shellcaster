@@ -210,9 +210,9 @@ impl<'a> Ui<'a> {
     /// This should be called immediately after creating the UI, in order
     /// to draw everything to the screen.
     pub fn init(&mut self) {
-        self.podcast_menu.activate();
         self.podcast_menu.redraw();
         self.episode_menu.redraw();
+        self.podcast_menu.activate();
         self.update_details_panel();
 
         self.notif_win.redraw();
@@ -783,13 +783,13 @@ impl<'a> Ui<'a> {
         };
         self.episode_menu.redraw();
 
-        match self.active_menu {
-            ActiveMenu::PodcastMenu => self.podcast_menu.highlight_selected(true),
-            ActiveMenu::EpisodeMenu => {
-                self.podcast_menu.highlight_selected(false);
-                self.episode_menu.highlight_selected(true);
-            }
-        }
+        // match self.active_menu {
+        //     ActiveMenu::PodcastMenu => self.podcast_menu.highlight_selected(true),
+        //     ActiveMenu::EpisodeMenu => {
+        //         self.podcast_menu.highlight_selected(false);
+        //         self.episode_menu.highlight_selected(true);
+        //     }
+        // }
     }
 
     /// When the program is ending, this performs tear-down functions so

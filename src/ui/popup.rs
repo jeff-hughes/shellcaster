@@ -93,7 +93,7 @@ impl<'a> PopupWin<'a> {
             }
             ActivePopup::DownloadWin(_win) => {
                 let mut download_win = self.make_download_win();
-                download_win.highlight_selected(true);
+                download_win.activate();
                 self.popup = ActivePopup::DownloadWin(download_win);
             }
             ActivePopup::None => (),
@@ -346,8 +346,7 @@ impl<'a> PopupWin<'a> {
             self.popup = ActivePopup::HelpWin(win);
         } else if self.download_win && !self.popup.is_download_win() {
             let mut win = self.make_download_win();
-            win.update_items();
-            win.highlight_selected(true);
+            win.activate();
             self.popup = ActivePopup::DownloadWin(win);
         } else if self.welcome_win && !self.popup.is_welcome_win() {
             let win = self.make_welcome_win();
