@@ -1,9 +1,9 @@
-use std::cmp::max;
+use std::cmp::min;
 use std::collections::hash_map::Entry;
 
 use crossterm::style;
 
-use super::ColorType;
+// use super::ColorType;
 use super::Panel;
 use crate::types::*;
 
@@ -64,7 +64,6 @@ impl<T: Clone + Menuable> Menu<T> {
     pub fn redraw(&mut self) {
         self.panel.redraw();
         self.update_items();
-        self.highlight_selected();
     }
 
     /// Prints the list of visible items to the terminal.
@@ -133,9 +132,15 @@ impl<T: Clone + Menuable> Menu<T> {
     /// not fall out of bounds, and then updates the panel to
     /// represent the new visible list.
     pub fn scroll(&mut self, lines: Scroll) {
+        let list_len = self.items.len();
+        if list_len == 0 {
+            return;
+        }
+
         match lines {
             Scroll::Up(v) => {
                 if v <= self.selected {
+                    self.unhighlight_item(self.selected);
                     self.selected -= v;
                 } else {
                     let list_scroll_amount = v - self.selected;
@@ -145,18 +150,24 @@ impl<T: Clone + Menuable> Menu<T> {
                         self.top_row = 0;
                     }
                     self.selected = 0;
+                    self.panel.clear_inner();
+                    self.update_items();
                 }
+                self.highlight_item(self.selected, self.active);
             }
             Scroll::Down(v) => {
                 let n_row = self.panel.get_rows();
                 if v < (n_row - self.selected) {
+                    self.unhighlight_item(self.selected);
                     self.selected += v;
                 } else {
-                    let list_len = self.items.len() as u16;
                     let list_scroll_amount = v - (n_row - self.selected - 1);
-                    self.top_row = max(list_scroll_amount, list_len - n_row);
+                    self.top_row = min(self.top_row + list_scroll_amount, list_len as u16 - n_row);
                     self.selected = n_row - 1;
+                    self.panel.clear_inner();
+                    self.update_items();
                 }
+                self.highlight_item(self.selected, self.active);
             }
         }
 
@@ -248,29 +259,59 @@ impl<T: Clone + Menuable> Menu<T> {
         // apply_color_played(self, self.selected, ColorType::HighlightedActive);
     }
 
-    /// Highlights the currently selected item in the menu, based on
-    /// whether the menu is currently active or not.
-    pub fn highlight_selected(&mut self) {
+    /// Highlights the item in the menu, given a y-value.
+    pub fn highlight_item(&mut self, item_y: u16, active: bool) {
         let el_details = self
             .items
-            .map_single_by_index(self.get_menu_idx(self.selected), |el| {
+            .map_single_by_index(self.get_menu_idx(item_y), |el| {
                 (el.get_title(self.panel.get_cols() as usize), el.is_played())
             });
 
         if let Some((title, is_played)) = el_details {
             let mut style = style::ContentStyle::new();
-            if self.active {
+            if active {
                 style = style
                     .foreground(style::Color::White)
                     .background(style::Color::DarkYellow);
+            } else {
+                style = style
+                    .foreground(style::Color::Black)
+                    .background(style::Color::Grey);
             }
             style = if is_played {
                 style.attribute(style::Attribute::NormalIntensity)
             } else {
                 style.attribute(style::Attribute::Bold)
             };
-            self.panel.write_line(self.selected, title, Some(style));
+            self.panel.write_line(item_y, title, Some(style));
         }
+    }
+
+    /// Removes highlight on the item in the menu, given a y-value.
+    pub fn unhighlight_item(&mut self, item_y: u16) {
+        let el_details = self
+            .items
+            .map_single_by_index(self.get_menu_idx(item_y), |el| {
+                (el.get_title(self.panel.get_cols() as usize), el.is_played())
+            });
+
+        if let Some((title, is_played)) = el_details {
+            let mut style = style::ContentStyle::new()
+                .foreground(style::Color::Reset)
+                .background(style::Color::Reset);
+            style = if is_played {
+                style.attribute(style::Attribute::NormalIntensity)
+            } else {
+                style.attribute(style::Attribute::Bold)
+            };
+            self.panel.write_line(item_y, title, Some(style));
+        }
+    }
+
+    /// Highlights the currently selected item in the menu, based on
+    /// whether the menu is currently active or not.
+    pub fn highlight_selected(&mut self) {
+        self.highlight_item(self.selected, self.active);
     }
 
     /// Controls how the window changes when it is active (i.e., available

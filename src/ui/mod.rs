@@ -478,7 +478,7 @@ impl<'a> Ui<'a> {
             }
 
             UserAction::PageUp => {
-                self.scroll_current_window(curr_pod_id, Scroll::Up(self.n_row + 3));
+                self.scroll_current_window(curr_pod_id, Scroll::Up(self.n_row - 3));
             }
 
             UserAction::PageDown => {
@@ -521,7 +521,6 @@ impl<'a> Ui<'a> {
             ActiveMenu::PodcastMenu => {
                 if pod_id.is_some() {
                     self.podcast_menu.scroll(scroll);
-                    self.podcast_menu.redraw();
 
                     self.episode_menu.top_row = 0;
                     self.episode_menu.selected = 0;
@@ -535,7 +534,6 @@ impl<'a> Ui<'a> {
             ActiveMenu::EpisodeMenu => {
                 if pod_id.is_some() {
                     self.episode_menu.scroll(scroll);
-                    self.episode_menu.redraw();
                     self.update_details_panel();
                 }
             }

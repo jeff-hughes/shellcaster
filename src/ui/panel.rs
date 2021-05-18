@@ -55,7 +55,12 @@ impl Panel {
 
     /// Redraws borders and refreshes the window to display on terminal.
     pub fn redraw(&self) {
-        // clear the panel
+        self.clear();
+        self.draw_border();
+    }
+
+    /// Clears the whole Panel.
+    pub fn clear(&self) {
         // TODO: Set the background color first
         let empty = vec![" "; self.n_col as usize];
         let empty_string = empty.join("");
@@ -67,7 +72,22 @@ impl Panel {
             )
             .unwrap();
         }
-        self.draw_border();
+    }
+
+    /// Clears the inner section of the Panel, leaving the borders
+    /// intact.
+    pub fn clear_inner(&self) {
+        // TODO: Set the background color first
+        let empty = vec![" "; self.n_col as usize - 2];
+        let empty_string = empty.join("");
+        for r in 1..(self.n_row - 2) {
+            queue!(
+                io::stdout(),
+                cursor::MoveTo(self.start_x + 1, r),
+                style::Print(&empty_string),
+            )
+            .unwrap();
+        }
     }
 
     /// Draws a border around the window.
@@ -267,7 +287,7 @@ impl Panel {
             //     None,
             // );
             // self.change_attr(row + 1, 0, 10, pancurses::A_UNDERLINE, ColorType::Normal);
-            row = row + 1;
+            row += 1;
         }
 
         // duration
@@ -281,7 +301,7 @@ impl Panel {
             );
             // let new_row = self.write_wrap_line(row + 1, &format!("Duration: {}", dur), None);
             // self.change_attr(row + 1, 0, 9, pancurses::A_UNDERLINE, ColorType::Normal);
-            row = row + 1;
+            row += 1;
         }
 
         // explicit
@@ -304,7 +324,7 @@ impl Panel {
             //     self.write_wrap_line(row + 1, "Explicit: No", None)
             // };
             // self.change_attr(row + 1, 0, 9, pancurses::A_UNDERLINE, ColorType::Normal);
-            row = row + 1;
+            row += 1;
         }
 
         row += 1; // blank line
