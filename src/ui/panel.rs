@@ -1,9 +1,10 @@
+use std::rc::Rc;
 use std::{convert::TryInto, io};
 
 use chrono::{DateTime, Utc};
 use crossterm::{cursor, queue, style};
 
-// use super::ColorType;
+use super::AppColors;
 
 
 pub const VERTICAL: &str = "│";
@@ -35,6 +36,7 @@ pub struct Details {
 #[derive(Debug)]
 pub struct Panel {
     screen_pos: usize,
+    pub colors: Rc<AppColors>,
     title: String,
     start_x: u16,
     n_row: u16,
@@ -43,9 +45,17 @@ pub struct Panel {
 
 impl Panel {
     /// Creates a new panel.
-    pub fn new(title: String, screen_pos: usize, n_row: u16, n_col: u16, start_x: u16) -> Self {
+    pub fn new(
+        title: String,
+        screen_pos: usize,
+        colors: Rc<AppColors>,
+        n_row: u16,
+        n_col: u16,
+        start_x: u16,
+    ) -> Self {
         return Panel {
             screen_pos: screen_pos,
+            colors: colors,
             title: title,
             start_x: start_x,
             n_row: n_row,
@@ -61,14 +71,17 @@ impl Panel {
 
     /// Clears the whole Panel.
     pub fn clear(&self) {
-        // TODO: Set the background color first
         let empty = vec![" "; self.n_col as usize];
         let empty_string = empty.join("");
         for r in 0..(self.n_row - 1) {
             queue!(
                 io::stdout(),
                 cursor::MoveTo(self.start_x, r),
-                style::Print(&empty_string),
+                style::PrintStyledContent(
+                    style::style(&empty_string)
+                        .with(self.colors.normal.0)
+                        .on(self.colors.normal.1)
+                ),
             )
             .unwrap();
         }
@@ -77,14 +90,17 @@ impl Panel {
     /// Clears the inner section of the Panel, leaving the borders
     /// intact.
     pub fn clear_inner(&self) {
-        // TODO: Set the background color first
         let empty = vec![" "; self.n_col as usize - 2];
         let empty_string = empty.join("");
         for r in 1..(self.n_row - 2) {
             queue!(
                 io::stdout(),
                 cursor::MoveTo(self.start_x + 1, r),
-                style::Print(&empty_string),
+                style::PrintStyledContent(
+                    style::style(&empty_string)
+                        .with(self.colors.normal.0)
+                        .on(self.colors.normal.1)
+                ),
             )
             .unwrap();
         }
@@ -115,6 +131,10 @@ impl Panel {
 
         queue!(
             io::stdout(),
+            style::SetColors(style::Colors::new(
+                self.colors.normal.0,
+                self.colors.normal.1
+            )),
             cursor::MoveTo(self.start_x, 0),
             style::Print(border_top.join("")),
             cursor::MoveTo(self.start_x, self.n_row - 1),
@@ -137,6 +157,7 @@ impl Panel {
             io::stdout(),
             cursor::MoveTo(self.start_x + 2, 0),
             style::Print(&self.title),
+            style::ResetColor,
         )
         .unwrap();
     }
@@ -146,25 +167,18 @@ impl Panel {
     /// up wrapping and may mess up the format. Use `write_wrap_line()`
     /// if you need line wrapping.
     pub fn write_line(&self, y: u16, string: String, style: Option<style::ContentStyle>) {
-        match style {
-            Some(style) => {
-                let styled = style.apply(string);
-                queue!(
-                    io::stdout(),
-                    cursor::MoveTo(self.abs_x(0), self.abs_y(y as i16)),
-                    style::PrintStyledContent(styled)
-                )
-                .unwrap();
-            }
-            None => {
-                queue!(
-                    io::stdout(),
-                    cursor::MoveTo(self.abs_x(0), self.abs_y(y as i16)),
-                    style::Print(string)
-                )
-                .unwrap();
-            }
-        }
+        let styled = match style {
+            Some(style) => style.apply(string),
+            None => style::style(string)
+                .with(self.colors.normal.0)
+                .on(self.colors.normal.1),
+        };
+        queue!(
+            io::stdout(),
+            cursor::MoveTo(self.abs_x(0), self.abs_y(y as i16)),
+            style::PrintStyledContent(styled)
+        )
+        .unwrap();
     }
 
     /// Writes a line of styled text to the window, representing a key
@@ -190,24 +204,20 @@ impl Panel {
         )
         .unwrap();
 
-        match key_style {
-            Some(kstyle) => {
-                let styled = kstyle.apply(key);
-                queue!(io::stdout(), style::PrintStyledContent(styled)).unwrap();
-            }
-            None => {
-                queue!(io::stdout(), style::Print(key)).unwrap();
-            }
-        }
-        match value_style {
-            Some(vstyle) => {
-                let styled = vstyle.apply(value);
-                queue!(io::stdout(), style::PrintStyledContent(styled)).unwrap();
-            }
-            None => {
-                queue!(io::stdout(), style::Print(value)).unwrap();
-            }
-        }
+        let key_styled = match key_style {
+            Some(kstyle) => kstyle.apply(key),
+            None => style::style(key)
+                .with(self.colors.normal.0)
+                .on(self.colors.normal.1),
+        };
+        queue!(io::stdout(), style::PrintStyledContent(key_styled)).unwrap();
+        let value_styled = match value_style {
+            Some(vstyle) => vstyle.apply(value),
+            None => style::style(value)
+                .with(self.colors.normal.0)
+                .on(self.colors.normal.1),
+        };
+        queue!(io::stdout(), style::PrintStyledContent(value_styled)).unwrap();
     }
 
     /// Writes one or more lines of text from a String, word wrapping
@@ -222,27 +232,20 @@ impl Panel {
     ) -> u16 {
         let mut row = start_y;
         let max_row = self.get_rows();
+        let content_style = match style {
+            Some(style) => style,
+            None => style::ContentStyle::new()
+                .foreground(self.colors.normal.0)
+                .background(self.colors.normal.1),
+        };
         let wrapper = textwrap::wrap(string, self.get_cols() as usize);
         for line in wrapper {
-            match style {
-                Some(style) => {
-                    let styled = style.apply(line);
-                    queue!(
-                        io::stdout(),
-                        cursor::MoveTo(self.abs_x(0), self.abs_y(row as i16)),
-                        style::PrintStyledContent(styled)
-                    )
-                    .unwrap();
-                }
-                None => {
-                    queue!(
-                        io::stdout(),
-                        cursor::MoveTo(self.abs_x(0), self.abs_y(row as i16)),
-                        style::Print(line)
-                    )
-                    .unwrap();
-                }
-            }
+            queue!(
+                io::stdout(),
+                cursor::MoveTo(self.abs_x(0), self.abs_y(row as i16)),
+                style::PrintStyledContent(content_style.apply(line))
+            )
+            .unwrap();
             row += 1;
 
             if row >= max_row {
@@ -256,7 +259,10 @@ impl Panel {
     /// not the most elegant code, but it works.
     pub fn details_template(&self, start_y: u16, details: Details) {
         let mut row = start_y;
-        let bold = style::ContentStyle::new().attribute(style::Attribute::Bold);
+        let bold = style::ContentStyle::new()
+            .foreground(self.colors.normal.0)
+            .background(self.colors.normal.1)
+            .attribute(style::Attribute::Bold);
 
         // podcast title
         match details.pod_title {
@@ -278,15 +284,14 @@ impl Panel {
                 row + 1,
                 "Published".to_string(),
                 format!("{}", date.format("%B %-d, %Y")),
-                Some(style::ContentStyle::new().attribute(style::Attribute::Underlined)),
+                Some(
+                    style::ContentStyle::new()
+                        .foreground(self.colors.normal.0)
+                        .background(self.colors.normal.1)
+                        .attribute(style::Attribute::Underlined),
+                ),
                 None,
             );
-            // let new_row = self.write_wrap_line(
-            //     row + 1,
-            //     &format!("Published: {}", date.format("%B %-d, %Y")),
-            //     None,
-            // );
-            // self.change_attr(row + 1, 0, 10, pancurses::A_UNDERLINE, ColorType::Normal);
             row += 1;
         }
 
@@ -296,11 +301,14 @@ impl Panel {
                 row + 1,
                 "Duration".to_string(),
                 dur,
-                Some(style::ContentStyle::new().attribute(style::Attribute::Underlined)),
+                Some(
+                    style::ContentStyle::new()
+                        .foreground(self.colors.normal.0)
+                        .background(self.colors.normal.1)
+                        .attribute(style::Attribute::Underlined),
+                ),
                 None,
             );
-            // let new_row = self.write_wrap_line(row + 1, &format!("Duration: {}", dur), None);
-            // self.change_attr(row + 1, 0, 9, pancurses::A_UNDERLINE, ColorType::Normal);
             row += 1;
         }
 
@@ -315,15 +323,14 @@ impl Panel {
                 row + 1,
                 "Explicit".to_string(),
                 exp_string,
-                Some(style::ContentStyle::new().attribute(style::Attribute::Underlined)),
+                Some(
+                    style::ContentStyle::new()
+                        .foreground(self.colors.normal.0)
+                        .background(self.colors.normal.1)
+                        .attribute(style::Attribute::Underlined),
+                ),
                 None,
             );
-            // let new_row = if exp {
-            //     self.write_wrap_line(row + 1, "Explicit: Yes", None)
-            // } else {
-            //     self.write_wrap_line(row + 1, "Explicit: No", None)
-            // };
-            // self.change_attr(row + 1, 0, 9, pancurses::A_UNDERLINE, ColorType::Normal);
             row += 1;
         }
 

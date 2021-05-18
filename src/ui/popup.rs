@@ -1,4 +1,5 @@
 use std::cmp::min;
+use std::rc::Rc;
 
 use crossterm::{
     event::{KeyCode, KeyEvent},
@@ -6,7 +7,7 @@ use crossterm::{
 };
 
 // use super::ColorType;
-use super::{Menu, Panel, Scroll, UiMsg};
+use super::{AppColors, Menu, Panel, Scroll, UiMsg};
 use crate::config::BIG_SCROLL_AMOUNT;
 use crate::keymap::{Keybindings, UserAction};
 use crate::types::*;
@@ -44,6 +45,7 @@ pub struct PopupWin<'a> {
     popup: ActivePopup,
     new_episodes: Vec<NewEpisode>,
     keymap: &'a Keybindings,
+    colors: Rc<AppColors>,
     total_rows: u16,
     total_cols: u16,
     pub welcome_win: bool,
@@ -53,11 +55,17 @@ pub struct PopupWin<'a> {
 
 impl<'a> PopupWin<'a> {
     /// Set up struct for handling popup windows.
-    pub fn new(keymap: &'a Keybindings, total_rows: u16, total_cols: u16) -> Self {
+    pub fn new(
+        keymap: &'a Keybindings,
+        colors: Rc<AppColors>,
+        total_rows: u16,
+        total_cols: u16,
+    ) -> Self {
         return Self {
             popup: ActivePopup::None,
             new_episodes: Vec::new(),
             keymap: keymap,
+            colors: colors,
             total_rows: total_rows,
             total_cols: total_cols,
             welcome_win: false,
@@ -125,6 +133,7 @@ impl<'a> PopupWin<'a> {
         let mut welcome_win = Panel::new(
             "Shellcaster".to_string(),
             0,
+            self.colors.clone(),
             self.total_rows - 1,
             self.total_cols,
             0,
@@ -214,6 +223,7 @@ impl<'a> PopupWin<'a> {
         let mut help_win = Panel::new(
             "Help".to_string(),
             0,
+            self.colors.clone(),
             self.total_rows - 1,
             self.total_cols,
             0,
@@ -224,7 +234,12 @@ impl<'a> PopupWin<'a> {
         row = help_win.write_wrap_line(
             row + 1,
             "Available keybindings:",
-            Some(style::ContentStyle::new().attribute(style::Attribute::Underlined)),
+            Some(
+                style::ContentStyle::new()
+                    .foreground(self.colors.normal.0)
+                    .background(self.colors.normal.1)
+                    .attribute(style::Attribute::Underlined),
+            ),
         );
         row += 1;
 
@@ -289,6 +304,7 @@ impl<'a> PopupWin<'a> {
         let mut download_panel = Panel::new(
             "New episodes".to_string(),
             0,
+            self.colors.clone(),
             self.total_rows - 1,
             self.total_cols,
             0,

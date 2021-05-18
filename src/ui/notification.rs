@@ -1,4 +1,5 @@
 use std::io;
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 // use super::ColorType;
@@ -7,6 +8,8 @@ use crossterm::{
     event::{self, KeyCode},
     execute, queue, style,
 };
+
+use super::AppColors;
 
 /// Holds details of a notification message.
 #[derive(Debug, Clone, PartialEq)]
@@ -41,6 +44,7 @@ impl Notification {
 /// not necessarily.
 #[derive(Debug)]
 pub struct NotifWin {
+    colors: Rc<AppColors>,
     start_y: u16,
     total_rows: u16,
     total_cols: u16,
@@ -51,8 +55,9 @@ pub struct NotifWin {
 
 impl NotifWin {
     /// Creates a new NotifWin.
-    pub fn new(start_y: u16, total_rows: u16, total_cols: u16) -> Self {
+    pub fn new(colors: Rc<AppColors>, start_y: u16, total_rows: u16, total_cols: u16) -> Self {
         return Self {
+            colors: colors,
             start_y: start_y,
             total_rows: total_rows,
             total_cols: total_cols,
@@ -72,7 +77,11 @@ impl NotifWin {
         queue!(
             io::stdout(),
             cursor::MoveTo(0, self.start_y),
-            style::Print(&empty_string),
+            style::PrintStyledContent(
+                style::style(&empty_string)
+                    .with(self.colors.normal.0)
+                    .on(self.colors.normal.1)
+            ),
         )
         .unwrap();
     }
@@ -236,25 +245,22 @@ impl NotifWin {
     /// Prints a notification to the window.
     fn display_notif(&self, notif: &Notification) {
         self.redraw();
-        if notif.error {
-            queue!(
-                io::stdout(),
-                cursor::MoveTo(0, self.start_y),
-                style::PrintStyledContent(
-                    style::style(&notif.message)
-                        .with(style::Color::Red)
-                        .attribute(style::Attribute::Bold)
-                )
-            )
-            .unwrap();
+        let styled = if notif.error {
+            style::style(&notif.message)
+                .with(self.colors.error.0)
+                .on(self.colors.error.1)
+                .attribute(style::Attribute::Bold)
         } else {
-            queue!(
-                io::stdout(),
-                cursor::MoveTo(0, self.start_y),
-                style::Print(&notif.message)
-            )
-            .unwrap();
-        }
+            style::style(&notif.message)
+                .with(self.colors.normal.0)
+                .on(self.colors.normal.1)
+        };
+        queue!(
+            io::stdout(),
+            cursor::MoveTo(0, self.start_y),
+            style::PrintStyledContent(styled)
+        )
+        .unwrap();
     }
 
     /// Adds a notification to the user. `duration` indicates how long

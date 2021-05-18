@@ -3,7 +3,6 @@ use std::collections::hash_map::Entry;
 
 use crossterm::style;
 
-// use super::ColorType;
 use super::Panel;
 use crate::types::*;
 
@@ -88,12 +87,9 @@ impl<T: Clone + Menuable> Menu<T> {
                     let elem = map.get(&elem_id).expect("Could not retrieve menu item.");
 
                     if i == self.selected || !elem.is_played() {
-                        let mut style = style::ContentStyle::new();
-                        // if i == self.selected {
-                        //     style = style
-                        //         .foreground(style::Color::White)
-                        //         .background(style::Color::DarkYellow);
-                        // }
+                        let mut style = style::ContentStyle::new()
+                            .foreground(self.panel.colors.normal.0)
+                            .background(self.panel.colors.normal.1);
                         if !elem.is_played() {
                             style = style.attribute(style::Attribute::Bold);
                         }
@@ -271,12 +267,12 @@ impl<T: Clone + Menuable> Menu<T> {
             let mut style = style::ContentStyle::new();
             if active {
                 style = style
-                    .foreground(style::Color::White)
-                    .background(style::Color::DarkYellow);
+                    .foreground(self.panel.colors.highlighted_active.0)
+                    .background(self.panel.colors.highlighted_active.1);
             } else {
                 style = style
-                    .foreground(style::Color::Black)
-                    .background(style::Color::Grey);
+                    .foreground(self.panel.colors.highlighted.0)
+                    .background(self.panel.colors.highlighted.1);
             }
             style = if is_played {
                 style.attribute(style::Attribute::NormalIntensity)
@@ -297,8 +293,8 @@ impl<T: Clone + Menuable> Menu<T> {
 
         if let Some((title, is_played)) = el_details {
             let mut style = style::ContentStyle::new()
-                .foreground(style::Color::Reset)
-                .background(style::Color::Reset);
+                .foreground(self.panel.colors.normal.0)
+                .background(self.panel.colors.normal.1);
             style = if is_played {
                 style.attribute(style::Attribute::NormalIntensity)
             } else {

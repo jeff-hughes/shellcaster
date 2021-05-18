@@ -5,7 +5,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use crate::keymap::Keybindings;
-use crate::ui::colors::ColorValue;
+use crate::ui::colors::AppColors;
 
 // Specifies how long, in milliseconds, to display messages at the
 // bottom of the screen in the UI.
@@ -97,82 +97,19 @@ pub struct KeybindingsFromToml {
     pub quit: Option<Vec<String>>,
 }
 
-/// Holds information about the colors to use in the application. Tuple
-/// values represent (foreground, background), respectively.
-#[derive(Debug, Clone)]
-pub struct AppColors {
-    pub normal: (ColorValue, ColorValue),
-    pub highlighted_active: (ColorValue, ColorValue),
-    pub highlighted: (ColorValue, ColorValue),
-    pub error: (ColorValue, ColorValue),
-}
-
-impl AppColors {
-    pub fn default() -> Self {
-        return Self {
-            normal: (ColorValue::White, ColorValue::Black),
-            highlighted_active: (ColorValue::Black, ColorValue::Yellow),
-            highlighted: (ColorValue::Black, ColorValue::White),
-            error: (ColorValue::Red, ColorValue::Black),
-        };
-    }
-
-    pub fn add_from_config(&mut self, config: AppColorsFromToml) {
-        if let Some(val) = config.normal_foreground {
-            if let Ok(v) = ColorValue::from_str(&val) {
-                self.normal.0 = v;
-            }
-        }
-        if let Some(val) = config.normal_background {
-            if let Ok(v) = ColorValue::from_str(&val) {
-                self.normal.1 = v;
-            }
-        }
-        if let Some(val) = config.highlighted_active_foreground {
-            if let Ok(v) = ColorValue::from_str(&val) {
-                self.highlighted_active.0 = v;
-            }
-        }
-        if let Some(val) = config.highlighted_active_background {
-            if let Ok(v) = ColorValue::from_str(&val) {
-                self.highlighted_active.1 = v;
-            }
-        }
-        if let Some(val) = config.highlighted_foreground {
-            if let Ok(v) = ColorValue::from_str(&val) {
-                self.highlighted.0 = v;
-            }
-        }
-        if let Some(val) = config.highlighted_background {
-            if let Ok(v) = ColorValue::from_str(&val) {
-                self.highlighted.1 = v;
-            }
-        }
-        if let Some(val) = config.error_foreground {
-            if let Ok(v) = ColorValue::from_str(&val) {
-                self.error.0 = v;
-            }
-        }
-        if let Some(val) = config.error_background {
-            if let Ok(v) = ColorValue::from_str(&val) {
-                self.error.1 = v;
-            }
-        }
-    }
-}
-
 /// A temporary struct used to deserialize colors data from the TOML
-/// configuration file.
+/// configuration file. See crate::ui::colors module for the AppColors
+/// struct which handles the final color scheme.
 #[derive(Debug, Deserialize)]
 pub struct AppColorsFromToml {
-    normal_foreground: Option<String>,
-    normal_background: Option<String>,
-    highlighted_active_foreground: Option<String>,
-    highlighted_active_background: Option<String>,
-    highlighted_foreground: Option<String>,
-    highlighted_background: Option<String>,
-    error_foreground: Option<String>,
-    error_background: Option<String>,
+    pub normal_foreground: Option<String>,
+    pub normal_background: Option<String>,
+    pub highlighted_active_foreground: Option<String>,
+    pub highlighted_active_background: Option<String>,
+    pub highlighted_foreground: Option<String>,
+    pub highlighted_background: Option<String>,
+    pub error_foreground: Option<String>,
+    pub error_background: Option<String>,
 }
 
 
