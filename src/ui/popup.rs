@@ -106,9 +106,6 @@ impl<'a> PopupWin<'a> {
             }
             ActivePopup::None => (),
         }
-        // if let Some(panel) = &self.panel {
-        //     panel.refresh();
-        // }
     }
 
     /// Create a welcome window and draw it to the screen.

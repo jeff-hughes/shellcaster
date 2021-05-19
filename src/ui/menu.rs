@@ -325,8 +325,8 @@ impl<T: Clone + Menuable> Menu<T> {
     }
 
     /// Updates window size
-    pub fn resize(&mut self, n_row: u16, n_col: u16, start_y: u16, start_x: u16) {
-        self.panel.resize(n_row, n_col, start_y, start_x);
+    pub fn resize(&mut self, n_row: u16, n_col: u16, start_x: u16) {
+        self.panel.resize(n_row, n_col, start_x);
         let n_row = self.panel.get_rows();
 
         // if resizing moves selected item off screen, scroll the list
@@ -335,6 +335,7 @@ impl<T: Clone + Menuable> Menu<T> {
             self.top_row = self.top_row + self.selected - (n_row - 1);
             self.selected = n_row - 1;
         }
+        self.redraw();
     }
 
     /// Given a row on the panel, this translates it into the

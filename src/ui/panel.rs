@@ -351,19 +351,10 @@ impl Panel {
     }
 
     /// Updates window size
-    pub fn resize(&mut self, n_row: u16, n_col: u16, start_y: u16, start_x: u16) {
-        // self.n_row = n_row;
-        // self.n_col = n_col;
-
-        // // apparently pancurses does not implement `wresize()`
-        // // from ncurses, so instead we create an entirely new
-        // // window every time the terminal is resized...not ideal,
-        // // but c'est la vie
-        // let oldwin = std::mem::replace(
-        //     &mut self.window,
-        //     pancurses::newwin(n_row, n_col, start_y, start_x),
-        // );
-        // oldwin.delwin();
+    pub fn resize(&mut self, n_row: u16, n_col: u16, start_x: u16) {
+        self.n_row = n_row;
+        self.n_col = n_col;
+        self.start_x = start_x;
     }
 
     /// Returns the effective number of rows (accounting for borders

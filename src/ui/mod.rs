@@ -253,7 +253,7 @@ impl<'a> Ui<'a> {
     pub fn getch(&mut self) -> UiMsg {
         if event::poll(Duration::from_secs(0)).expect("Can't poll for inputs") {
             match event::read().expect("Can't read inputs") {
-                Event::Resize(_, _) => self.resize(),
+                Event::Resize(n_col, n_row) => self.resize(n_col, n_row),
                 Event::Key(input) => {
                     let (curr_pod_id, curr_ep_id) = self.get_current_ids();
 
@@ -406,51 +406,46 @@ impl<'a> Ui<'a> {
     }
 
     /// Resize all the windows on the screen and refresh.
-    pub fn resize(&mut self) {
-        // pancurses::resize_term(0, 0);
-        // let (n_row, n_col) = self.stdscr.get_max_yx();
-        // self.n_row = n_row;
-        // self.n_col = n_col;
+    pub fn resize(&mut self, n_col: u16, n_row: u16) {
+        self.n_row = n_row;
+        self.n_col = n_col;
 
-        // let (pod_col, ep_col, det_col) = Self::calculate_sizes(n_col);
+        let (pod_col, ep_col, det_col) = Self::calculate_sizes(n_col);
 
-        // self.podcast_menu.resize(n_row - 1, pod_col, 0, 0);
-        // self.episode_menu.resize(n_row - 1, ep_col, 0, pod_col - 1);
+        self.podcast_menu.resize(n_row - 1, pod_col, 0);
+        self.episode_menu.resize(n_row - 1, ep_col, pod_col - 1);
 
-        // if self.details_panel.is_some() {
-        //     if det_col > 0 {
-        //         let det = self.details_panel.as_mut().unwrap();
-        //         det.resize(n_row - 1, det_col, 0, pod_col + ep_col - 2);
-        //     } else {
-        //         self.details_panel = None;
-        //     }
-        // } else if det_col > 0 {
-        //     self.details_panel = Some(Self::make_details_panel(
-        //         n_row - 1,
-        //         det_col,
-        //         0,
-        //         pod_col + ep_col - 2,
-        //     ));
-        // }
+        match self.active_menu {
+            ActiveMenu::PodcastMenu => {
+                self.podcast_menu.highlight_selected();
+            }
+            ActiveMenu::EpisodeMenu => {
+                self.podcast_menu.highlight_selected();
+                self.episode_menu.highlight_selected();
+            }
+        }
 
-        // self.stdscr.refresh();
-        // self.update_menus();
+        if self.details_panel.is_some() {
+            if det_col > 0 {
+                let det = self.details_panel.as_mut().unwrap();
+                det.resize(n_row - 1, det_col, pod_col + ep_col - 2);
+                // resizing the menus may change which item is selected
+                self.update_details_panel();
+            } else {
+                self.details_panel = None;
+            }
+        } else if det_col > 0 {
+            self.details_panel = Some(Self::make_details_panel(
+                self.colors.clone(),
+                n_row - 1,
+                det_col,
+                pod_col + ep_col - 2,
+            ));
+            self.update_details_panel();
+        }
 
-        // match self.active_menu {
-        //     ActiveMenu::PodcastMenu => self.podcast_menu.activate(),
-        //     ActiveMenu::EpisodeMenu => {
-        //         self.podcast_menu.activate();
-        //         self.episode_menu.activate();
-        //     }
-        // }
-
-        // if self.details_panel.is_some() {
-        //     self.update_details_panel();
-        // }
-
-        // self.popup_win.resize(n_row, n_col);
-        // self.notif_win.resize(n_row, n_col);
-        // self.stdscr.refresh();
+        self.popup_win.resize(n_row, n_col);
+        self.notif_win.resize(n_row, n_col);
     }
 
     /// Move the menu cursor around and refresh menus when necessary.
