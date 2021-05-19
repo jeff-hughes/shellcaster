@@ -260,8 +260,8 @@ impl Panel {
     pub fn details_template(&self, start_y: u16, details: Details) {
         let mut row = start_y;
         let bold = style::ContentStyle::new()
-            .foreground(self.colors.normal.0)
-            .background(self.colors.normal.1)
+            .foreground(self.colors.bold.0)
+            .background(self.colors.bold.1)
             .attribute(style::Attribute::Bold);
 
         // podcast title
@@ -340,7 +340,7 @@ impl Panel {
         match details.description {
             Some(desc) => {
                 // self.window.attron(Attribute::Bold);
-                row = self.write_wrap_line(row + 1, "Description:", None);
+                row = self.write_wrap_line(row + 1, "Description:", Some(bold));
                 // self.window.attroff(Attribute::Bold);
                 let _row = self.write_wrap_line(row + 1, &desc, None);
             }

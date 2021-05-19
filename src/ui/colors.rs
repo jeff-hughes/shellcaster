@@ -20,6 +20,7 @@ lazy_static! {
 #[derive(Debug, Clone)]
 pub struct AppColors {
     pub normal: (Color, Color),
+    pub bold: (Color, Color),
     pub highlighted_active: (Color, Color),
     pub highlighted: (Color, Color),
     pub error: (Color, Color),
@@ -28,7 +29,8 @@ pub struct AppColors {
 impl AppColors {
     pub fn default() -> Self {
         return Self {
-            normal: (Color::White, Color::Black),
+            normal: (Color::Grey, Color::Black),
+            bold: (Color::White, Color::Black),
             highlighted_active: (Color::Black, Color::DarkYellow),
             highlighted: (Color::Black, Color::Grey),
             error: (Color::Red, Color::Black),
@@ -44,6 +46,16 @@ impl AppColors {
         if let Some(val) = config.normal_background {
             if let Ok(v) = Self::color_from_str(&val) {
                 self.normal.1 = v;
+            }
+        }
+        if let Some(val) = config.bold_foreground {
+            if let Ok(v) = Self::color_from_str(&val) {
+                self.bold.0 = v;
+            }
+        }
+        if let Some(val) = config.bold_background {
+            if let Ok(v) = Self::color_from_str(&val) {
+                self.bold.1 = v;
             }
         }
         if let Some(val) = config.highlighted_active_foreground {

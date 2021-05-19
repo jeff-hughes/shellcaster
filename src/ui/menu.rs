@@ -87,12 +87,16 @@ impl<T: Clone + Menuable> Menu<T> {
                     let elem = map.get(&elem_id).expect("Could not retrieve menu item.");
 
                     if i == self.selected || !elem.is_played() {
-                        let mut style = style::ContentStyle::new()
-                            .foreground(self.panel.colors.normal.0)
-                            .background(self.panel.colors.normal.1);
-                        if !elem.is_played() {
-                            style = style.attribute(style::Attribute::Bold);
-                        }
+                        let style = if !elem.is_played() {
+                            style::ContentStyle::new()
+                                .foreground(self.panel.colors.bold.0)
+                                .background(self.panel.colors.bold.1)
+                                .attribute(style::Attribute::Bold)
+                        } else {
+                            style::ContentStyle::new()
+                                .foreground(self.panel.colors.normal.0)
+                                .background(self.panel.colors.normal.1)
+                        };
                         self.panel.write_line(
                             i,
                             elem.get_title(self.panel.get_cols() as usize),
@@ -180,93 +184,6 @@ impl<T: Clone + Menuable> Menu<T> {
                 self.highlight_item(self.selected, self.active);
             }
         }
-
-        // let mut old_selected;
-        // let checked_lines;
-        // let apply_color_played;
-        // let get_titles;
-
-        // let list_len = self.items.len();
-        // if list_len == 0 {
-        //     return;
-        // }
-
-        // let n_row = self.panel.get_rows();
-        // let max_lines = list_len as u16 + self.start_row;
-        // let check_max = |lines| min(lines, max_lines);
-
-        // // check the bounds of lines and adjust accordingly
-        // if lines.checked_add((self.top_row + n_row) as i32).is_some() {
-        //     checked_lines = lines;
-        // } else {
-        //     checked_lines = lines - self.top_row - n_row;
-        // }
-
-        // old_selected = self.selected;
-        // self.selected = self.selected.checked_add(checked_lines).unwrap();
-
-        // // don't allow scrolling past last item in list (if shorter
-        // // than self.panel.get_rows())
-        // let abs_bottom = min(self.panel.get_rows(), list_len as u16 + self.start_row - 1);
-        // if self.selected > abs_bottom {
-        //     self.selected = abs_bottom;
-        // }
-
-        // // given a selection, apply correct play status and highlight
-        // apply_color_played = |menu: &mut Menu<T>, selected, color: ColorType| {
-        //     let played = menu
-        //         .items
-        //         .map_single_by_index(menu.get_menu_idx(selected), |el| el.is_played())
-        //         .unwrap_or(false);
-        //     menu.set_attrs(selected, played, color);
-        // };
-
-        // // return a vec with sorted titles in range start, end (exclusive)
-        // get_titles = |menu: &mut Menu<T>, start, end| {
-        //     menu.items.map_by_range(start, end, |el| {
-        //         Some(el.get_title(menu.panel.get_cols() as usize))
-        //     })
-        // };
-
-        // // scroll list if necessary:
-        // // scroll down
-        // if (self.selected) > (n_row - 1) {
-        //     // for scrolls that don't start at the bottom
-        //     apply_color_played(self, old_selected, ColorType::Normal);
-        //     let delta = n_row - old_selected - 1;
-
-        //     let titles = get_titles(
-        //         self,
-        //         (self.top_row + n_row) as usize,
-        //         (check_max(checked_lines + self.top_row + n_row - delta)) as usize,
-        //     );
-        //     for title in titles.into_iter() {
-        //         self.top_row += 1;
-        //         self.panel.delete_line(self.start_row);
-        //         old_selected -= 1;
-        //         self.panel.delete_line(n_row - 1);
-        //         self.panel.write_line(n_row - 1, title);
-        //         apply_color_played(self, n_row - 1, ColorType::Normal);
-        //     }
-        //     self.selected = n_row - 1;
-
-        // // scroll up
-        // } else if self.selected < self.start_row {
-        //     let titles = get_titles(
-        //         self,
-        //         max(0, self.top_row + self.selected) as usize,
-        //         (self.top_row) as usize,
-        //     );
-        //     for title in titles.into_iter().rev() {
-        //         self.top_row -= 1;
-        //         self.panel.insert_line(self.start_row, title);
-        //         apply_color_played(self, 1, ColorType::Normal);
-        //         old_selected += 1;
-        //     }
-        //     self.selected = self.start_row;
-        // }
-        // apply_color_played(self, old_selected, ColorType::Normal);
-        // apply_color_played(self, self.selected, ColorType::HighlightedActive);
     }
 
     /// Highlights the item in the menu, given a y-value.
@@ -306,13 +223,16 @@ impl<T: Clone + Menuable> Menu<T> {
             });
 
         if let Some((title, is_played)) = el_details {
-            let mut style = style::ContentStyle::new()
-                .foreground(self.panel.colors.normal.0)
-                .background(self.panel.colors.normal.1);
-            style = if is_played {
-                style.attribute(style::Attribute::NormalIntensity)
+            let style = if is_played {
+                style::ContentStyle::new()
+                    .foreground(self.panel.colors.normal.0)
+                    .background(self.panel.colors.normal.1)
+                    .attribute(style::Attribute::NormalIntensity)
             } else {
-                style.attribute(style::Attribute::Bold)
+                style::ContentStyle::new()
+                    .foreground(self.panel.colors.bold.0)
+                    .background(self.panel.colors.bold.1)
+                    .attribute(style::Attribute::Bold)
             };
             self.panel.write_line(item_y, title, Some(style));
         }

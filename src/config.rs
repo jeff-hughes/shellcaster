@@ -104,6 +104,8 @@ pub struct KeybindingsFromToml {
 pub struct AppColorsFromToml {
     pub normal_foreground: Option<String>,
     pub normal_background: Option<String>,
+    pub bold_foreground: Option<String>,
+    pub bold_background: Option<String>,
     pub highlighted_active_foreground: Option<String>,
     pub highlighted_active_background: Option<String>,
     pub highlighted_foreground: Option<String>,
@@ -162,6 +164,8 @@ impl Config {
                 let colors = AppColorsFromToml {
                     normal_foreground: None,
                     normal_background: None,
+                    bold_foreground: None,
+                    bold_background: None,
                     highlighted_active_foreground: None,
                     highlighted_active_background: None,
                     highlighted_foreground: None,
