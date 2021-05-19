@@ -128,7 +128,7 @@ impl<T: Clone + Menuable> Menu<T> {
     /// not fall out of bounds, and then updates the panel to
     /// represent the new visible list.
     pub fn scroll(&mut self, lines: Scroll) {
-        let list_len = self.items.len();
+        let list_len = self.items.len() as u16;
         if list_len == 0 {
             return;
         }
@@ -152,14 +152,28 @@ impl<T: Clone + Menuable> Menu<T> {
                 self.highlight_item(self.selected, self.active);
             }
             Scroll::Down(v) => {
+                if self.get_menu_idx(self.selected) >= list_len as usize - 1 {
+                    // we're at the bottom of the list
+                    return;
+                }
+
                 let n_row = self.panel.get_rows();
-                if v < (n_row - self.selected) {
+                let select_max = if list_len < n_row {
+                    list_len - 1
+                } else {
+                    n_row - 1
+                };
+
+                if v <= (select_max - self.selected) {
                     self.unhighlight_item(self.selected);
                     self.selected += v;
                 } else {
                     let list_scroll_amount = v - (n_row - self.selected - 1);
-                    self.top_row = min(self.top_row + list_scroll_amount, list_len as u16 - n_row);
-                    self.selected = n_row - 1;
+                    // can't scroll list if list is shorter than full screen
+                    if list_len > n_row {
+                        self.top_row = min(self.top_row + list_scroll_amount, list_len - n_row);
+                    }
+                    self.selected = select_max;
                     self.panel.clear_inner();
                     self.update_items();
                 }
