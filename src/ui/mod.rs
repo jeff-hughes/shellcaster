@@ -12,8 +12,8 @@ use crossterm::{
 use lazy_static::lazy_static;
 use regex::Regex;
 
-// #[cfg_attr(not(test), path = "panel.rs")]
-// #[cfg_attr(test, path = "mock_panel.rs")]
+#[cfg_attr(not(test), path = "panel.rs")]
+#[cfg_attr(test, path = "mock_panel.rs")]
 mod panel;
 
 pub mod colors;

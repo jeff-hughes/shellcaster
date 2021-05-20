@@ -1,5 +1,9 @@
-use super::ColorType;
+use std::rc::Rc;
+
 use chrono::{DateTime, Utc};
+use crossterm::style;
+
+use super::AppColors;
 
 /// Struct holding the raw data used for building the details panel.
 pub struct Details {
@@ -13,67 +17,78 @@ pub struct Details {
 
 #[derive(Debug)]
 pub struct Panel {
-    pub window: Vec<(String, pancurses::chtype, ColorType)>,
+    pub buffer: Vec<String>,
     pub screen_pos: usize,
+    pub colors: Rc<AppColors>,
     pub title: String,
-    pub n_row: i32,
-    pub n_col: i32,
+    pub start_x: u16,
+    pub n_row: u16,
+    pub n_col: u16,
+    pub margins: (u16, u16, u16, u16),
 }
 
 impl Panel {
     pub fn new(
         title: String,
         screen_pos: usize,
-        n_row: i32,
-        n_col: i32,
-        _start_y: i32,
-        _start_x: i32,
+        colors: Rc<AppColors>,
+        n_row: u16,
+        n_col: u16,
+        start_x: u16,
+        margins: (u16, u16, u16, u16),
     ) -> Self {
         // we represent the window as a vector of Strings instead of
         // the pancurses window
-        let panel_win =
-            vec![(String::new(), pancurses::A_NORMAL, ColorType::Normal); (n_row - 2) as usize];
+        let buffer = vec![String::new(); (n_row - 2) as usize];
 
         return Panel {
-            window: panel_win,
+            buffer: buffer,
             screen_pos: screen_pos,
+            colors: colors,
             title: title,
+            start_x: start_x,
             n_row: n_row,
             n_col: n_col,
+            margins: margins,
         };
     }
 
-    pub fn refresh(&self) {}
+    pub fn redraw(&self) {}
 
-    pub fn erase(&mut self) {
-        self.window =
-            vec![(String::new(), pancurses::A_NORMAL, ColorType::Normal); self.n_row as usize];
+    pub fn clear(&mut self) {
+        self.clear_inner();
     }
 
-    pub fn write_line(&mut self, y: i32, string: String) {
-        self.window[y as usize] = (string, pancurses::A_NORMAL, ColorType::Normal);
+    pub fn clear_inner(&mut self) {
+        self.buffer = vec![String::new(); (self.n_row - 2) as usize];
     }
 
-    pub fn insert_line(&mut self, y: i32, string: String) {
-        self.window
-            .insert(y as usize, (string, pancurses::A_NORMAL, ColorType::Normal));
-        let _ = self.window.pop();
+    pub fn write_line(&mut self, y: u16, string: String, _style: Option<style::ContentStyle>) {
+        self.buffer[y as usize] = string;
     }
 
-    pub fn delete_line(&mut self, y: i32) {
-        let _ = self.window.remove(y as usize);
-        // add a new empty line to the end so the vector stays the
-        // same size
-        self.window
-            .push((String::new(), pancurses::A_NORMAL, ColorType::Normal));
+    pub fn write_key_value_line(
+        &mut self,
+        y: u16,
+        key: String,
+        value: String,
+        _key_style: Option<style::ContentStyle>,
+        _value_style: Option<style::ContentStyle>,
+    ) {
+        self.buffer[y as usize] = format!("{}: {}", key, value);
     }
 
-    pub fn write_wrap_line(&mut self, start_y: i32, string: &str) -> i32 {
+    pub fn write_wrap_line(
+        &mut self,
+        start_y: u16,
+        string: &str,
+        _style: Option<style::ContentStyle>,
+    ) -> u16 {
         let mut row = start_y;
         let max_row = self.get_rows();
         let wrapper = textwrap::wrap(&string, self.get_cols() as usize);
         for line in wrapper {
-            self.write_line(row, line.to_string());
+            self.write_line(row, line.to_string(), None);
             row += 1;
 
             if row >= max_row {
@@ -83,49 +98,50 @@ impl Panel {
         return row - 1;
     }
 
-    pub fn details_template(&mut self, start_y: i32, details: Details) {
+    pub fn details_template(&mut self, start_y: u16, details: Details) {
         let mut row = start_y - 1;
 
         // podcast title
         match details.pod_title {
-            Some(t) => row = self.write_wrap_line(row + 1, &t),
-            None => row = self.write_wrap_line(row + 1, "No title"),
+            Some(t) => row = self.write_wrap_line(row + 1, &t, None),
+            None => row = self.write_wrap_line(row + 1, "No title", None),
         }
 
         // episode title
         match details.ep_title {
-            Some(t) => row = self.write_wrap_line(row + 1, &t),
-            None => row = self.write_wrap_line(row + 1, "No title"),
+            Some(t) => row = self.write_wrap_line(row + 1, &t, None),
+            None => row = self.write_wrap_line(row + 1, "No title", None),
         }
 
         row += 1; // blank line
 
         // published date
         if let Some(date) = details.pubdate {
-            let new_row = self.write_wrap_line(
+            self.write_key_value_line(
                 row + 1,
-                &format!("Published: {}", date.format("%B %-d, %Y")),
+                "Published".to_string(),
+                format!("{}", date.format("%B %-d, %Y")),
+                None,
+                None,
             );
-            self.change_attr(row + 1, 0, 10, pancurses::A_UNDERLINE, ColorType::Normal);
-            row = new_row;
+            row += 1;
         }
 
         // duration
         if let Some(dur) = details.duration {
-            let new_row = self.write_wrap_line(row + 1, &format!("Duration: {}", dur));
-            self.change_attr(row + 1, 0, 9, pancurses::A_UNDERLINE, ColorType::Normal);
-            row = new_row;
+            self.write_key_value_line(row + 1, "Duration".to_string(), dur, None, None);
+            row += 1;
         }
 
         // explicit
         if let Some(exp) = details.explicit {
-            let new_row = if exp {
-                self.write_wrap_line(row + 1, "Explicit: Yes")
+            let exp_string = if exp {
+                "Yes".to_string()
             } else {
-                self.write_wrap_line(row + 1, "Explicit: No")
+                "No".to_string()
             };
-            self.change_attr(row + 1, 0, 9, pancurses::A_UNDERLINE, ColorType::Normal);
-            row = new_row;
+            self.write_key_value_line(row + 1, "Explicit".to_string(), exp_string, None, None);
+            row += 1;
         }
 
         row += 1; // blank line
@@ -133,57 +149,42 @@ impl Panel {
         // description
         match details.description {
             Some(desc) => {
-                row = self.write_wrap_line(row + 1, "Description:");
-                let _row = self.write_wrap_line(row + 1, &desc);
+                row = self.write_wrap_line(row + 1, "Description:", None);
+                let _row = self.write_wrap_line(row + 1, &desc, None);
             }
             None => {
-                let _row = self.write_wrap_line(row + 1, "No description.");
+                let _row = self.write_wrap_line(row + 1, "No description.", None);
             }
         }
     }
 
-    // This doesn't fully replicate the functionality of Panel, as it
-    // only applies the attribute to the line as a whole, rather than
-    // specific characters. But I'm primarily using it to change whole
-    // lines anyway.
-    pub fn change_attr(
-        &mut self,
-        y: i32,
-        _x: i32,
-        _nchars: i32,
-        attr: pancurses::chtype,
-        color: ColorType,
-    ) {
-        let current = &self.window[y as usize];
-        self.window[y as usize] = (current.0.clone(), attr, color);
-    }
-
-    pub fn resize(&mut self, n_row: i32, n_col: i32, _start_y: i32, _start_x: i32) {
+    pub fn resize(&mut self, n_row: u16, n_col: u16, start_x: u16) {
         self.n_row = n_row;
         self.n_col = n_col;
+        self.start_x = start_x;
 
         let new_len = (n_row - 2) as usize;
-        let len = self.window.len();
+        let len = self.buffer.len();
         if new_len < len {
-            self.window.truncate(new_len);
+            self.buffer.truncate(new_len);
         } else if new_len > len {
             for _ in (new_len - len)..new_len {
-                self.window
-                    .push((String::new(), pancurses::A_NORMAL, ColorType::Normal));
+                self.buffer.push(String::new());
             }
         }
     }
 
-    pub fn get_rows(&self) -> i32 {
-        return self.n_row - 2; // border on top and bottom
+    pub fn get_rows(&self) -> u16 {
+        // 2 for border on top and bottom
+        return self.n_row - self.margins.0 - self.margins.2 - 2;
     }
 
-    pub fn get_cols(&self) -> i32 {
-        return self.n_col - 5; // 2 for border, 2 for margins, and 1
-                               // extra for some reason...
+    pub fn get_cols(&self) -> u16 {
+        // 2 for border, and 1 extra for some reason...
+        return self.n_col - self.margins.1 - self.margins.3 - 3;
     }
 
-    pub fn get_row(&self, row: usize) -> (String, pancurses::chtype, ColorType) {
-        return self.window[row].clone();
+    pub fn get_row(&self, row: usize) -> String {
+        return self.buffer[row].clone();
     }
 }
