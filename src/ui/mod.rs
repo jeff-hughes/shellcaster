@@ -183,6 +183,7 @@ impl<'a> Ui<'a> {
             n_row - 1,
             pod_col,
             0,
+            (0, 0, 0, 0),
         );
         let podcast_menu = Menu::new(podcast_panel, None, items);
 
@@ -193,6 +194,7 @@ impl<'a> Ui<'a> {
             n_row - 1,
             ep_col,
             pod_col - 1,
+            (0, 0, 0, 0),
         );
 
         let episode_menu = Menu::new(episode_panel, None, first_pod);
@@ -824,7 +826,15 @@ impl<'a> Ui<'a> {
         n_col: u16,
         start_x: u16,
     ) -> Panel {
-        return Panel::new("Details".to_string(), 2, colors, n_row, n_col, start_x);
+        return Panel::new(
+            "Details".to_string(),
+            2,
+            colors,
+            n_row,
+            n_col,
+            start_x,
+            (0, 1, 0, 1),
+        );
     }
 
     /// Updates the details panel with information about the current

@@ -67,19 +67,18 @@ impl Menuable for Podcast {
         // to the end
         if length > crate::config::PODCAST_UNPLAYED_TOTALS_LENGTH {
             let meta_str = format!("({}/{})", self.num_unplayed(), self.episodes.len());
-            title_length = length - meta_str.chars().count();
+            title_length = length - meta_str.chars().count() - 2;
 
             let out = self.title.substr(0, title_length);
 
             return format!(
-                "{} {:>width$}",
+                " {} {:>width$} ",
                 out,
                 meta_str,
-                width = length - out.grapheme_len()
-            );
-        // this pads spaces between title and totals
+                width = length - out.grapheme_len() - 2
+            ); // this pads spaces between title and totals
         } else {
-            return self.title.substr(0, title_length);
+            return format!(" {} ", self.title.substr(0, title_length - 2));
         }
     }
 
@@ -157,7 +156,6 @@ impl Menuable for Episode {
             }
             None => self.title.substr(0, length),
         };
-        let out_len = out.grapheme_len();
         if length > crate::config::EPISODE_PUBDATE_LENGTH {
             let dur = self.format_duration();
             let meta_dur = format!("[{}]", dur);
@@ -168,35 +166,35 @@ impl Menuable for Episode {
                 let meta_str = format!("({}) {}", pd, meta_dur);
                 let added_len = meta_str.chars().count();
 
-                let out_added = out.substr(0, length - added_len);
+                let out_added = out.substr(0, length - added_len - 2);
                 return format!(
-                    "{} {:>width$}",
+                    " {} {:>width$} ",
                     out_added,
                     meta_str,
-                    width = length - out_len
+                    width = length - out_added.grapheme_len() - 2
                 );
             } else {
                 // just print duration
-                let out_added = out.substr(0, length - meta_dur.chars().count());
+                let out_added = out.substr(0, length - meta_dur.chars().count() - 2);
                 return format!(
-                    "{} {:>width$}",
+                    " {} {:>width$} ",
                     out_added,
                     meta_dur,
-                    width = length - out_len
+                    width = length - out_added.grapheme_len() - 2
                 );
             }
         } else if length > crate::config::EPISODE_DURATION_LENGTH {
             let dur = self.format_duration();
             let meta_dur = format!("[{}]", dur);
-            let out_added = out.substr(0, length - meta_dur.chars().count());
+            let out_added = out.substr(0, length - meta_dur.chars().count() - 2);
             return format!(
-                "{} {:>width$}",
+                " {} {:>width$} ",
                 out_added,
                 meta_dur,
-                width = length - out_len
+                width = length - out_added.grapheme_len() - 2
             );
         } else {
-            return out;
+            return format!(" {} ", out.substr(0, length - 2));
         }
     }
 

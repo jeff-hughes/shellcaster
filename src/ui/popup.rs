@@ -134,11 +134,12 @@ impl<'a> PopupWin<'a> {
             self.total_rows - 1,
             self.total_cols,
             0,
+            (1, 1, 1, 1),
         );
         welcome_win.redraw();
 
         let mut row = 0;
-        row = welcome_win.write_wrap_line(row + 1, "Welcome to shellcaster!", None);
+        row = welcome_win.write_wrap_line(row, "Welcome to shellcaster!", None);
 
         row = welcome_win.write_wrap_line(row + 2,
             &format!("Your podcast list is currently empty. Press {} to add a new podcast feed, {} to quit, or see all available commands by typing {} to get help.", key_strs[0], key_strs[1], key_strs[2]), None);
@@ -224,6 +225,7 @@ impl<'a> PopupWin<'a> {
             self.total_rows - 1,
             self.total_cols,
             0,
+            (1, 1, 1, 1),
         );
         help_win.redraw();
 
@@ -305,6 +307,7 @@ impl<'a> PopupWin<'a> {
             self.total_rows - 1,
             self.total_cols,
             0,
+            (0, 0, 0, 0),
         );
 
         let header = format!(

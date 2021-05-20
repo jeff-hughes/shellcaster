@@ -1,5 +1,5 @@
+use std::io;
 use std::rc::Rc;
-use std::{convert::TryInto, io};
 
 use chrono::{DateTime, Utc};
 use crossterm::{cursor, queue, style};
@@ -30,9 +30,10 @@ pub struct Details {
 /// Panels abstract away a pancurses window, and handles all methods
 /// associated with writing data to that window. A panel includes a
 /// border and margin around the edge of the window, and a title that
-/// appears at the top. The Panel will translate the x and y coordinates
-/// to account for the border and margins, so users of the methods can
-/// calculate rows and columns relative to the Panel.
+/// appears at the top. Margins are set individually, in the order
+/// (top, right, bottom, left). The Panel will translate the x and y
+/// coordinates to account for the border and margins, so users of the
+/// methods can calculate rows and columns relative to the Panel.
 #[derive(Debug)]
 pub struct Panel {
     screen_pos: usize,
@@ -41,6 +42,7 @@ pub struct Panel {
     start_x: u16,
     n_row: u16,
     n_col: u16,
+    margins: (u16, u16, u16, u16),
 }
 
 impl Panel {
@@ -52,6 +54,7 @@ impl Panel {
         n_row: u16,
         n_col: u16,
         start_x: u16,
+        margins: (u16, u16, u16, u16),
     ) -> Self {
         return Panel {
             screen_pos: screen_pos,
@@ -60,6 +63,7 @@ impl Panel {
             start_x: start_x,
             n_row: n_row,
             n_col: n_col,
+            margins: margins,
         };
     }
 
@@ -175,7 +179,7 @@ impl Panel {
         };
         queue!(
             io::stdout(),
-            cursor::MoveTo(self.abs_x(0), self.abs_y(y as i16)),
+            cursor::MoveTo(self.abs_x(0), self.abs_y(y)),
             style::PrintStyledContent(styled)
         )
         .unwrap();
@@ -198,11 +202,7 @@ impl Panel {
         key.push(':');
         value.insert(0, ' ');
 
-        queue!(
-            io::stdout(),
-            cursor::MoveTo(self.abs_x(0), self.abs_y(y as i16))
-        )
-        .unwrap();
+        queue!(io::stdout(), cursor::MoveTo(self.abs_x(0), self.abs_y(y))).unwrap();
 
         let key_styled = match key_style {
             Some(kstyle) => kstyle.apply(key),
@@ -242,7 +242,7 @@ impl Panel {
         for line in wrapper {
             queue!(
                 io::stdout(),
-                cursor::MoveTo(self.abs_x(0), self.abs_y(row as i16)),
+                cursor::MoveTo(self.abs_x(0), self.abs_y(row)),
                 style::PrintStyledContent(content_style.apply(line))
             )
             .unwrap();
@@ -360,29 +360,26 @@ impl Panel {
     /// Returns the effective number of rows (accounting for borders
     /// and margins).
     pub fn get_rows(&self) -> u16 {
-        return self.n_row - 2; // border on top and bottom
+        // 2 for border on top and bottom
+        return self.n_row - self.margins.0 - self.margins.2 - 2;
     }
 
     /// Returns the effective number of columns (accounting for
     /// borders and margins).
     pub fn get_cols(&self) -> u16 {
-        return self.n_col - 5; // 2 for border, 2 for margins, and 1
-                               // extra for some reason...
+        // 2 for border, and 1 extra for some reason...
+        return self.n_col - self.margins.1 - self.margins.3 - 3;
     }
 
     /// Calculates the y-value relative to the terminal rather than to
     /// the panel (i.e., taking into account borders and margins).
-    fn abs_y(&self, y: i16) -> u16 {
-        return (y + 1)
-            .try_into()
-            .expect("Can't convert signed integer to unsigned");
+    fn abs_y(&self, y: u16) -> u16 {
+        return y + self.margins.0 + 1;
     }
 
     /// Calculates the x-value relative to the terminal rather than to
     /// the panel (i.e., taking into account borders and margins).
-    fn abs_x(&self, x: i16) -> u16 {
-        return (x + self.start_x as i16 + 2)
-            .try_into()
-            .expect("Can't convert signed integer to unsigned");
+    fn abs_x(&self, x: u16) -> u16 {
+        return x + self.start_x + self.margins.3 + 1;
     }
 }
