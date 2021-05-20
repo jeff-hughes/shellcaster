@@ -158,6 +158,7 @@ impl<'a> Ui<'a> {
         terminal::enable_raw_mode().expect("Terminal can't run in raw mode.");
         execute!(
             io::stdout(),
+            terminal::EnterAlternateScreen,
             terminal::Clear(terminal::ClearType::All),
             cursor::Hide
         )
@@ -804,7 +805,6 @@ impl<'a> Ui<'a> {
             io::stdout(),
             terminal::Clear(terminal::ClearType::All),
             terminal::LeaveAlternateScreen,
-            event::DisableMouseCapture,
             cursor::Show
         )
         .unwrap();
