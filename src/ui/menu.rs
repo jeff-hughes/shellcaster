@@ -188,6 +188,7 @@ impl<T: Clone + Menuable> Menu<T> {
 
     /// Highlights the item in the menu, given a y-value.
     pub fn highlight_item(&mut self, item_y: u16, active: bool) {
+        // if list is empty, will return None
         let el_details = self
             .items
             .map_single_by_index(self.get_menu_idx(item_y), |el| {
@@ -216,6 +217,7 @@ impl<T: Clone + Menuable> Menu<T> {
 
     /// Removes highlight on the item in the menu, given a y-value.
     pub fn unhighlight_item(&mut self, item_y: u16) {
+        // if list is empty, will return None
         let el_details = self
             .items
             .map_single_by_index(self.get_menu_idx(item_y), |el| {
@@ -227,7 +229,6 @@ impl<T: Clone + Menuable> Menu<T> {
                 style::ContentStyle::new()
                     .foreground(self.panel.colors.normal.0)
                     .background(self.panel.colors.normal.1)
-                    .attribute(style::Attribute::NormalIntensity)
             } else {
                 style::ContentStyle::new()
                     .foreground(self.panel.colors.bold.0)
@@ -247,13 +248,6 @@ impl<T: Clone + Menuable> Menu<T> {
     /// Controls how the window changes when it is active (i.e., available
     /// for user input to modify state).
     pub fn activate(&mut self) {
-        // if list is empty, will return None
-        // if let Some(played) = self
-        //     .items
-        //     .map_single_by_index(self.get_menu_idx(self.selected), |el| el.is_played())
-        // {
-        //     self.set_attrs(self.selected, played, ColorType::HighlightedActive);
-        // }
         self.active = true;
         self.highlight_selected();
     }
@@ -302,14 +296,8 @@ impl Menu<Podcast> {
     /// Controls how the window changes when it is inactive (i.e., not
     /// available for user input to modify state).
     pub fn deactivate(&mut self) {
-        // if list is empty, will return None
-        // if let Some(played) = self
-        //     .items
-        //     .map_single_by_index(self.get_menu_idx(self.selected), |el| el.is_played())
-        // {
-        //     self.set_attrs(self.selected, played, ColorType::Highlighted);
-        // }
         self.active = false;
+        // if list is empty, will return None
         let el_details = self
             .items
             .map_single_by_index(self.get_menu_idx(self.selected), |el| {
@@ -317,13 +305,11 @@ impl Menu<Podcast> {
             });
         if let Some((title, is_played)) = el_details {
             let mut style = style::ContentStyle::new()
-                .foreground(style::Color::Black)
-                .background(style::Color::Grey);
-            style = if is_played {
-                style.attribute(style::Attribute::NormalIntensity)
-            } else {
-                style.attribute(style::Attribute::Bold)
-            };
+                .foreground(self.panel.colors.highlighted.0)
+                .background(self.panel.colors.highlighted.1);
+            if !is_played {
+                style = style.attribute(style::Attribute::Bold);
+            }
             self.panel.write_line(self.selected, title, Some(style));
         }
     }
@@ -333,30 +319,8 @@ impl Menu<Episode> {
     /// Controls how the window changes when it is inactive (i.e., not
     /// available for user input to modify state).
     pub fn deactivate(&mut self) {
-        // if list is empty, will return None
-        // if let Some(played) = self
-        //     .items
-        //     .map_single_by_index(self.get_menu_idx(self.selected), |el| el.is_played())
-        // {
-        //     self.set_attrs(self.selected, played, ColorType::Normal);
-        // }
         self.active = false;
-        let el_details = self
-            .items
-            .map_single_by_index(self.get_menu_idx(self.selected), |el| {
-                (el.get_title(self.panel.get_cols() as usize), el.is_played())
-            });
-        if let Some((title, is_played)) = el_details {
-            let mut style = style::ContentStyle::new()
-                .foreground(style::Color::Reset)
-                .background(style::Color::Reset);
-            style = if is_played {
-                style.attribute(style::Attribute::NormalIntensity)
-            } else {
-                style.attribute(style::Attribute::Bold)
-            };
-            self.panel.write_line(self.selected, title, Some(style));
-        }
+        self.unhighlight_item(self.selected);
     }
 }
 

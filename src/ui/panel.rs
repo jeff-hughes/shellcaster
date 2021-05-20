@@ -339,9 +339,7 @@ impl Panel {
         // description
         match details.description {
             Some(desc) => {
-                // self.window.attron(Attribute::Bold);
                 row = self.write_wrap_line(row + 1, "Description:", Some(bold));
-                // self.window.attroff(Attribute::Bold);
                 let _row = self.write_wrap_line(row + 1, &desc, None);
             }
             None => {
