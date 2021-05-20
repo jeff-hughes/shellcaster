@@ -268,7 +268,6 @@ impl MainController {
     /// synchronizing data from the RSS feed of an existing podcast.
     /// `pod_id` will be None if a new podcast is being added (i.e.,
     /// the database has not given it an id yet).
-    #[allow(clippy::useless_let_if_seq)]
     pub fn add_or_sync_data(&mut self, pod: PodcastNoId, pod_id: Option<i64>) {
         let title = pod.title.clone();
         let db_result;

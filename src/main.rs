@@ -56,7 +56,6 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// *Export subcommand:*
 /// Connects to the sqlite database, and reads all podcasts into an OPML
 /// file, with the location specified from the command line arguments.
-#[allow(clippy::while_let_on_iterator)]
 fn main() -> Result<()> {
     // SETUP -----------------------------------------------------------
 

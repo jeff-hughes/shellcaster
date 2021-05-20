@@ -27,13 +27,15 @@ pub struct Details {
     pub description: Option<String>,
 }
 
-/// Panels abstract away a pancurses window, and handles all methods
-/// associated with writing data to that window. A panel includes a
-/// border and margin around the edge of the window, and a title that
-/// appears at the top. Margins are set individually, in the order
-/// (top, right, bottom, left). The Panel will translate the x and y
-/// coordinates to account for the border and margins, so users of the
-/// methods can calculate rows and columns relative to the Panel.
+/// Panels abstract away a terminal "window" (section of the screen),
+/// and handle all methods associated with writing data to that window.
+/// A panel includes a border and margin around the edge of the window,
+/// and a title that appears at the top. Margins are set individually,
+/// in the order (top, right, bottom, left). The Panel will translate
+/// the x and y coordinates to account for the border and margins, so
+/// users of the methods can calculate rows and columns relative to the
+/// Panel (i.e., x = 0 and y = 0 represent the top-left printable
+/// cell in the window).
 #[derive(Debug)]
 pub struct Panel {
     screen_pos: usize,
@@ -255,8 +257,7 @@ impl Panel {
         return row - 1;
     }
 
-    /// Write the specific template used for the details panel. This is
-    /// not the most elegant code, but it works.
+    /// Write the specific template used for the details panel.
     pub fn details_template(&self, start_y: u16, details: Details) {
         let mut row = start_y;
         let bold = style::ContentStyle::new()
@@ -348,7 +349,7 @@ impl Panel {
         }
     }
 
-    /// Updates window size
+    /// Updates window size.
     pub fn resize(&mut self, n_row: u16, n_col: u16, start_x: u16) {
         self.n_row = n_row;
         self.n_col = n_col;

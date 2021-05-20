@@ -192,7 +192,6 @@ impl Config {
 /// Takes the deserialized TOML configuration, and creates a Config struct
 /// that specifies user settings where indicated, and defaults for any
 /// settings that were not specified by the user.
-#[allow(clippy::type_complexity)]
 fn config_with_defaults(config_toml: ConfigFromToml) -> Result<Config> {
     // specify keybindings
     let keymap = match config_toml.keybindings {

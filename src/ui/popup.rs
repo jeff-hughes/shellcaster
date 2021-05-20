@@ -6,7 +6,6 @@ use crossterm::{
     style,
 };
 
-// use super::ColorType;
 use super::{AppColors, Menu, Panel, Scroll, UiMsg};
 use crate::config::BIG_SCROLL_AMOUNT;
 use crate::keymap::{Keybindings, UserAction};
@@ -39,7 +38,12 @@ impl ActivePopup {
     }
 }
 
-/// Holds all state relevant for handling popup windows.
+/// Holds all state relevant for handling popup windows. Holds an
+/// ActivePopup enum that itself contains the Panel/Menu displayed with
+/// the current popup window (if any). The `bool` values provide an
+/// indicator of which popup menus currently exist, with the possibility
+/// for multiple popup windows to exist (though only one is "active" at
+/// any given time).
 #[derive(Debug)]
 pub struct PopupWin<'a> {
     popup: ActivePopup,
@@ -325,6 +329,7 @@ impl<'a> PopupWin<'a> {
         return download_win;
     }
 
+    /// Appends a new episode to the list of new episodes.
     pub fn _add_episodes(&mut self, mut episodes: Vec<NewEpisode>) {
         self.new_episodes.append(&mut episodes);
     }
@@ -350,13 +355,13 @@ impl<'a> PopupWin<'a> {
     /// When there is a change to the active popup window, this should
     /// be called to check for other popup windows that are "in the
     /// queue" -- this lets one popup window appear over top of another
-    /// one, while keeping that second one in reserve. This function will
-    /// check for other popup windows to appear and change the active
-    /// window accordingly.
+    /// one, while keeping that second one in reserve. This function
+    /// will check for other popup windows to appear and change the
+    /// active window accordingly.
     fn change_win(&mut self) {
-        // The help window takes precedence over all other popup windows;
-        // the welcome window is lowest priority and only appears if all
-        // other windows are inactive
+        // The help window takes precedence over all other popup
+        // windows; the welcome window is lowest priority and only
+        // appears if all other windows are inactive
         if self.help_win && !self.popup.is_help_win() {
             let win = self.make_help_win();
             self.popup = ActivePopup::HelpWin(win);

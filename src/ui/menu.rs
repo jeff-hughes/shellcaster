@@ -15,11 +15,11 @@ pub enum Scroll {
 
 /// Generic struct holding details about a list menu. These menus are
 /// contained by the UI, and hold the list of podcasts or podcast
-/// episodes. They also hold the pancurses window used to display the menu
-/// to the user.
+/// episodes. They also hold the Panel used to draw all elements to the
+/// screen.
 ///
-/// * `screen_pos` stores the position of the window on the screen, from
-///   left to right
+/// * `header` is an optional String of text that is printed above the
+///   menu; the scrollable menu effectively starts below the header.
 /// * `start_row` indicates the first row that is used for the menu;
 ///   this will be 0 if there is no header; otherwise, `start_row` will
 ///   be the first row below the header. Calculated relative to the
@@ -31,6 +31,9 @@ pub enum Scroll {
 /// * `selected` indicates which item on screen is currently highlighted.
 ///   It is calculated relative to the panel, i.e., a value between
 ///   0 and (n_row - 1)
+/// * `active` indicates whether the menu is currently interactive, e.g.,
+///   if the user scrolls up or down, this is the menu that will receive
+///   those events.
 #[derive(Debug)]
 pub struct Menu<T>
 where T: Clone + Menuable
@@ -245,14 +248,14 @@ impl<T: Clone + Menuable> Menu<T> {
         self.highlight_item(self.selected, self.active);
     }
 
-    /// Controls how the window changes when it is active (i.e., available
-    /// for user input to modify state).
+    /// Controls how the window changes when it is active (i.e.,
+    /// available for user input to modify state).
     pub fn activate(&mut self) {
         self.active = true;
         self.highlight_selected();
     }
 
-    /// Updates window size
+    /// Updates window size.
     pub fn resize(&mut self, n_row: u16, n_col: u16, start_x: u16) {
         self.panel.resize(n_row, n_col, start_x);
         let n_row = self.panel.get_rows();

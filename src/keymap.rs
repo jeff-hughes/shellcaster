@@ -102,7 +102,7 @@ impl Keybindings {
         return keymap;
     }
 
-    /// Takes an Input object from pancurses and returns the associated
+    /// Takes an Input object from crossterm and returns the associated
     /// user action, if one exists.
     pub fn get_from_input(&self, input: KeyEvent) -> Option<&UserAction> {
         match input_to_str(input) {
@@ -180,11 +180,8 @@ impl Keybindings {
     }
 }
 
-/// Helper function converting a pancurses Input object to a unique
+/// Helper function converting a crossterm KeyEvent object to a unique
 /// string representing that input.
-/// This function is a bit ridiculous, given that 95% of keyboards
-/// probably don't even have half these special keys, but at any rate...
-/// they're mapped, if anyone wants them.
 pub fn input_to_str(input: KeyEvent) -> Option<String> {
     let ctrl = if input.modifiers.intersects(KeyModifiers::CONTROL) {
         "Ctrl+"

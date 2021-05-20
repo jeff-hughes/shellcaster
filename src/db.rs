@@ -207,10 +207,7 @@ impl Database {
     pub fn insert_episode(&self, podcast_id: i64, episode: &EpisodeNoId) -> Result<i64> {
         let conn = self.conn.as_ref().expect("Error connecting to database.");
 
-        let pubdate = match episode.pubdate {
-            Some(dt) => Some(dt.timestamp()),
-            None => None,
-        };
+        let pubdate = episode.pubdate.map(|dt| dt.timestamp());
 
         let mut stmt = conn.prepare_cached(
             "INSERT INTO episodes (podcast_id, title, url,
@@ -321,10 +318,7 @@ impl Database {
         let mut insert_ep = Vec::new();
         let mut update_ep = Vec::new();
         for new_ep in episodes.iter().rev() {
-            let new_pd = match new_ep.pubdate {
-                Some(dt) => Some(dt.timestamp()),
-                None => None,
-            };
+            let new_pd = new_ep.pubdate.map(|dt| dt.timestamp());
 
             // for each existing episode, check the title, url, and
             // pubdate -- if two of the three match, we count it as an
@@ -494,12 +488,7 @@ impl Database {
                 played: row.get("played")?,
             })
         })?;
-        let mut episodes = Vec::new();
-        for ep in episode_iter {
-            if let Ok(ep) = ep {
-                episodes.push(ep);
-            }
-        }
+        let episodes = episode_iter.flatten().collect();
         return Ok(episodes);
     }
 
@@ -517,10 +506,9 @@ impl Database {
 /// DateTime<Utc> object
 fn convert_date(result: Result<i64, rusqlite::Error>) -> Option<DateTime<Utc>> {
     return match result {
-        Ok(timestamp) => match NaiveDateTime::from_timestamp_opt(timestamp, 0) {
-            Some(ndt) => Some(DateTime::from_utc(ndt, Utc)),
-            None => None,
-        },
+        Ok(timestamp) => {
+            NaiveDateTime::from_timestamp_opt(timestamp, 0).map(|ndt| DateTime::from_utc(ndt, Utc))
+        }
         Err(_) => None,
     };
 }

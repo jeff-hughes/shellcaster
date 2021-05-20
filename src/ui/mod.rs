@@ -81,8 +81,8 @@ enum ActiveMenu {
 
 
 /// Struct containing all interface elements of the TUI. Functionally, it
-/// encapsulates the pancurses windows, and holds data about the size of
-/// the screen.
+/// encapsulates the terminal menus and panels, and holds data about the
+/// size of the screen.
 #[derive(Debug)]
 pub struct Ui<'a> {
     n_row: u16,
@@ -152,8 +152,8 @@ impl<'a> Ui<'a> {
     }
 
     /// Initializes the UI with a list of podcasts and podcast episodes,
-    /// creates the pancurses window and draws it to the screen, and
-    /// returns a UI object for future manipulation.
+    /// creates the menus and panels, and returns a UI object for future
+    /// manipulation.
     pub fn new(config: &'a Config, items: LockVec<Podcast>) -> Ui<'a> {
         terminal::enable_raw_mode().expect("Terminal can't run in raw mode.");
         execute!(
@@ -247,11 +247,11 @@ impl<'a> Ui<'a> {
     /// Waits for user input and, where necessary, provides UiMsgs
     /// back to the main controller.
     ///
-    /// Anything UI-related (e.g., scrolling up and down menus) is handled
-    /// internally, producing an empty UiMsg. This allows for some
-    /// greater degree of abstraction; for example, input to add a new
-    /// podcast feed spawns a UI window to capture the feed URL, and only
-    /// then passes this data back to the main controller.
+    /// Anything UI-related (e.g., scrolling up and down menus) is
+    /// handled internally, producing an empty UiMsg. This allows for
+    /// some greater degree of abstraction; for example, input to add a
+    /// new podcast feed spawns a UI window to capture the feed URL, and
+    /// only then passes this data back to the main controller.
     pub fn getch(&mut self) -> UiMsg {
         if event::poll(Duration::from_secs(0)).expect("Can't poll for inputs") {
             match event::read().expect("Can't read inputs") {
@@ -259,8 +259,8 @@ impl<'a> Ui<'a> {
                 Event::Key(input) => {
                     let (curr_pod_id, curr_ep_id) = self.get_current_ids();
 
-                    // get rid of the "welcome" window once the podcast list
-                    // is no longer empty
+                    // get rid of the "welcome" window once the podcast
+                    // list is no longer empty
                     if self.popup_win.welcome_win && !self.podcast_menu.items.is_empty() {
                         self.popup_win.turn_off_welcome_win();
                     }
@@ -271,8 +271,8 @@ impl<'a> Ui<'a> {
                     if self.popup_win.is_non_welcome_popup_active() {
                         let popup_msg = self.popup_win.handle_input(input);
 
-                        // need to check if popup window is still active, as
-                        // handling character input above may involve
+                        // need to check if popup window is still active,
+                        // as handling character input above may involve
                         // closing the popup window
                         if !self.popup_win.is_popup_active() {
                             self.update_menus();
@@ -407,7 +407,7 @@ impl<'a> Ui<'a> {
         return UiMsg::Noop;
     }
 
-    /// Resize all the windows on the screen and refresh.
+    /// Resize all the windows on the screen and redraw them.
     pub fn resize(&mut self, n_col: u16, n_row: u16) {
         self.n_row = n_row;
         self.n_col = n_col;
@@ -450,7 +450,7 @@ impl<'a> Ui<'a> {
         self.notif_win.resize(n_row, n_col);
     }
 
-    /// Move the menu cursor around and refresh menus when necessary.
+    /// Move the menu cursor around and redraw menus when necessary.
     pub fn move_cursor(
         &mut self,
         action: &UserAction,
@@ -689,7 +689,6 @@ impl<'a> Ui<'a> {
     /// main panels: podcast menu, episodes menu, and details panel; if
     /// the screen is too small to display the details panel, this size
     /// will be 0
-    #[allow(clippy::useless_let_if_seq)]
     pub fn calculate_sizes(n_col: u16) -> (u16, u16, u16) {
         let pod_col;
         let ep_col;
@@ -765,7 +764,7 @@ impl<'a> Ui<'a> {
     }
 
     /// Adds a notification to the bottom of the screen for `duration`
-    /// time  (in milliseconds). Useful for presenting error messages,
+    /// time (in milliseconds). Useful for presenting error messages,
     /// among other things.
     pub fn timed_notif(&mut self, message: String, duration: u64, error: bool) {
         self.notif_win.timed_notif(message, duration, error);
@@ -795,14 +794,6 @@ impl<'a> Ui<'a> {
             LockVec::new(Vec::new())
         };
         self.episode_menu.redraw();
-
-        // match self.active_menu {
-        //     ActiveMenu::PodcastMenu => self.podcast_menu.highlight_selected(true),
-        //     ActiveMenu::EpisodeMenu => {
-        //         self.podcast_menu.highlight_selected(false);
-        //         self.episode_menu.highlight_selected(true);
-        //     }
-        // }
     }
 
     /// When the program is ending, this performs tear-down functions so

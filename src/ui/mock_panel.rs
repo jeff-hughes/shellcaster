@@ -38,7 +38,7 @@ impl Panel {
         margins: (u16, u16, u16, u16),
     ) -> Self {
         // we represent the window as a vector of Strings instead of
-        // the pancurses window
+        // printing to the terminal buffer
         let buffer = vec![String::new(); (n_row - 2) as usize];
 
         return Panel {

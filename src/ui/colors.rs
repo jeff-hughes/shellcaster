@@ -27,6 +27,7 @@ pub struct AppColors {
 }
 
 impl AppColors {
+    /// Creates an AppColors struct with default color values.
     pub fn default() -> Self {
         return Self {
             normal: (Color::Grey, Color::Black),
@@ -37,6 +38,11 @@ impl AppColors {
         };
     }
 
+    /// Reading in values that were set in the config file, this changes
+    /// the associated colors. Note that this only modifies colors that
+    /// were set in the config, so this is most useful in conjunction
+    /// with `default()` to set default colors and then change
+    /// the ones that the user has set.
     pub fn add_from_config(&mut self, config: AppColorsFromToml) {
         if let Some(val) = config.normal_foreground {
             if let Ok(v) = Self::color_from_str(&val) {
@@ -104,6 +110,7 @@ impl AppColors {
             }
             return Err(anyhow!("Invalid color hex code"));
         } else if text.starts_with("rgb") || text.starts_with("RGB") {
+            #[allow(clippy::clippy::from_str_radix_10)]
             if let Some(cap) = RE_COLOR_RGB.captures(text) {
                 return Ok(Color::Rgb {
                     r: u8::from_str_radix(&cap[1], 10)?,

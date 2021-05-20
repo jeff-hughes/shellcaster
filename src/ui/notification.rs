@@ -2,7 +2,6 @@ use std::io;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-// use super::ColorType;
 use crossterm::{
     cursor,
     event::{self, KeyCode},
@@ -11,7 +10,9 @@ use crossterm::{
 
 use super::AppColors;
 
-/// Holds details of a notification message.
+/// Holds details of a notification message. The `expiry` is optional,
+/// and is used to create timed notifications -- `Instant` should refer
+/// to the timestamp when the message should disappear.
 #[derive(Debug, Clone, PartialEq)]
 struct Notification {
     message: String,
@@ -71,7 +72,6 @@ impl NotifWin {
     /// window.
     pub fn redraw(&self) {
         // clear the panel
-        // TODO: Set the background color first
         let empty = vec![" "; self.total_cols as usize];
         let empty_string = empty.join("");
         queue!(
@@ -90,8 +90,8 @@ impl NotifWin {
     /// updates the message window accordingly.
     pub fn check_notifs(&mut self) {
         if !self.msg_stack.is_empty() {
-            // compare expiry times of all notifications to current time,
-            // remove expired ones
+            // compare expiry times of all notifications to current
+            // time, remove expired ones
             let now = Instant::now();
             self.msg_stack.retain(|x| match x.expiry {
                 Some(exp) => now < exp,
@@ -143,11 +143,6 @@ impl NotifWin {
             cursor::Show
         )
         .unwrap();
-        // self.window.mv(self.total_rows - 1, 0);
-        // self.window.addstr(&prefix);
-        // self.window.keypad(true);
-        // self.window.refresh();
-        // pancurses::curs_set(2);
 
         let mut inputs = String::new();
         let mut cancelled = false;
