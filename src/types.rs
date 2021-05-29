@@ -67,7 +67,7 @@ impl Menuable for Podcast {
         // to the end
         if length > crate::config::PODCAST_UNPLAYED_TOTALS_LENGTH {
             let meta_str = format!("({}/{})", self.num_unplayed(), self.episodes.len());
-            title_length = length - meta_str.chars().count() - 2;
+            title_length = length - meta_str.chars().count() - 3;
 
             let out = self.title.substr(0, title_length);
 
@@ -75,7 +75,7 @@ impl Menuable for Podcast {
                 " {} {:>width$} ",
                 out,
                 meta_str,
-                width = length - out.grapheme_len() - 2
+                width = length - out.grapheme_len() - 3
             ); // this pads spaces between title and totals
         } else {
             return format!(" {} ", self.title.substr(0, title_length - 2));
@@ -166,32 +166,32 @@ impl Menuable for Episode {
                 let meta_str = format!("({}) {}", pd, meta_dur);
                 let added_len = meta_str.chars().count();
 
-                let out_added = out.substr(0, length - added_len - 2);
+                let out_added = out.substr(0, length - added_len - 3);
                 return format!(
                     " {} {:>width$} ",
                     out_added,
                     meta_str,
-                    width = length - out_added.grapheme_len() - 2
+                    width = length - out_added.grapheme_len() - 3
                 );
             } else {
                 // just print duration
-                let out_added = out.substr(0, length - meta_dur.chars().count() - 2);
+                let out_added = out.substr(0, length - meta_dur.chars().count() - 3);
                 return format!(
                     " {} {:>width$} ",
                     out_added,
                     meta_dur,
-                    width = length - out_added.grapheme_len() - 2
+                    width = length - out_added.grapheme_len() - 3
                 );
             }
         } else if length > crate::config::EPISODE_DURATION_LENGTH {
             let dur = self.format_duration();
             let meta_dur = format!("[{}]", dur);
-            let out_added = out.substr(0, length - meta_dur.chars().count() - 2);
+            let out_added = out.substr(0, length - meta_dur.chars().count() - 3);
             return format!(
                 " {} {:>width$} ",
                 out_added,
                 meta_dur,
-                width = length - out_added.grapheme_len() - 2
+                width = length - out_added.grapheme_len() - 3
             );
         } else {
             return format!(" {} ", out.substr(0, length - 2));

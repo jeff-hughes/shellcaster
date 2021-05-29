@@ -242,45 +242,6 @@ impl<'a> Ui<'a> {
         if self.podcast_menu.items.is_empty() {
             self.popup_win.spawn_welcome_win();
         }
-
-        let temp = vec![
-            NewEpisode {
-                id: 1,
-                pod_id: 1,
-                title: "Test title".to_string(),
-                pod_title: "The Podcast".to_string(),
-                selected: false,
-            },
-            NewEpisode {
-                id: 2,
-                pod_id: 1,
-                title: "This is another title that is pretty long".to_string(),
-                pod_title: "The Skeptics' Guide to the Universe".to_string(),
-                selected: false,
-            },
-            NewEpisode {
-                id: 3,
-                pod_id: 1,
-                title: "Abracabra, it's a test title!".to_string(),
-                pod_title: "The Allusionist".to_string(),
-                selected: false,
-            },
-            NewEpisode {
-                id: 4,
-                pod_id: 1,
-                title: "Return to Sender".to_string(),
-                pod_title: "Reply All".to_string(),
-                selected: false,
-            },
-            NewEpisode {
-                id: 5,
-                pod_id: 1,
-                title: "Blah".to_string(),
-                pod_title: "Blah".to_string(),
-                selected: false,
-            },
-        ];
-        self.popup_win.spawn_download_win(temp, false);
         io::stdout().flush().unwrap();
     }
 
