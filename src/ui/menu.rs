@@ -102,13 +102,13 @@ impl<T: Clone + Menuable> Menu<T> {
                         };
                         self.panel.write_line(
                             i,
-                            elem.get_title(self.panel.get_cols() as usize - 1),
+                            elem.get_title(self.panel.get_cols() as usize),
                             Some(style),
                         );
                     } else {
                         self.panel.write_line(
                             i,
-                            elem.get_title(self.panel.get_cols() as usize - 1),
+                            elem.get_title(self.panel.get_cols() as usize),
                             None,
                         );
                     }
@@ -198,10 +198,7 @@ impl<T: Clone + Menuable> Menu<T> {
         let el_details = self
             .items
             .map_single_by_index(self.get_menu_idx(item_y), |el| {
-                (
-                    el.get_title(self.panel.get_cols() as usize - 1),
-                    el.is_played(),
-                )
+                (el.get_title(self.panel.get_cols() as usize), el.is_played())
             });
 
         if let Some((title, is_played)) = el_details {
@@ -230,10 +227,7 @@ impl<T: Clone + Menuable> Menu<T> {
         let el_details = self
             .items
             .map_single_by_index(self.get_menu_idx(item_y), |el| {
-                (
-                    el.get_title(self.panel.get_cols() as usize - 1),
-                    el.is_played(),
-                )
+                (el.get_title(self.panel.get_cols() as usize), el.is_played())
             });
 
         if let Some((title, is_played)) = el_details {
@@ -313,10 +307,7 @@ impl Menu<Podcast> {
         let el_details = self
             .items
             .map_single_by_index(self.get_menu_idx(self.selected), |el| {
-                (
-                    el.get_title(self.panel.get_cols() as usize - 1),
-                    el.is_played(),
-                )
+                (el.get_title(self.panel.get_cols() as usize), el.is_played())
             });
         if let Some((title, is_played)) = el_details {
             let mut style = style::ContentStyle::new()
