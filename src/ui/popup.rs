@@ -235,7 +235,7 @@ impl<'a> PopupWin<'a> {
 
         let mut row = 0;
         row = help_win.write_wrap_line(
-            row + 1,
+            row,
             "Available keybindings:",
             Some(
                 style::ContentStyle::new()
@@ -311,7 +311,7 @@ impl<'a> PopupWin<'a> {
             self.total_rows - 1,
             self.total_cols,
             0,
-            (0, 0, 0, 0),
+            (1, 0, 0, 0),
         );
 
         let header = format!(

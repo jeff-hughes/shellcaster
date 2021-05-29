@@ -359,15 +359,15 @@ impl Panel {
     /// Returns the effective number of rows (accounting for borders
     /// and margins).
     pub fn get_rows(&self) -> u16 {
-        // 2 for border on top and bottom
+        // 2 for borders on top and bottom
         return self.n_row - self.margins.0 - self.margins.2 - 2;
     }
 
     /// Returns the effective number of columns (accounting for
     /// borders and margins).
     pub fn get_cols(&self) -> u16 {
-        // 2 for border, and 1 extra for some reason...
-        return self.n_col - self.margins.1 - self.margins.3 - 3;
+        // 2 for borders on left and right
+        return self.n_col - self.margins.1 - self.margins.3 - 2;
     }
 
     /// Calculates the y-value relative to the terminal rather than to

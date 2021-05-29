@@ -250,7 +250,20 @@ impl Menuable for NewEpisode {
     /// Returns the title for the episode, up to length characters.
     fn get_title(&self, length: usize) -> String {
         let selected = if self.selected { "✓" } else { " " };
-        let full_string = format!("[{}] {} ({})", selected, self.title, self.pod_title);
+
+        let title_len = self.title.grapheme_len();
+        let pod_title_len = self.pod_title.grapheme_len();
+        let empty_string = if length > title_len + pod_title_len + 9 {
+            let empty = vec![" "; length - title_len - pod_title_len - 9];
+            empty.join("")
+        } else {
+            "".to_string()
+        };
+
+        let full_string = format!(
+            " [{}] {} ({}){} ",
+            selected, self.title, self.pod_title, empty_string
+        );
         return full_string.substr(0, length);
     }
 

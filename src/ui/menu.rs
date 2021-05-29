@@ -102,13 +102,13 @@ impl<T: Clone + Menuable> Menu<T> {
                         };
                         self.panel.write_line(
                             i,
-                            elem.get_title(self.panel.get_cols() as usize),
+                            elem.get_title(self.panel.get_cols() as usize - 1),
                             Some(style),
                         );
                     } else {
                         self.panel.write_line(
                             i,
-                            elem.get_title(self.panel.get_cols() as usize),
+                            elem.get_title(self.panel.get_cols() as usize - 1),
                             None,
                         );
                     }
@@ -142,17 +142,18 @@ impl<T: Clone + Menuable> Menu<T> {
 
         match lines {
             Scroll::Up(v) => {
-                if v <= self.selected {
+                let selected_adj = self.selected - self.start_row;
+                if v <= selected_adj {
                     self.unhighlight_item(self.selected);
                     self.selected -= v;
                 } else {
-                    let list_scroll_amount = v - self.selected;
+                    let list_scroll_amount = v - selected_adj;
                     if let Some(top) = self.top_row.checked_sub(list_scroll_amount) {
                         self.top_row = top;
                     } else {
                         self.top_row = 0;
                     }
-                    self.selected = 0;
+                    self.selected = self.start_row;
                     self.panel.clear_inner();
                     self.update_items();
                 }
@@ -165,8 +166,8 @@ impl<T: Clone + Menuable> Menu<T> {
                 }
 
                 let n_row = self.panel.get_rows();
-                let select_max = if list_len < n_row {
-                    list_len - 1
+                let select_max = if list_len < n_row - self.start_row {
+                    self.start_row + list_len - 1
                 } else {
                     n_row - 1
                 };
@@ -176,9 +177,11 @@ impl<T: Clone + Menuable> Menu<T> {
                     self.selected += v;
                 } else {
                     let list_scroll_amount = v - (n_row - self.selected - 1);
+                    let visible_rows = n_row - self.start_row;
                     // can't scroll list if list is shorter than full screen
-                    if list_len > n_row {
-                        self.top_row = min(self.top_row + list_scroll_amount, list_len - n_row);
+                    if list_len > visible_rows {
+                        self.top_row =
+                            min(self.top_row + list_scroll_amount, list_len - visible_rows);
                     }
                     self.selected = select_max;
                     self.panel.clear_inner();
@@ -195,7 +198,10 @@ impl<T: Clone + Menuable> Menu<T> {
         let el_details = self
             .items
             .map_single_by_index(self.get_menu_idx(item_y), |el| {
-                (el.get_title(self.panel.get_cols() as usize), el.is_played())
+                (
+                    el.get_title(self.panel.get_cols() as usize - 1),
+                    el.is_played(),
+                )
             });
 
         if let Some((title, is_played)) = el_details {
@@ -224,7 +230,10 @@ impl<T: Clone + Menuable> Menu<T> {
         let el_details = self
             .items
             .map_single_by_index(self.get_menu_idx(item_y), |el| {
-                (el.get_title(self.panel.get_cols() as usize), el.is_played())
+                (
+                    el.get_title(self.panel.get_cols() as usize - 1),
+                    el.is_played(),
+                )
             });
 
         if let Some((title, is_played)) = el_details {
@@ -304,7 +313,10 @@ impl Menu<Podcast> {
         let el_details = self
             .items
             .map_single_by_index(self.get_menu_idx(self.selected), |el| {
-                (el.get_title(self.panel.get_cols() as usize), el.is_played())
+                (
+                    el.get_title(self.panel.get_cols() as usize - 1),
+                    el.is_played(),
+                )
             });
         if let Some((title, is_played)) = el_details {
             let mut style = style::ContentStyle::new()
