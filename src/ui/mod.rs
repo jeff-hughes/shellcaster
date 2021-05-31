@@ -417,16 +417,7 @@ impl<'a> Ui<'a> {
 
         self.podcast_menu.resize(n_row - 1, pod_col, 0);
         self.episode_menu.resize(n_row - 1, ep_col, pod_col - 1);
-
-        match self.active_menu {
-            ActiveMenu::PodcastMenu => {
-                self.podcast_menu.highlight_selected();
-            }
-            ActiveMenu::EpisodeMenu => {
-                self.podcast_menu.highlight_selected();
-                self.episode_menu.highlight_selected();
-            }
-        }
+        self.highlight_items();
 
         if self.details_panel.is_some() {
             if det_col > 0 {
@@ -795,6 +786,20 @@ impl<'a> Ui<'a> {
             LockVec::new(Vec::new())
         };
         self.episode_menu.redraw();
+        self.highlight_items();
+    }
+
+    /// Forces the menus to redraw the highlighted item.
+    pub fn highlight_items(&mut self) {
+        match self.active_menu {
+            ActiveMenu::PodcastMenu => {
+                self.podcast_menu.highlight_selected();
+            }
+            ActiveMenu::EpisodeMenu => {
+                self.podcast_menu.highlight_selected();
+                self.episode_menu.highlight_selected();
+            }
+        }
     }
 
     /// When the program is ending, this performs tear-down functions so

@@ -55,9 +55,9 @@ impl Panel {
 
     pub fn redraw(&self) {}
 
-    pub fn clear(&mut self) {
-        self.clear_inner();
-    }
+    // pub fn clear(&mut self) {
+    //     self.clear_inner();
+    // }
 
     pub fn clear_inner(&mut self) {
         self.buffer = vec![String::new(); (self.n_row - 2) as usize];
