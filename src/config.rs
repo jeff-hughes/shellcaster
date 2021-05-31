@@ -5,7 +5,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use crate::keymap::Keybindings;
-use crate::ui::colors::ColorValue;
+use crate::ui::colors::AppColors;
 
 // Specifies how long, in milliseconds, to display messages at the
 // bottom of the screen in the UI.
@@ -25,11 +25,11 @@ pub const EPISODE_PUBDATE_LENGTH: usize = 60;
 
 // How many columns we need (total terminal window width) before we
 // display the details panel
-pub const DETAILS_PANEL_LENGTH: i32 = 135;
+pub const DETAILS_PANEL_LENGTH: u16 = 135;
 
 // How many lines will be scrolled by the big scroll,
 // in relation to the rows eg: 4 = 1/4 of the screen
-pub const BIG_SCROLL_AMOUNT: i32 = 4;
+pub const BIG_SCROLL_AMOUNT: u16 = 4;
 
 
 /// Identifies the user's selection for what to do with new episodes
@@ -97,82 +97,21 @@ pub struct KeybindingsFromToml {
     pub quit: Option<Vec<String>>,
 }
 
-/// Holds information about the colors to use in the application. Tuple
-/// values represent (foreground, background), respectively.
-#[derive(Debug, Clone)]
-pub struct AppColors {
-    pub normal: (ColorValue, ColorValue),
-    pub highlighted_active: (ColorValue, ColorValue),
-    pub highlighted: (ColorValue, ColorValue),
-    pub error: (ColorValue, ColorValue),
-}
-
-impl AppColors {
-    pub fn default() -> Self {
-        return Self {
-            normal: (ColorValue::White, ColorValue::Black),
-            highlighted_active: (ColorValue::Black, ColorValue::Yellow),
-            highlighted: (ColorValue::Black, ColorValue::White),
-            error: (ColorValue::Red, ColorValue::Black),
-        };
-    }
-
-    pub fn add_from_config(&mut self, config: AppColorsFromToml) {
-        if let Some(val) = config.normal_foreground {
-            if let Ok(v) = ColorValue::from_str(&val) {
-                self.normal.0 = v;
-            }
-        }
-        if let Some(val) = config.normal_background {
-            if let Ok(v) = ColorValue::from_str(&val) {
-                self.normal.1 = v;
-            }
-        }
-        if let Some(val) = config.highlighted_active_foreground {
-            if let Ok(v) = ColorValue::from_str(&val) {
-                self.highlighted_active.0 = v;
-            }
-        }
-        if let Some(val) = config.highlighted_active_background {
-            if let Ok(v) = ColorValue::from_str(&val) {
-                self.highlighted_active.1 = v;
-            }
-        }
-        if let Some(val) = config.highlighted_foreground {
-            if let Ok(v) = ColorValue::from_str(&val) {
-                self.highlighted.0 = v;
-            }
-        }
-        if let Some(val) = config.highlighted_background {
-            if let Ok(v) = ColorValue::from_str(&val) {
-                self.highlighted.1 = v;
-            }
-        }
-        if let Some(val) = config.error_foreground {
-            if let Ok(v) = ColorValue::from_str(&val) {
-                self.error.0 = v;
-            }
-        }
-        if let Some(val) = config.error_background {
-            if let Ok(v) = ColorValue::from_str(&val) {
-                self.error.1 = v;
-            }
-        }
-    }
-}
-
 /// A temporary struct used to deserialize colors data from the TOML
-/// configuration file.
+/// configuration file. See crate::ui::colors module for the AppColors
+/// struct which handles the final color scheme.
 #[derive(Debug, Deserialize)]
 pub struct AppColorsFromToml {
-    normal_foreground: Option<String>,
-    normal_background: Option<String>,
-    highlighted_active_foreground: Option<String>,
-    highlighted_active_background: Option<String>,
-    highlighted_foreground: Option<String>,
-    highlighted_background: Option<String>,
-    error_foreground: Option<String>,
-    error_background: Option<String>,
+    pub normal_foreground: Option<String>,
+    pub normal_background: Option<String>,
+    pub bold_foreground: Option<String>,
+    pub bold_background: Option<String>,
+    pub highlighted_active_foreground: Option<String>,
+    pub highlighted_active_background: Option<String>,
+    pub highlighted_foreground: Option<String>,
+    pub highlighted_background: Option<String>,
+    pub error_foreground: Option<String>,
+    pub error_background: Option<String>,
 }
 
 
@@ -225,6 +164,8 @@ impl Config {
                 let colors = AppColorsFromToml {
                     normal_foreground: None,
                     normal_background: None,
+                    bold_foreground: None,
+                    bold_background: None,
                     highlighted_active_foreground: None,
                     highlighted_active_background: None,
                     highlighted_foreground: None,
@@ -251,7 +192,6 @@ impl Config {
 /// Takes the deserialized TOML configuration, and creates a Config struct
 /// that specifies user settings where indicated, and defaults for any
 /// settings that were not specified by the user.
-#[allow(clippy::type_complexity)]
 fn config_with_defaults(config_toml: ConfigFromToml) -> Result<Config> {
     // specify keybindings
     let keymap = match config_toml.keybindings {

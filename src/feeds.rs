@@ -115,10 +115,7 @@ fn parse_feed_data(channel: Channel, url: &str) -> PodcastNoId {
     let mut author = None;
     let mut explicit = None;
     if let Some(itunes) = channel.itunes_ext() {
-        author = match itunes.author() {
-            None => None,
-            Some(a) => Some(a.to_string()),
-        };
+        author = itunes.author().map(|a| a.to_string());
         explicit = match itunes.explicit() {
             None => None,
             Some(s) => {
@@ -186,10 +183,7 @@ fn parse_episode_data(item: &Item) -> EpisodeNoId {
 
     let mut duration = None;
     if let Some(itunes) = item.itunes_ext() {
-        duration = match duration_to_int(itunes.duration()) {
-            Some(dur) => Some(dur as i64),
-            None => None,
-        };
+        duration = duration_to_int(itunes.duration()).map(|dur| dur as i64);
     }
 
     return EpisodeNoId {

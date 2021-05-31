@@ -1,4 +1,4 @@
-use pancurses::Input;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::collections::HashMap;
 
 use crate::config::KeybindingsFromToml;
@@ -102,9 +102,9 @@ impl Keybindings {
         return keymap;
     }
 
-    /// Takes an Input object from pancurses and returns the associated
+    /// Takes an Input object from crossterm and returns the associated
     /// user action, if one exists.
-    pub fn get_from_input(&self, input: Input) -> Option<&UserAction> {
+    pub fn get_from_input(&self, input: KeyEvent) -> Option<&UserAction> {
         match input_to_str(input) {
             Some(code) => self.0.get(&code),
             None => None,
@@ -180,140 +180,57 @@ impl Keybindings {
     }
 }
 
-/// Helper function converting a pancurses Input object to a unique
+/// Helper function converting a crossterm KeyEvent object to a unique
 /// string representing that input.
-/// This function is a bit ridiculous, given that 95% of keyboards
-/// probably don't even have half these special keys, but at any rate...
-/// they're mapped, if anyone wants them.
-pub fn input_to_str(input: Input) -> Option<String> {
+pub fn input_to_str(input: KeyEvent) -> Option<String> {
+    let ctrl = if input.modifiers.intersects(KeyModifiers::CONTROL) {
+        "Ctrl+"
+    } else {
+        ""
+    };
+    let alt = if input.modifiers.intersects(KeyModifiers::ALT) {
+        "Alt+"
+    } else {
+        ""
+    };
+    let shift = if input.modifiers.intersects(KeyModifiers::SHIFT) {
+        "Shift+"
+    } else {
+        ""
+    };
     let mut tmp = [0; 4];
-    let code = match input {
-        Input::KeyCodeYes => "CodeYes",
-        Input::KeyBreak => "Break",
-        Input::KeyDown => "Down",
-        Input::KeyUp => "Up",
-        Input::KeyLeft => "Left",
-        Input::KeyRight => "Right",
-        Input::KeyHome => "Home",
-        Input::KeyBackspace => "Backspace",
-        Input::KeyF0 => "F0",
-        Input::KeyF1 => "F1",
-        Input::KeyF2 => "F2",
-        Input::KeyF3 => "F3",
-        Input::KeyF4 => "F4",
-        Input::KeyF5 => "F5",
-        Input::KeyF6 => "F6",
-        Input::KeyF7 => "F7",
-        Input::KeyF8 => "F8",
-        Input::KeyF9 => "F9",
-        Input::KeyF10 => "F10",
-        Input::KeyF11 => "F11", // F11 triggers KeyResize for me
-        Input::KeyF12 => "F12",
-        Input::KeyF13 => "F13",
-        Input::KeyF14 => "F14",
-        Input::KeyF15 => "F15",
-        Input::KeyDL => "DL",
-        Input::KeyIL => "IL",
-        Input::KeyDC => "Del",
-        Input::KeyIC => "Ins",
-        Input::KeyEIC => "EIC",
-        Input::KeyClear => "Clear",
-        Input::KeyEOS => "EOS",
-        Input::KeyEOL => "EOL",
-        Input::KeySF => "S_Down",
-        Input::KeySR => "S_Up",
-        Input::KeyNPage => "PgDn",
-        Input::KeyPPage => "PgUp",
-        Input::KeySTab => "STab", // this doesn't appear to be Shift+Tab
-        Input::KeyCTab => "C_Tab",
-        Input::KeyCATab => "CATab",
-        Input::KeyEnter => "Enter",
-        Input::KeySReset => "SReset",
-        Input::KeyReset => "Reset",
-        Input::KeyPrint => "Print",
-        Input::KeyLL => "LL",
-        Input::KeyAbort => "Abort",
-        Input::KeySHelp => "SHelp",
-        Input::KeyLHelp => "LHelp",
-        Input::KeyBTab => "S_Tab", // Shift+Tab
-        Input::KeyBeg => "Beg",
-        Input::KeyCancel => "Cancel",
-        Input::KeyClose => "Close",
-        Input::KeyCommand => "Command",
-        Input::KeyCopy => "Copy",
-        Input::KeyEnd => "End",
-        Input::KeyExit => "Exit",
-        Input::KeyFind => "Find",
-        Input::KeyHelp => "Help",
-        Input::KeyMark => "Mark",
-        Input::KeyMessage => "Message",
-        Input::KeyMove => "Move",
-        Input::KeyNext => "Next",
-        Input::KeyOpen => "Open",
-        Input::KeyOptions => "Options",
-        Input::KeyPrevious => "Previous",
-        Input::KeyRedo => "Redo",
-        Input::KeyReference => "Reference",
-        Input::KeyRefresh => "Refresh",
-        Input::KeyResume => "Resume",
-        Input::KeyRestart => "Restart",
-        Input::KeySave => "Save",
-        Input::KeySBeg => "S_Beg",
-        Input::KeySCancel => "S_Cancel",
-        Input::KeySCommand => "S_Command",
-        Input::KeySCopy => "S_Copy",
-        Input::KeySCreate => "S_Create",
-        Input::KeySDC => "S_Del",
-        Input::KeySDL => "S_DL",
-        Input::KeySelect => "Select",
-        Input::KeySEnd => "S_End",
-        Input::KeySEOL => "S_EOL",
-        Input::KeySExit => "S_Exit",
-        Input::KeySFind => "S_Find",
-        Input::KeySHome => "S_Home",
-        Input::KeySIC => "S_Ins",
-        Input::KeySLeft => "S_Left",
-        Input::KeySMessage => "S_Message",
-        Input::KeySMove => "S_Move",
-        Input::KeySNext => "S_PgDn",
-        Input::KeySOptions => "S_Options",
-        Input::KeySPrevious => "S_PgUp",
-        Input::KeySPrint => "S_Print",
-        Input::KeySRedo => "S_Redo",
-        Input::KeySReplace => "S_Replace",
-        Input::KeySRight => "S_Right",
-        Input::KeySResume => "S_Resume",
-        Input::KeySSave => "S_Save",
-        Input::KeySSuspend => "S_Suspend",
-        Input::KeySUndo => "S_Undo",
-        Input::KeySuspend => "Suspend",
-        Input::KeyUndo => "Undo",
-        Input::KeyResize => "F11", // I'm marking this as F11 as well
-        Input::KeyEvent => "Event",
-        Input::KeyMouse => "Mouse",
-        Input::KeyA1 => "A1",
-        Input::KeyA3 => "A3",
-        Input::KeyB2 => "B2",
-        Input::KeyC1 => "C1",
-        Input::KeyC3 => "C3",
-        Input::Character(c) => {
+    return match input.code {
+        KeyCode::Backspace => Some(format!("{}{}{}Backspace", ctrl, alt, shift)),
+        KeyCode::Enter => Some(format!("{}{}{}Enter", ctrl, alt, shift)),
+        KeyCode::Left => Some(format!("{}{}{}Left", ctrl, alt, shift)),
+        KeyCode::Right => Some(format!("{}{}{}Right", ctrl, alt, shift)),
+        KeyCode::Up => Some(format!("{}{}{}Up", ctrl, alt, shift)),
+        KeyCode::Down => Some(format!("{}{}{}Down", ctrl, alt, shift)),
+        KeyCode::Home => Some(format!("{}{}{}Home", ctrl, alt, shift)),
+        KeyCode::End => Some(format!("{}{}{}End", ctrl, alt, shift)),
+        KeyCode::PageUp => Some(format!("{}{}{}PgUp", ctrl, alt, shift)),
+        KeyCode::PageDown => Some(format!("{}{}{}PgDn", ctrl, alt, shift)),
+        KeyCode::Tab => Some(format!("{}{}{}Tab", ctrl, alt, shift)),
+        KeyCode::BackTab => Some(format!("{}{}{}Tab", ctrl, alt, shift)),
+        KeyCode::Delete => Some(format!("{}{}{}Del", ctrl, alt, shift)),
+        KeyCode::Insert => Some(format!("{}{}{}Ins", ctrl, alt, shift)),
+        KeyCode::Esc => Some(format!("{}{}{}Esc", ctrl, alt, shift)),
+        KeyCode::F(num) => Some(format!("{}{}{}F{}", ctrl, alt, shift, num)), // Function keys
+        KeyCode::Char(c) => {
             if c == '\u{7f}' {
-                "Backspace"
+                Some(format!("{}{}{}Backspace", ctrl, alt, shift))
             } else if c == '\u{1b}' {
-                "Escape"
+                Some(format!("{}{}{}Esc", ctrl, alt, shift))
             } else if c == '\n' {
-                "Enter"
+                Some(format!("{}{}{}Enter", ctrl, alt, shift))
             } else if c == '\t' {
-                "Tab"
+                Some(format!("{}{}{}Tab", ctrl, alt, shift))
             } else {
-                c.encode_utf8(&mut tmp)
+                // here we don't include "shift" because that will
+                // already be encoded in the character itself
+                Some(format!("{}{}{}", ctrl, alt, c.encode_utf8(&mut tmp)))
             }
         }
-        _ => "",
+        _ => None,
     };
-    if code.is_empty() {
-        return None;
-    } else {
-        return Some(code.to_string());
-    }
 }

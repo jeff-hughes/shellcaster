@@ -14,14 +14,12 @@ use std::borrow::Cow;
 /// Tries to fix common ways date generators misshandle rfc822/rfc2822.
 ///
 /// For more check the source code, Its ~70 lines of code.
-#[allow(clippy::let_and_return)]
 pub fn sanitize_rfc822_like_date<S: Into<String>>(s: S) -> String {
     let s = s.into();
     let s = pad_zeros(s);
     let s = remove_weekday(s);
     let s = replace_month(s);
-    let s = replace_leading_zeros(s);
-    s
+    return replace_leading_zeros(s);
 }
 
 /// Pad HH:MM:SS with exta zeros if needed.
@@ -40,7 +38,7 @@ fn pad_zeros(s: String) -> String {
 
     if let Some(cap) = RE_RGX.captures(&s) {
         let mut tm = String::with_capacity(2 + 1 + 2 + 1 + 2 + 1);
-        cap.iter().skip(1).filter_map(|m| m).for_each(|mtch| {
+        cap.iter().skip(1).flatten().for_each(|mtch| {
             let m_str = mtch.as_str();
             if m_str.len() == 1 {
                 tm.push('0');

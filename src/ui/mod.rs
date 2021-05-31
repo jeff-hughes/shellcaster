@@ -1,6 +1,16 @@
+use std::io::{self, Write};
+use std::rc::Rc;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
+
+use crossterm::{
+    self, cursor,
+    event::{self, Event},
+    execute, terminal,
+};
+use lazy_static::lazy_static;
+use regex::Regex;
 
 #[cfg_attr(not(test), path = "panel.rs")]
 #[cfg_attr(test, path = "mock_panel.rs")]
@@ -11,20 +21,19 @@ mod menu;
 mod notification;
 mod popup;
 
-use self::colors::ColorType;
-use self::menu::Menu;
+use self::colors::AppColors;
+use self::menu::{Menu, Scroll};
 use self::notification::NotifWin;
 use self::panel::{Details, Panel};
 use self::popup::PopupWin;
-
-use lazy_static::lazy_static;
-use pancurses::{Input, Window};
-use regex::Regex;
 
 use super::MainMessage;
 use crate::config::Config;
 use crate::keymap::{Keybindings, UserAction};
 use crate::types::*;
+
+/// Amount of time between ticks in the event loop
+const TICK_RATE: u64 = 10;
 
 lazy_static! {
     /// Regex for finding <br/> tags -- also captures any surrounding
@@ -72,14 +81,14 @@ enum ActiveMenu {
 
 
 /// Struct containing all interface elements of the TUI. Functionally, it
-/// encapsulates the pancurses windows, and holds data about the size of
-/// the screen.
+/// encapsulates the terminal menus and panels, and holds data about the
+/// size of the screen.
 #[derive(Debug)]
 pub struct Ui<'a> {
-    stdscr: Window,
-    n_row: i32,
-    n_col: i32,
+    n_row: u16,
+    n_col: u16,
     keymap: &'a Keybindings,
+    colors: Rc<AppColors>,
     podcast_menu: Menu<Podcast>,
     episode_menu: Menu<Episode>,
     active_menu: ActiveMenu,
@@ -134,30 +143,30 @@ impl<'a> Ui<'a> {
                     }
                 }
 
+                io::stdout().flush().unwrap();
+
                 // slight delay to avoid excessive CPU usage
-                thread::sleep(Duration::from_millis(10));
+                thread::sleep(Duration::from_millis(TICK_RATE));
             }
         });
     }
 
     /// Initializes the UI with a list of podcasts and podcast episodes,
-    /// creates the pancurses window and draws it to the screen, and
-    /// returns a UI object for future manipulation.
+    /// creates the menus and panels, and returns a UI object for future
+    /// manipulation.
     pub fn new(config: &'a Config, items: LockVec<Podcast>) -> Ui<'a> {
-        let stdscr = pancurses::initscr();
+        terminal::enable_raw_mode().expect("Terminal can't run in raw mode.");
+        execute!(
+            io::stdout(),
+            terminal::EnterAlternateScreen,
+            terminal::Clear(terminal::ClearType::All),
+            cursor::Hide
+        )
+        .expect("Can't draw to screen.");
 
-        // set some options
-        pancurses::cbreak(); // allows characters to be read one by one
-        pancurses::noecho(); // turns off automatic echoing of characters
-                             // to the screen as they are input
-        pancurses::curs_set(0); // turn off cursor
-        stdscr.keypad(true); // returns special characters as single
-                             // key codes
-        stdscr.nodelay(true); // getch() will not wait for user input
+        let colors = Rc::new(config.colors.clone());
 
-        self::colors::set_colors(&config.colors);
-
-        let (n_row, n_col) = stdscr.get_max_yx();
+        let (n_col, n_row) = terminal::size().expect("Can't get terminal size");
         let (pod_col, ep_col, det_col) = Self::calculate_sizes(n_col);
 
         let first_pod = match items.borrow_order().get(0) {
@@ -168,33 +177,48 @@ impl<'a> Ui<'a> {
             None => LockVec::new(Vec::new()),
         };
 
-        let podcast_panel = Panel::new("Podcasts".to_string(), 0, n_row - 1, pod_col, 0, 0);
+        let podcast_panel = Panel::new(
+            "Podcasts".to_string(),
+            0,
+            colors.clone(),
+            n_row - 1,
+            pod_col,
+            0,
+            (0, 0, 0, 0),
+        );
         let podcast_menu = Menu::new(podcast_panel, None, items);
 
-        let episode_panel =
-            Panel::new("Episodes".to_string(), 1, n_row - 1, ep_col, 0, pod_col - 1);
+        let episode_panel = Panel::new(
+            "Episodes".to_string(),
+            1,
+            colors.clone(),
+            n_row - 1,
+            ep_col,
+            pod_col - 1,
+            (0, 0, 0, 0),
+        );
 
         let episode_menu = Menu::new(episode_panel, None, first_pod);
 
         let details_panel = if n_col > crate::config::DETAILS_PANEL_LENGTH {
             Some(Self::make_details_panel(
+                colors.clone(),
                 n_row - 1,
                 det_col,
-                0,
                 pod_col + ep_col - 2,
             ))
         } else {
             None
         };
 
-        let notif_win = NotifWin::new(n_row, n_col);
-        let popup_win = PopupWin::new(&config.keybindings, n_row, n_col);
+        let notif_win = NotifWin::new(colors.clone(), n_row - 1, n_row, n_col);
+        let popup_win = PopupWin::new(&config.keybindings, colors.clone(), n_row, n_col);
 
         return Ui {
-            stdscr: stdscr,
             n_row: n_row,
             n_col: n_col,
             keymap: &config.keybindings,
+            colors: colors,
             podcast_menu: podcast_menu,
             episode_menu: episode_menu,
             active_menu: ActiveMenu::PodcastMenu,
@@ -207,230 +231,218 @@ impl<'a> Ui<'a> {
     /// This should be called immediately after creating the UI, in order
     /// to draw everything to the screen.
     pub fn init(&mut self) {
-        self.stdscr.refresh();
-        self.podcast_menu.init();
+        self.podcast_menu.redraw();
+        self.episode_menu.redraw();
         self.podcast_menu.activate();
-        self.episode_menu.init();
-
-        if let Some(ref panel) = self.details_panel {
-            panel.refresh();
-        }
         self.update_details_panel();
 
-        self.notif_win.init();
+        self.notif_win.redraw();
 
         // welcome screen if user does not have any podcasts yet
         if self.podcast_menu.items.is_empty() {
             self.popup_win.spawn_welcome_win();
         }
+        io::stdout().flush().unwrap();
     }
 
     /// Waits for user input and, where necessary, provides UiMsgs
     /// back to the main controller.
     ///
-    /// Anything UI-related (e.g., scrolling up and down menus) is handled
-    /// internally, producing an empty UiMsg. This allows for some
-    /// greater degree of abstraction; for example, input to add a new
-    /// podcast feed spawns a UI window to capture the feed URL, and only
-    /// then passes this data back to the main controller.
+    /// Anything UI-related (e.g., scrolling up and down menus) is
+    /// handled internally, producing an empty UiMsg. This allows for
+    /// some greater degree of abstraction; for example, input to add a
+    /// new podcast feed spawns a UI window to capture the feed URL, and
+    /// only then passes this data back to the main controller.
     pub fn getch(&mut self) -> UiMsg {
-        match self.stdscr.getch() {
-            Some(Input::KeyResize) => self.resize(),
+        if event::poll(Duration::from_secs(0)).expect("Can't poll for inputs") {
+            match event::read().expect("Can't read inputs") {
+                Event::Resize(n_col, n_row) => self.resize(n_col, n_row),
+                Event::Key(input) => {
+                    let (curr_pod_id, curr_ep_id) = self.get_current_ids();
 
-            Some(input) => {
-                let (curr_pod_id, curr_ep_id) = self.get_current_ids();
-
-                // get rid of the "welcome" window once the podcast list
-                // is no longer empty
-                if self.popup_win.welcome_win && !self.podcast_menu.items.is_empty() {
-                    self.popup_win.turn_off_welcome_win();
-                }
-
-                // if there is a popup window active (apart from the
-                // welcome window which takes no input), then
-                // redirect user input there
-                if self.popup_win.is_non_welcome_popup_active() {
-                    let popup_msg = self.popup_win.handle_input(input);
-
-                    // need to check if popup window is still active, as
-                    // handling character input above may involve
-                    // closing the popup window
-                    if !self.popup_win.is_popup_active() {
-                        self.stdscr.refresh();
-                        self.update_menus();
-                        if self.details_panel.is_some() {
-                            self.update_details_panel();
-                        }
+                    // get rid of the "welcome" window once the podcast
+                    // list is no longer empty
+                    if self.popup_win.welcome_win && !self.podcast_menu.items.is_empty() {
+                        self.popup_win.turn_off_welcome_win();
                     }
-                    return popup_msg;
-                } else {
-                    match self.keymap.get_from_input(input) {
-                        Some(a @ UserAction::Down)
-                        | Some(a @ UserAction::Up)
-                        | Some(a @ UserAction::Left)
-                        | Some(a @ UserAction::Right)
-                        | Some(a @ UserAction::PageUp)
-                        | Some(a @ UserAction::PageDown)
-                        | Some(a @ UserAction::BigUp)
-                        | Some(a @ UserAction::BigDown)
-                        | Some(a @ UserAction::GoTop)
-                        | Some(a @ UserAction::GoBot) => {
-                            self.move_cursor(a, curr_pod_id, curr_ep_id)
-                        }
 
-                        Some(UserAction::AddFeed) => {
-                            let url = &self.spawn_input_notif("Feed URL: ");
-                            if !url.is_empty() {
-                                return UiMsg::AddFeed(url.to_string());
-                            }
-                        }
+                    // if there is a popup window active (apart from the
+                    // welcome window which takes no input), then
+                    // redirect user input there
+                    if self.popup_win.is_non_welcome_popup_active() {
+                        let popup_msg = self.popup_win.handle_input(input);
 
-                        Some(UserAction::Sync) => {
-                            if let Some(pod_id) = curr_pod_id {
-                                return UiMsg::Sync(pod_id);
+                        // need to check if popup window is still active,
+                        // as handling character input above may involve
+                        // closing the popup window
+                        if !self.popup_win.is_popup_active() {
+                            self.update_menus();
+                            if self.details_panel.is_some() {
+                                self.update_details_panel();
                             }
+                            io::stdout().flush().unwrap();
                         }
-                        Some(UserAction::SyncAll) => {
-                            if curr_pod_id.is_some() {
-                                return UiMsg::SyncAll;
+                        return popup_msg;
+                    } else {
+                        match self.keymap.get_from_input(input) {
+                            Some(a @ UserAction::Down)
+                            | Some(a @ UserAction::Up)
+                            | Some(a @ UserAction::Left)
+                            | Some(a @ UserAction::Right)
+                            | Some(a @ UserAction::PageUp)
+                            | Some(a @ UserAction::PageDown)
+                            | Some(a @ UserAction::BigUp)
+                            | Some(a @ UserAction::BigDown)
+                            | Some(a @ UserAction::GoTop)
+                            | Some(a @ UserAction::GoBot) => {
+                                self.move_cursor(a, curr_pod_id, curr_ep_id)
                             }
-                        }
 
-                        Some(UserAction::Play) => {
-                            if let Some(pod_id) = curr_pod_id {
-                                if let Some(ep_id) = curr_ep_id {
-                                    return UiMsg::Play(pod_id, ep_id);
+                            Some(UserAction::AddFeed) => {
+                                let url = &self.spawn_input_notif("Feed URL: ");
+                                if !url.is_empty() {
+                                    return UiMsg::AddFeed(url.to_string());
                                 }
                             }
-                        }
-                        Some(UserAction::MarkPlayed) => match self.active_menu {
-                            ActiveMenu::PodcastMenu => (),
-                            ActiveMenu::EpisodeMenu => {
-                                if let Some(ui_msg) = self.mark_played(curr_pod_id, curr_ep_id) {
-                                    return ui_msg;
+
+                            Some(UserAction::Sync) => {
+                                if let Some(pod_id) = curr_pod_id {
+                                    return UiMsg::Sync(pod_id);
                                 }
                             }
-                        },
-                        Some(UserAction::MarkAllPlayed) => {
-                            if let Some(ui_msg) = self.mark_all_played(curr_pod_id) {
-                                return ui_msg;
-                            }
-                        }
-
-                        Some(UserAction::Download) => {
-                            if let Some(pod_id) = curr_pod_id {
-                                if let Some(ep_id) = curr_ep_id {
-                                    return UiMsg::Download(pod_id, ep_id);
+                            Some(UserAction::SyncAll) => {
+                                if curr_pod_id.is_some() {
+                                    return UiMsg::SyncAll;
                                 }
                             }
-                        }
-                        Some(UserAction::DownloadAll) => {
-                            if let Some(pod_id) = curr_pod_id {
-                                return UiMsg::DownloadAll(pod_id);
-                            }
-                        }
 
-                        Some(UserAction::Delete) => match self.active_menu {
-                            ActiveMenu::PodcastMenu => (),
-                            ActiveMenu::EpisodeMenu => {
+                            Some(UserAction::Play) => {
                                 if let Some(pod_id) = curr_pod_id {
                                     if let Some(ep_id) = curr_ep_id {
-                                        return UiMsg::Delete(pod_id, ep_id);
+                                        return UiMsg::Play(pod_id, ep_id);
                                     }
                                 }
                             }
-                        },
-                        Some(UserAction::DeleteAll) => {
-                            if let Some(pod_id) = curr_pod_id {
-                                return UiMsg::DeleteAll(pod_id);
-                            }
-                        }
-
-                        Some(UserAction::Remove) => match self.active_menu {
-                            ActiveMenu::PodcastMenu => {
-                                if let Some(ui_msg) = self.remove_podcast(curr_pod_id) {
+                            Some(UserAction::MarkPlayed) => match self.active_menu {
+                                ActiveMenu::PodcastMenu => (),
+                                ActiveMenu::EpisodeMenu => {
+                                    if let Some(ui_msg) = self.mark_played(curr_pod_id, curr_ep_id)
+                                    {
+                                        return ui_msg;
+                                    }
+                                }
+                            },
+                            Some(UserAction::MarkAllPlayed) => {
+                                if let Some(ui_msg) = self.mark_all_played(curr_pod_id) {
                                     return ui_msg;
                                 }
                             }
-                            ActiveMenu::EpisodeMenu => {
-                                if let Some(ui_msg) = self.remove_episode(curr_pod_id, curr_ep_id) {
+
+                            Some(UserAction::Download) => {
+                                if let Some(pod_id) = curr_pod_id {
+                                    if let Some(ep_id) = curr_ep_id {
+                                        return UiMsg::Download(pod_id, ep_id);
+                                    }
+                                }
+                            }
+                            Some(UserAction::DownloadAll) => {
+                                if let Some(pod_id) = curr_pod_id {
+                                    return UiMsg::DownloadAll(pod_id);
+                                }
+                            }
+
+                            Some(UserAction::Delete) => match self.active_menu {
+                                ActiveMenu::PodcastMenu => (),
+                                ActiveMenu::EpisodeMenu => {
+                                    if let Some(pod_id) = curr_pod_id {
+                                        if let Some(ep_id) = curr_ep_id {
+                                            return UiMsg::Delete(pod_id, ep_id);
+                                        }
+                                    }
+                                }
+                            },
+                            Some(UserAction::DeleteAll) => {
+                                if let Some(pod_id) = curr_pod_id {
+                                    return UiMsg::DeleteAll(pod_id);
+                                }
+                            }
+
+                            Some(UserAction::Remove) => match self.active_menu {
+                                ActiveMenu::PodcastMenu => {
+                                    if let Some(ui_msg) = self.remove_podcast(curr_pod_id) {
+                                        return ui_msg;
+                                    }
+                                }
+                                ActiveMenu::EpisodeMenu => {
+                                    if let Some(ui_msg) =
+                                        self.remove_episode(curr_pod_id, curr_ep_id)
+                                    {
+                                        return ui_msg;
+                                    }
+                                }
+                            },
+                            Some(UserAction::RemoveAll) => {
+                                let ui_msg = match self.active_menu {
+                                    ActiveMenu::PodcastMenu => self.remove_podcast(curr_pod_id),
+                                    ActiveMenu::EpisodeMenu => {
+                                        self.remove_all_episodes(curr_pod_id)
+                                    }
+                                };
+                                if let Some(ui_msg) = ui_msg {
                                     return ui_msg;
                                 }
                             }
-                        },
-                        Some(UserAction::RemoveAll) => {
-                            let ui_msg = match self.active_menu {
-                                ActiveMenu::PodcastMenu => self.remove_podcast(curr_pod_id),
-                                ActiveMenu::EpisodeMenu => self.remove_all_episodes(curr_pod_id),
-                            };
-                            if let Some(ui_msg) = ui_msg {
-                                return ui_msg;
+
+                            Some(UserAction::Help) => self.popup_win.spawn_help_win(),
+
+                            Some(UserAction::Quit) => {
+                                return UiMsg::Quit;
                             }
-                        }
-
-                        Some(UserAction::Help) => self.popup_win.spawn_help_win(),
-
-                        Some(UserAction::Quit) => {
-                            return UiMsg::Quit;
-                        }
-                        None => (),
-                    } // end of input match
+                            None => (),
+                        } // end of input match
+                    }
                 }
+                _ => (),
             }
-            None => (),
-        }; // end of getch() match
+        } // end of poll()
         return UiMsg::Noop;
     }
 
-    /// Resize all the windows on the screen and refresh.
-    pub fn resize(&mut self) {
-        pancurses::resize_term(0, 0);
-        let (n_row, n_col) = self.stdscr.get_max_yx();
+    /// Resize all the windows on the screen and redraw them.
+    pub fn resize(&mut self, n_col: u16, n_row: u16) {
         self.n_row = n_row;
         self.n_col = n_col;
 
         let (pod_col, ep_col, det_col) = Self::calculate_sizes(n_col);
 
-        self.podcast_menu.resize(n_row - 1, pod_col, 0, 0);
-        self.episode_menu.resize(n_row - 1, ep_col, 0, pod_col - 1);
+        self.podcast_menu.resize(n_row - 1, pod_col, 0);
+        self.episode_menu.resize(n_row - 1, ep_col, pod_col - 1);
+        self.highlight_items();
 
         if self.details_panel.is_some() {
             if det_col > 0 {
                 let det = self.details_panel.as_mut().unwrap();
-                det.resize(n_row - 1, det_col, 0, pod_col + ep_col - 2);
+                det.resize(n_row - 1, det_col, pod_col + ep_col - 2);
+                // resizing the menus may change which item is selected
+                self.update_details_panel();
             } else {
                 self.details_panel = None;
             }
         } else if det_col > 0 {
             self.details_panel = Some(Self::make_details_panel(
+                self.colors.clone(),
                 n_row - 1,
                 det_col,
-                0,
                 pod_col + ep_col - 2,
             ));
-        }
-
-        self.stdscr.refresh();
-        self.update_menus();
-
-        match self.active_menu {
-            ActiveMenu::PodcastMenu => self.podcast_menu.activate(),
-            ActiveMenu::EpisodeMenu => {
-                self.podcast_menu.activate();
-                self.episode_menu.activate();
-            }
-        }
-
-        if self.details_panel.is_some() {
             self.update_details_panel();
         }
 
         self.popup_win.resize(n_row, n_col);
         self.notif_win.resize(n_row, n_col);
-        self.stdscr.refresh();
     }
 
-    /// Move the menu cursor around and refresh menus when necessary.
+    /// Move the menu cursor around and redraw menus when necessary.
     pub fn move_cursor(
         &mut self,
         action: &UserAction,
@@ -439,11 +451,11 @@ impl<'a> Ui<'a> {
     ) {
         match action {
             UserAction::Down => {
-                self.scroll_current_window(curr_pod_id, 1);
+                self.scroll_current_window(curr_pod_id, Scroll::Down(1));
             }
 
             UserAction::Up => {
-                self.scroll_current_window(curr_pod_id, -1);
+                self.scroll_current_window(curr_pod_id, Scroll::Up(1));
             }
 
             UserAction::Left => {
@@ -456,9 +468,6 @@ impl<'a> Ui<'a> {
                             self.episode_menu.deactivate();
                         }
                     }
-                }
-                if let Some(det) = &self.details_panel {
-                    det.refresh();
                 }
             }
 
@@ -473,39 +482,36 @@ impl<'a> Ui<'a> {
                         ActiveMenu::EpisodeMenu => (),
                     }
                 }
-                if let Some(det) = &self.details_panel {
-                    det.refresh();
-                }
             }
 
             UserAction::PageUp => {
-                self.scroll_current_window(curr_pod_id, -self.n_row + 3);
+                self.scroll_current_window(curr_pod_id, Scroll::Up(self.n_row - 3));
             }
 
             UserAction::PageDown => {
-                self.scroll_current_window(curr_pod_id, self.n_row - 3);
+                self.scroll_current_window(curr_pod_id, Scroll::Down(self.n_row - 3));
             }
 
             UserAction::BigUp => {
                 self.scroll_current_window(
                     curr_pod_id,
-                    -self.n_row / crate::config::BIG_SCROLL_AMOUNT,
+                    Scroll::Up(self.n_row / crate::config::BIG_SCROLL_AMOUNT),
                 );
             }
 
             UserAction::BigDown => {
                 self.scroll_current_window(
                     curr_pod_id,
-                    self.n_row / crate::config::BIG_SCROLL_AMOUNT,
+                    Scroll::Down(self.n_row / crate::config::BIG_SCROLL_AMOUNT),
                 );
             }
 
             UserAction::GoTop => {
-                self.scroll_current_window(curr_pod_id, -i32::MAX);
+                self.scroll_current_window(curr_pod_id, Scroll::Up(u16::MAX));
             }
 
             UserAction::GoBot => {
-                self.scroll_current_window(curr_pod_id, i32::MAX);
+                self.scroll_current_window(curr_pod_id, Scroll::Down(u16::MAX));
             }
 
             // this shouldn't occur because we only trigger this
@@ -515,11 +521,9 @@ impl<'a> Ui<'a> {
         }
     }
 
-    /// Scrolls the current active menu by
-    /// the specified amount and refreshes
-    /// the window.
-    /// Positive Scroll is down.
-    pub fn scroll_current_window(&mut self, pod_id: Option<i64>, scroll: i32) {
+    /// Scrolls the current active menu by the specified amount and
+    /// refreshes the window.
+    pub fn scroll_current_window(&mut self, pod_id: Option<i64>, scroll: Scroll) {
         match self.active_menu {
             ActiveMenu::PodcastMenu => {
                 if pod_id.is_some() {
@@ -530,7 +534,7 @@ impl<'a> Ui<'a> {
 
                     // update episodes menu with new list
                     self.episode_menu.items = self.podcast_menu.get_episodes();
-                    self.episode_menu.update_items();
+                    self.episode_menu.redraw();
                     self.update_details_panel();
                 }
             }
@@ -677,18 +681,17 @@ impl<'a> Ui<'a> {
     /// main panels: podcast menu, episodes menu, and details panel; if
     /// the screen is too small to display the details panel, this size
     /// will be 0
-    #[allow(clippy::useless_let_if_seq)]
-    pub fn calculate_sizes(n_col: i32) -> (i32, i32, i32) {
+    pub fn calculate_sizes(n_col: u16) -> (u16, u16, u16) {
         let pod_col;
         let ep_col;
         let det_col;
         if n_col > crate::config::DETAILS_PANEL_LENGTH {
-            pod_col = n_col / 3;
-            ep_col = n_col / 3 + 1;
-            det_col = n_col - pod_col - ep_col + 2;
+            pod_col = (n_col + 2) / 3;
+            ep_col = (n_col + 2) / 3;
+            det_col = n_col + 2 - pod_col - ep_col;
         } else {
-            pod_col = n_col / 2;
-            ep_col = n_col - pod_col + 1;
+            pod_col = (n_col + 1) / 2;
+            ep_col = n_col + 1 - pod_col;
             det_col = 0;
         }
         return (pod_col, ep_col, det_col);
@@ -753,7 +756,7 @@ impl<'a> Ui<'a> {
     }
 
     /// Adds a notification to the bottom of the screen for `duration`
-    /// time  (in milliseconds). Useful for presenting error messages,
+    /// time (in milliseconds). Useful for presenting error messages,
     /// among other things.
     pub fn timed_notif(&mut self, message: String, duration: u64, error: bool) {
         self.notif_win.timed_notif(message, duration, error);
@@ -775,20 +778,26 @@ impl<'a> Ui<'a> {
     /// Forces the menus to check the list of podcasts/episodes again and
     /// update.
     pub fn update_menus(&mut self) {
-        self.podcast_menu.update_items();
+        self.podcast_menu.redraw();
 
         self.episode_menu.items = if !self.podcast_menu.items.is_empty() {
             self.podcast_menu.get_episodes()
         } else {
             LockVec::new(Vec::new())
         };
-        self.episode_menu.update_items();
+        self.episode_menu.redraw();
+        self.highlight_items();
+    }
 
+    /// Forces the menus to redraw the highlighted item.
+    pub fn highlight_items(&mut self) {
         match self.active_menu {
-            ActiveMenu::PodcastMenu => self.podcast_menu.highlight_selected(true),
+            ActiveMenu::PodcastMenu => {
+                self.podcast_menu.highlight_selected();
+            }
             ActiveMenu::EpisodeMenu => {
-                self.podcast_menu.highlight_selected(false);
-                self.episode_menu.highlight_selected(true);
+                self.podcast_menu.highlight_selected();
+                self.episode_menu.highlight_selected();
             }
         }
     }
@@ -796,12 +805,32 @@ impl<'a> Ui<'a> {
     /// When the program is ending, this performs tear-down functions so
     /// that the terminal is properly restored to its prior settings.
     pub fn tear_down(&self) {
-        pancurses::endwin();
+        terminal::disable_raw_mode().unwrap();
+        execute!(
+            io::stdout(),
+            terminal::Clear(terminal::ClearType::All),
+            terminal::LeaveAlternateScreen,
+            cursor::Show
+        )
+        .unwrap();
     }
 
     /// Create a details panel.
-    pub fn make_details_panel(n_row: i32, n_col: i32, start_y: i32, start_x: i32) -> Panel {
-        return Panel::new("Details".to_string(), 2, n_row, n_col, start_y, start_x);
+    pub fn make_details_panel(
+        colors: Rc<AppColors>,
+        n_row: u16,
+        n_col: u16,
+        start_x: u16,
+    ) -> Panel {
+        return Panel::new(
+            "Details".to_string(),
+            2,
+            colors,
+            n_row,
+            n_col,
+            start_x,
+            (0, 1, 0, 1),
+        );
     }
 
     /// Updates the details panel with information about the current
@@ -810,7 +839,6 @@ impl<'a> Ui<'a> {
         if self.details_panel.is_some() {
             let (curr_pod_id, curr_ep_id) = self.get_current_ids();
             let det = self.details_panel.as_mut().unwrap();
-            det.erase();
             if let Some(pod_id) = curr_pod_id {
                 if let Some(ep_id) = curr_ep_id {
                     // get a couple details from the current podcast
@@ -862,10 +890,9 @@ impl<'a> Ui<'a> {
                             explicit: pod_explicit,
                             description: desc,
                         };
+                        det.redraw();
                         det.details_template(0, details);
                     };
-
-                    det.refresh();
                 }
             }
         }

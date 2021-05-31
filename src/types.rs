@@ -67,19 +67,18 @@ impl Menuable for Podcast {
         // to the end
         if length > crate::config::PODCAST_UNPLAYED_TOTALS_LENGTH {
             let meta_str = format!("({}/{})", self.num_unplayed(), self.episodes.len());
-            title_length = length - meta_str.chars().count();
+            title_length = length - meta_str.chars().count() - 3;
 
             let out = self.title.substr(0, title_length);
 
             return format!(
-                "{} {:>width$}",
+                " {} {:>width$} ",
                 out,
                 meta_str,
-                width = length - out.grapheme_len()
-            );
-        // this pads spaces between title and totals
+                width = length - out.grapheme_len() - 3
+            ); // this pads spaces between title and totals
         } else {
-            return self.title.substr(0, title_length);
+            return format!(" {} ", self.title.substr(0, title_length - 2));
         }
     }
 
@@ -157,7 +156,6 @@ impl Menuable for Episode {
             }
             None => self.title.substr(0, length),
         };
-        let out_len = out.grapheme_len();
         if length > crate::config::EPISODE_PUBDATE_LENGTH {
             let dur = self.format_duration();
             let meta_dur = format!("[{}]", dur);
@@ -168,35 +166,35 @@ impl Menuable for Episode {
                 let meta_str = format!("({}) {}", pd, meta_dur);
                 let added_len = meta_str.chars().count();
 
-                let out_added = out.substr(0, length - added_len);
+                let out_added = out.substr(0, length - added_len - 3);
                 return format!(
-                    "{} {:>width$}",
+                    " {} {:>width$} ",
                     out_added,
                     meta_str,
-                    width = length - out_len
+                    width = length - out_added.grapheme_len() - 3
                 );
             } else {
                 // just print duration
-                let out_added = out.substr(0, length - meta_dur.chars().count());
+                let out_added = out.substr(0, length - meta_dur.chars().count() - 3);
                 return format!(
-                    "{} {:>width$}",
+                    " {} {:>width$} ",
                     out_added,
                     meta_dur,
-                    width = length - out_len
+                    width = length - out_added.grapheme_len() - 3
                 );
             }
         } else if length > crate::config::EPISODE_DURATION_LENGTH {
             let dur = self.format_duration();
             let meta_dur = format!("[{}]", dur);
-            let out_added = out.substr(0, length - meta_dur.chars().count());
+            let out_added = out.substr(0, length - meta_dur.chars().count() - 3);
             return format!(
-                "{} {:>width$}",
+                " {} {:>width$} ",
                 out_added,
                 meta_dur,
-                width = length - out_len
+                width = length - out_added.grapheme_len() - 3
             );
         } else {
-            return out;
+            return format!(" {} ", out.substr(0, length - 2));
         }
     }
 
@@ -252,7 +250,20 @@ impl Menuable for NewEpisode {
     /// Returns the title for the episode, up to length characters.
     fn get_title(&self, length: usize) -> String {
         let selected = if self.selected { "✓" } else { " " };
-        let full_string = format!("[{}] {} ({})", selected, self.title, self.pod_title);
+
+        let title_len = self.title.grapheme_len();
+        let pod_title_len = self.pod_title.grapheme_len();
+        let empty_string = if length > title_len + pod_title_len + 9 {
+            let empty = vec![" "; length - title_len - pod_title_len - 9];
+            empty.join("")
+        } else {
+            "".to_string()
+        };
+
+        let full_string = format!(
+            " [{}] {} ({}){} ",
+            selected, self.title, self.pod_title, empty_string
+        );
         return full_string.substr(0, length);
     }
 
@@ -377,18 +388,18 @@ impl<T: Clone + Menuable> LockVec<T> {
     /// However, to avoid issues with keeping the borrow
     /// alive, the function returns a Vec of the collected results,
     /// rather than an iterator.
-    pub fn map_by_range<B, F>(&self, start: usize, end: usize, mut f: F) -> Vec<B>
-    where F: FnMut(&T) -> Option<B> {
-        let (map, order) = self.borrow();
-        return (start..end)
-            .into_iter()
-            .filter_map(|id| {
-                f(map
-                    .get(order.get(id).expect("Index error in LockVec"))
-                    .expect("Index error in LockVec"))
-            })
-            .collect();
-    }
+    // pub fn map_by_range<B, F>(&self, start: usize, end: usize, mut f: F) -> Vec<B>
+    // where F: FnMut(&T) -> Option<B> {
+    //     let (map, order) = self.borrow();
+    //     return (start..end)
+    //         .into_iter()
+    //         .filter_map(|id| {
+    //             f(map
+    //                 .get(order.get(id).expect("Index error in LockVec"))
+    //                 .expect("Index error in LockVec"))
+    //         })
+    //         .collect();
+    // }
 
     /// Maps a closure to every element in the LockVec, in the same way
     /// as the `filter_map()` does on an Iterator, both mapping and
@@ -428,10 +439,7 @@ impl LockVec<Podcast> {
     /// This clones the podcast with the given id.
     pub fn clone_podcast(&self, id: i64) -> Option<Podcast> {
         let pod_map = self.borrow_map();
-        return match pod_map.get(&id) {
-            Some(pod) => Some(pod.clone()),
-            None => None,
-        };
+        return pod_map.get(&id).cloned();
     }
 
     /// This clones the episode with the given id (`ep_id`), from
@@ -453,10 +461,7 @@ impl LockVec<Episode> {
     /// and can be used at that level as well if given a podcast id.
     pub fn clone_episode(&self, ep_id: i64) -> Option<Episode> {
         let ep_map = self.borrow_map();
-        return match ep_map.get(&ep_id) {
-            Some(ep) => Some(ep.clone()),
-            None => None,
-        };
+        return ep_map.get(&ep_id).cloned();
     }
 }
 

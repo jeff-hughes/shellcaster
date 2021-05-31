@@ -1,18 +1,25 @@
-use std::cmp::max;
 use std::cmp::min;
 use std::collections::hash_map::Entry;
 
-use super::ColorType;
+use crossterm::style;
+
 use super::Panel;
 use crate::types::*;
 
+/// Holds a value for how much to scroll the menu up or down, without
+/// having to deal with positive/negative values.
+pub enum Scroll {
+    Up(u16),
+    Down(u16),
+}
+
 /// Generic struct holding details about a list menu. These menus are
 /// contained by the UI, and hold the list of podcasts or podcast
-/// episodes. They also hold the pancurses window used to display the menu
-/// to the user.
+/// episodes. They also hold the Panel used to draw all elements to the
+/// screen.
 ///
-/// * `screen_pos` stores the position of the window on the screen, from
-///   left to right
+/// * `header` is an optional String of text that is printed above the
+///   menu; the scrollable menu effectively starts below the header.
 /// * `start_row` indicates the first row that is used for the menu;
 ///   this will be 0 if there is no header; otherwise, `start_row` will
 ///   be the first row below the header. Calculated relative to the
@@ -24,6 +31,9 @@ use crate::types::*;
 /// * `selected` indicates which item on screen is currently highlighted.
 ///   It is calculated relative to the panel, i.e., a value between
 ///   0 and (n_row - 1)
+/// * `active` indicates whether the menu is currently interactive, e.g.,
+///   if the user scrolls up or down, this is the menu that will receive
+///   those events.
 #[derive(Debug)]
 pub struct Menu<T>
 where T: Clone + Menuable
@@ -31,9 +41,10 @@ where T: Clone + Menuable
     pub panel: Panel,
     pub header: Option<String>,
     pub items: LockVec<T>,
-    pub start_row: i32, // beginning of first row of menu
-    pub top_row: i32,   // top row of text shown in window
-    pub selected: i32,  // which line of text is highlighted
+    pub start_row: u16, // beginning of first row of menu
+    pub top_row: u16,   // top row of text shown in window
+    pub selected: u16,  // which line of text is highlighted
+    pub active: bool,
 }
 
 impl<T: Clone + Menuable> Menu<T> {
@@ -46,20 +57,19 @@ impl<T: Clone + Menuable> Menu<T> {
             start_row: 0,
             top_row: 0,
             selected: 0,
+            active: false,
         };
     }
 
-    /// Prints the list of visible items to the pancurses window and
-    /// refreshes it.
-    pub fn init(&mut self) {
-        self.panel.refresh();
+    /// Clears the terminal, and then prints the list of visible items
+    /// to the terminal.
+    pub fn redraw(&mut self) {
+        self.panel.redraw();
         self.update_items();
     }
 
-    /// Prints or reprints the list of visible items to the pancurses
-    /// window and refreshes it.
+    /// Prints the list of visible items to the terminal.
     pub fn update_items(&mut self) {
-        self.panel.erase();
         self.start_row = self.print_header();
         if self.selected < self.start_row {
             self.selected = self.start_row;
@@ -68,196 +78,189 @@ impl<T: Clone + Menuable> Menu<T> {
         let (map, order) = self.items.borrow();
         if !order.is_empty() {
             // update selected item if list has gotten shorter
-            let current_selected = self.get_menu_idx(self.selected) as i32;
-            let list_len = order.len() as i32;
+            let current_selected = self.get_menu_idx(self.selected);
+            let list_len = order.len();
             if current_selected >= list_len {
-                self.selected = self.selected - (current_selected - list_len) - 1;
+                self.selected = (self.selected as usize - (current_selected - list_len) - 1) as u16;
             }
 
             // for visible rows, print strings from list
             for i in self.start_row..self.panel.get_rows() {
                 if let Some(elem_id) = order.get(self.get_menu_idx(i)) {
                     let elem = map.get(&elem_id).expect("Could not retrieve menu item.");
-                    self.panel
-                        .write_line(i, elem.get_title(self.panel.get_cols() as usize));
 
-                    // this is literally the same logic as
-                    // self.set_attrs(), but it's complaining about
-                    // immutable borrows, so...
-                    let attr = if elem.is_played() {
-                        pancurses::A_NORMAL
+                    if i == self.selected || !elem.is_played() {
+                        let style = if !elem.is_played() {
+                            style::ContentStyle::new()
+                                .foreground(self.panel.colors.bold.0)
+                                .background(self.panel.colors.bold.1)
+                                .attribute(style::Attribute::Bold)
+                        } else {
+                            style::ContentStyle::new()
+                                .foreground(self.panel.colors.normal.0)
+                                .background(self.panel.colors.normal.1)
+                        };
+                        self.panel.write_line(
+                            i,
+                            elem.get_title(self.panel.get_cols() as usize),
+                            Some(style),
+                        );
                     } else {
-                        pancurses::A_BOLD
-                    };
-                    self.panel.change_attr(
-                        i,
-                        -1,
-                        self.panel.get_cols() + 3,
-                        attr,
-                        ColorType::Normal,
-                    );
+                        self.panel.write_line(
+                            i,
+                            elem.get_title(self.panel.get_cols() as usize),
+                            None,
+                        );
+                    }
                 } else {
                     break;
                 }
             }
         }
-        self.panel.refresh();
     }
 
     /// If a header exists, prints lines of text to the panel to appear
     /// above the menu.
-    fn print_header(&mut self) -> i32 {
+    fn print_header(&mut self) -> u16 {
         if let Some(header) = &self.header {
-            return self.panel.write_wrap_line(0, header) + 2;
+            return self.panel.write_wrap_line(0, header, None) + 2;
         } else {
             return 0;
         }
     }
 
-    /// Scrolls the menu up or down by `lines` lines. Negative values of
-    /// `lines` will scroll the menu up.
+    /// Scrolls the menu up or down by `lines` lines.
     ///
     /// This function examines the new selected value, ensures it does
-    /// not fall out of bounds, and then updates the pancurses window to
+    /// not fall out of bounds, and then updates the panel to
     /// represent the new visible list.
-    pub fn scroll(&mut self, lines: i32) {
-        let mut old_selected;
-        let checked_lines;
-        let apply_color_played;
-        let get_titles;
-
-        let list_len = self.items.len();
+    pub fn scroll(&mut self, lines: Scroll) {
+        let list_len = self.items.len() as u16;
         if list_len == 0 {
             return;
         }
 
-        let n_row = self.panel.get_rows();
-        let max_lines = list_len as i32 + self.start_row;
-        let check_max = |lines| min(lines, max_lines);
-
-        // check the bounds of lines and adjust accordingly
-        if lines.checked_add(self.top_row + n_row).is_some() {
-            checked_lines = lines;
-        } else {
-            checked_lines = lines - self.top_row - n_row;
-        }
-
-        old_selected = self.selected;
-        self.selected += checked_lines;
-
-        // don't allow scrolling past last item in list (if shorter
-        // than self.panel.get_rows())
-        let abs_bottom = min(self.panel.get_rows(), list_len as i32 + self.start_row - 1);
-        if self.selected > abs_bottom {
-            self.selected = abs_bottom;
-        }
-
-        // given a selection, apply correct play status and highlight
-        apply_color_played = |menu: &mut Menu<T>, selected, color: ColorType| {
-            let played = menu
-                .items
-                .map_single_by_index(menu.get_menu_idx(selected), |el| el.is_played())
-                .unwrap_or(false);
-            menu.set_attrs(selected, played, color);
-        };
-
-        // return a vec with sorted titles in range start, end (exclusive)
-        get_titles = |menu: &mut Menu<T>, start, end| {
-            menu.items.map_by_range(start, end, |el| {
-                Some(el.get_title(menu.panel.get_cols() as usize))
-            })
-        };
-
-        // scroll list if necessary:
-        // scroll down
-        if (self.selected) > (n_row - 1) {
-            // for scrolls that don't start at the bottom
-            apply_color_played(self, old_selected, ColorType::Normal);
-            let delta = n_row - old_selected - 1;
-
-            let titles = get_titles(
-                self,
-                (self.top_row + n_row) as usize,
-                (check_max(checked_lines + self.top_row + n_row - delta)) as usize,
-            );
-            for title in titles.into_iter() {
-                self.top_row += 1;
-                self.panel.delete_line(self.start_row);
-                old_selected -= 1;
-                self.panel.delete_line(n_row - 1);
-                self.panel.write_line(n_row - 1, title);
-                apply_color_played(self, n_row - 1, ColorType::Normal);
+        match lines {
+            Scroll::Up(v) => {
+                let selected_adj = self.selected - self.start_row;
+                if v <= selected_adj {
+                    self.unhighlight_item(self.selected);
+                    self.selected -= v;
+                } else {
+                    let list_scroll_amount = v - selected_adj;
+                    if let Some(top) = self.top_row.checked_sub(list_scroll_amount) {
+                        self.top_row = top;
+                    } else {
+                        self.top_row = 0;
+                    }
+                    self.selected = self.start_row;
+                    self.panel.clear_inner();
+                    self.update_items();
+                }
+                self.highlight_item(self.selected, self.active);
             }
-            self.selected = n_row - 1;
+            Scroll::Down(v) => {
+                if self.get_menu_idx(self.selected) >= list_len as usize - 1 {
+                    // we're at the bottom of the list
+                    return;
+                }
 
-        // scroll up
-        } else if self.selected < self.start_row {
-            let titles = get_titles(
-                self,
-                max(0, self.top_row + self.selected) as usize,
-                (self.top_row) as usize,
-            );
-            for title in titles.into_iter().rev() {
-                self.top_row -= 1;
-                self.panel.insert_line(self.start_row, title);
-                apply_color_played(self, 1, ColorType::Normal);
-                old_selected += 1;
+                let n_row = self.panel.get_rows();
+                let select_max = if list_len < n_row - self.start_row {
+                    self.start_row + list_len - 1
+                } else {
+                    n_row - 1
+                };
+
+                if v <= (select_max - self.selected) {
+                    self.unhighlight_item(self.selected);
+                    self.selected += v;
+                } else {
+                    let list_scroll_amount = v - (n_row - self.selected - 1);
+                    let visible_rows = n_row - self.start_row;
+                    // can't scroll list if list is shorter than full screen
+                    if list_len > visible_rows {
+                        self.top_row =
+                            min(self.top_row + list_scroll_amount, list_len - visible_rows);
+                    }
+                    self.selected = select_max;
+                    self.panel.clear_inner();
+                    self.update_items();
+                }
+                self.highlight_item(self.selected, self.active);
             }
-            self.selected = self.start_row;
         }
-        apply_color_played(self, old_selected, ColorType::Normal);
-        apply_color_played(self, self.selected, ColorType::HighlightedActive);
-        self.panel.refresh();
     }
 
-    /// Sets font style and color of menu item. `index` is the position
-    /// of the menu item to be changed. `played` is an indicator of
-    /// whether that item has been played or not. `color` is a ColorType
-    /// representing the appropriate state of the item (e.g., Normal,
-    /// Highlighted).
-    pub fn set_attrs(&mut self, index: i32, played: bool, color: ColorType) {
-        let attr = if played {
-            pancurses::A_NORMAL
-        } else {
-            pancurses::A_BOLD
-        };
-        self.panel
-            .change_attr(index, -1, self.panel.get_cols() + 3, attr, color);
+    /// Highlights the item in the menu, given a y-value.
+    pub fn highlight_item(&mut self, item_y: u16, active: bool) {
+        // if list is empty, will return None
+        let el_details = self
+            .items
+            .map_single_by_index(self.get_menu_idx(item_y), |el| {
+                (el.get_title(self.panel.get_cols() as usize), el.is_played())
+            });
+
+        if let Some((title, is_played)) = el_details {
+            let mut style = style::ContentStyle::new();
+            if active {
+                style = style
+                    .foreground(self.panel.colors.highlighted_active.0)
+                    .background(self.panel.colors.highlighted_active.1);
+            } else {
+                style = style
+                    .foreground(self.panel.colors.highlighted.0)
+                    .background(self.panel.colors.highlighted.1);
+            }
+            style = if is_played {
+                style.attribute(style::Attribute::NormalIntensity)
+            } else {
+                style.attribute(style::Attribute::Bold)
+            };
+            self.panel.write_line(item_y, title, Some(style));
+        }
+    }
+
+    /// Removes highlight on the item in the menu, given a y-value.
+    pub fn unhighlight_item(&mut self, item_y: u16) {
+        // if list is empty, will return None
+        let el_details = self
+            .items
+            .map_single_by_index(self.get_menu_idx(item_y), |el| {
+                (el.get_title(self.panel.get_cols() as usize), el.is_played())
+            });
+
+        if let Some((title, is_played)) = el_details {
+            let style = if is_played {
+                style::ContentStyle::new()
+                    .foreground(self.panel.colors.normal.0)
+                    .background(self.panel.colors.normal.1)
+            } else {
+                style::ContentStyle::new()
+                    .foreground(self.panel.colors.bold.0)
+                    .background(self.panel.colors.bold.1)
+                    .attribute(style::Attribute::Bold)
+            };
+            self.panel.write_line(item_y, title, Some(style));
+        }
     }
 
     /// Highlights the currently selected item in the menu, based on
     /// whether the menu is currently active or not.
-    pub fn highlight_selected(&mut self, active_menu: bool) {
-        let is_played = self
-            .items
-            .map_single_by_index(self.get_menu_idx(self.selected), |el| el.is_played());
-
-        if let Some(played) = is_played {
-            if active_menu {
-                self.set_attrs(self.selected, played, ColorType::HighlightedActive);
-            } else {
-                self.set_attrs(self.selected, played, ColorType::Highlighted);
-            }
-            self.panel.refresh();
-        }
+    pub fn highlight_selected(&mut self) {
+        self.highlight_item(self.selected, self.active);
     }
 
-    /// Controls how the window changes when it is active (i.e., available
-    /// for user input to modify state).
+    /// Controls how the window changes when it is active (i.e.,
+    /// available for user input to modify state).
     pub fn activate(&mut self) {
-        // if list is empty, will return None
-        if let Some(played) = self
-            .items
-            .map_single_by_index(self.get_menu_idx(self.selected), |el| el.is_played())
-        {
-            self.set_attrs(self.selected, played, ColorType::HighlightedActive);
-            self.panel.refresh();
-        }
+        self.active = true;
+        self.highlight_selected();
     }
 
-    /// Updates window size
-    pub fn resize(&mut self, n_row: i32, n_col: i32, start_y: i32, start_x: i32) {
-        self.panel.resize(n_row, n_col, start_y, start_x);
+    /// Updates window size.
+    pub fn resize(&mut self, n_row: u16, n_col: u16, start_x: u16) {
+        self.panel.resize(n_row, n_col, start_x);
         let n_row = self.panel.get_rows();
 
         // if resizing moves selected item off screen, scroll the list
@@ -266,6 +269,7 @@ impl<T: Clone + Menuable> Menu<T> {
             self.top_row = self.top_row + self.selected - (n_row - 1);
             self.selected = n_row - 1;
         }
+        self.redraw();
     }
 
     /// Given a row on the panel, this translates it into the
@@ -273,7 +277,7 @@ impl<T: Clone + Menuable> Menu<T> {
     /// do any checks to ensure `screen_y` is between 0 and `n_rows`,
     /// or that the resulting menu index is between 0 and `n_items`.
     /// It's merely a straight translation.
-    pub fn get_menu_idx(&self, screen_y: i32) -> usize {
+    pub fn get_menu_idx(&self, screen_y: u16) -> usize {
         return (self.top_row + screen_y - self.start_row) as usize;
     }
 }
@@ -298,13 +302,21 @@ impl Menu<Podcast> {
     /// Controls how the window changes when it is inactive (i.e., not
     /// available for user input to modify state).
     pub fn deactivate(&mut self) {
+        self.active = false;
         // if list is empty, will return None
-        if let Some(played) = self
+        let el_details = self
             .items
-            .map_single_by_index(self.get_menu_idx(self.selected), |el| el.is_played())
-        {
-            self.set_attrs(self.selected, played, ColorType::Highlighted);
-            self.panel.refresh();
+            .map_single_by_index(self.get_menu_idx(self.selected), |el| {
+                (el.get_title(self.panel.get_cols() as usize), el.is_played())
+            });
+        if let Some((title, is_played)) = el_details {
+            let mut style = style::ContentStyle::new()
+                .foreground(self.panel.colors.highlighted.0)
+                .background(self.panel.colors.highlighted.1);
+            if !is_played {
+                style = style.attribute(style::Attribute::Bold);
+            }
+            self.panel.write_line(self.selected, title, Some(style));
         }
     }
 }
@@ -313,14 +325,8 @@ impl Menu<Episode> {
     /// Controls how the window changes when it is inactive (i.e., not
     /// available for user input to modify state).
     pub fn deactivate(&mut self) {
-        // if list is empty, will return None
-        if let Some(played) = self
-            .items
-            .map_single_by_index(self.get_menu_idx(self.selected), |el| el.is_played())
-        {
-            self.set_attrs(self.selected, played, ColorType::Normal);
-            self.panel.refresh();
-        }
+        self.active = false;
+        self.unhighlight_item(self.selected);
     }
 }
 
@@ -332,7 +338,7 @@ impl Menu<NewEpisode> {
         let changed = self.change_item_selections(vec![self.get_menu_idx(self.selected)], None);
         if changed {
             self.update_items();
-            self.highlight_selected(true);
+            self.highlight_selected();
         }
     }
 
@@ -346,7 +352,7 @@ impl Menu<NewEpisode> {
             self.change_item_selections((0..self.items.len()).collect(), Some(!all_selected));
         if changed {
             self.update_items();
-            self.highlight_selected(true);
+            self.highlight_selected();
         }
     }
 
@@ -382,8 +388,10 @@ impl Menu<NewEpisode> {
 mod tests {
     use super::*;
     use chrono::Utc;
+    use std::rc::Rc;
 
-    fn create_menu(n_row: i32, n_col: i32, top_row: i32, selected: i32) -> Menu<Episode> {
+    fn create_menu(n_row: u16, n_col: u16, top_row: u16, selected: u16) -> Menu<Episode> {
+        let colors = Rc::new(crate::ui::AppColors::default());
         let titles = vec![
             "A Very Cool Episode",
             "This is a very long episode title but we'll get through it together",
@@ -409,7 +417,15 @@ mod tests {
             });
         }
 
-        let panel = Panel::new("Episodes".to_string(), 1, n_row, n_col, 0, 0);
+        let panel = Panel::new(
+            "Episodes".to_string(),
+            1,
+            colors.clone(),
+            n_row,
+            n_col,
+            0,
+            (0, 0, 0, 0),
+        );
         return Menu {
             panel: panel,
             header: None,
@@ -417,6 +433,7 @@ mod tests {
             start_row: 0,
             top_row: top_row,
             selected: selected,
+            active: true,
         };
     }
 
@@ -424,10 +441,10 @@ mod tests {
     fn scroll_up() {
         let real_rows = 5;
         let real_cols = 65;
-        let mut menu = create_menu(real_rows + 2, real_cols + 5, 2, 0);
+        let mut menu = create_menu(real_rows + 2, real_cols + 3, 2, 0);
         menu.update_items();
 
-        menu.scroll(-1);
+        menu.scroll(Scroll::Up(1));
 
         let expected_top = menu
             .items
@@ -438,18 +455,18 @@ mod tests {
             .map_single_by_index(5, |ep| ep.get_title(real_cols as usize))
             .unwrap();
 
-        assert_eq!(menu.panel.get_row(0).0, expected_top);
-        assert_eq!(menu.panel.get_row(4).0, expected_bot);
+        assert_eq!(menu.panel.get_row(0), expected_top);
+        assert_eq!(menu.panel.get_row(4), expected_bot);
     }
 
     #[test]
     fn scroll_down() {
         let real_rows = 5;
         let real_cols = 65;
-        let mut menu = create_menu(real_rows + 2, real_cols + 5, 0, 4);
+        let mut menu = create_menu(real_rows + 2, real_cols + 3, 0, 4);
         menu.update_items();
 
-        menu.scroll(1);
+        menu.scroll(Scroll::Down(1));
 
         let expected_top = menu
             .items
@@ -460,18 +477,18 @@ mod tests {
             .map_single_by_index(5, |ep| ep.get_title(real_cols as usize))
             .unwrap();
 
-        assert_eq!(menu.panel.get_row(0).0, expected_top);
-        assert_eq!(menu.panel.get_row(4).0, expected_bot);
+        assert_eq!(menu.panel.get_row(0), expected_top);
+        assert_eq!(menu.panel.get_row(4), expected_bot);
     }
 
     #[test]
     fn resize_bigger() {
         let real_rows = 5;
         let real_cols = 65;
-        let mut menu = create_menu(real_rows + 2, real_cols + 5, 0, 4);
+        let mut menu = create_menu(real_rows + 2, real_cols + 3, 0, 4);
         menu.update_items();
 
-        menu.resize(real_rows + 2 + 5, real_cols + 5 + 5, 0, 0);
+        menu.resize(real_rows + 2 + 5, real_cols + 3 + 5, 0);
         menu.update_items();
 
         assert_eq!(menu.top_row, 0);
@@ -479,15 +496,9 @@ mod tests {
 
         let non_empty: Vec<String> = menu
             .panel
-            .window
+            .buffer
             .iter()
-            .filter_map(|x| {
-                if x.0.is_empty() {
-                    None
-                } else {
-                    Some(x.0.clone())
-                }
-            })
+            .filter_map(|x| if x.is_empty() { None } else { Some(x.clone()) })
             .collect();
         assert_eq!(non_empty.len(), menu.items.len());
     }
@@ -496,10 +507,10 @@ mod tests {
     fn resize_smaller() {
         let real_rows = 7;
         let real_cols = 65;
-        let mut menu = create_menu(real_rows + 2, real_cols + 5, 0, 6);
+        let mut menu = create_menu(real_rows + 2, real_cols + 3, 0, 6);
         menu.update_items();
 
-        menu.resize(real_rows + 2 - 2, real_cols + 5 - 5, 0, 0);
+        menu.resize(real_rows + 2 - 2, real_cols + 3 - 5, 0);
         menu.update_items();
 
         assert_eq!(menu.top_row, 2);
@@ -507,15 +518,9 @@ mod tests {
 
         let non_empty: Vec<String> = menu
             .panel
-            .window
+            .buffer
             .iter()
-            .filter_map(|x| {
-                if x.0.is_empty() {
-                    None
-                } else {
-                    Some(x.0.clone())
-                }
-            })
+            .filter_map(|x| if x.is_empty() { None } else { Some(x.clone()) })
             .collect();
         assert_eq!(non_empty.len(), (real_rows - 2) as usize);
     }
@@ -527,9 +532,9 @@ mod tests {
         let mut menu = create_menu(real_rows + 2, real_cols + 5, 0, 0);
         menu.update_items();
 
-        let expected = "An episode with le Unicod".to_string();
+        let expected = " An episode with le Unicod ".to_string();
 
-        assert_eq!(menu.panel.get_row(2).0, expected);
+        assert_eq!(menu.panel.get_row(2), expected);
     }
 
     #[test]
@@ -539,8 +544,8 @@ mod tests {
         let mut menu = create_menu(real_rows + 2, real_cols + 5, 0, 0);
         menu.update_items();
 
-        let expected = "How does an episode with emoji sound? ".to_string();
+        let expected = " How does an episode with emoji sound?  ".to_string();
 
-        assert_eq!(menu.panel.get_row(3).0, expected);
+        assert_eq!(menu.panel.get_row(3), expected);
     }
 }

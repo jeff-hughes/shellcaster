@@ -16,7 +16,7 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-pancurses = "0.16.1"
+crossterm = "0.19.0"
 rss = "1.10.0"
 rusqlite = "0.21.0"
 clap = "2.33.1"
@@ -42,7 +42,7 @@ default-features = false
 
 
 [features]
-default = ["wide", "native-tls"]
+default = ["native-tls"]
 
 # bundle sqlite library with app; recommended for Windows. This is
 # turned on by default, but if you are building this for a package
@@ -56,9 +56,3 @@ sqlite_bundled = ["rusqlite/bundled"]
 # then specify `--features "rustls"`
 native-tls = ["ureq/native-tls"]
 rustls = ["ureq/tls"]
-
-# specific to Unix systems; see pancurses docs for more details
-wide = ["pancurses/wide"]
-
-# specific to Windows; see pancurses docs for more details
-win32 = ["pancurses/win32"]
