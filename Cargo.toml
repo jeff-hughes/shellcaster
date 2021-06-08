@@ -30,6 +30,7 @@ sanitize-filename = "0.2.1"
 shellexpand = "2.1.0"
 dirs = { package = "dirs-next", version = "2.0.0" }
 opml = "0.2.4"
+ahash = "0.7.4"
 nohash-hasher = "0.2.0"
 unicode-segmentation = "1.7.1"
 textwrap = "0.13.4"
@@ -56,3 +57,6 @@ sqlite_bundled = ["rusqlite/bundled"]
 # then specify `--features "rustls"`
 native-tls = ["ureq/native-tls"]
 rustls = ["ureq/tls"]
+
+[profile.release]
+debug = 1

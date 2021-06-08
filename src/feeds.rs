@@ -209,54 +209,39 @@ fn duration_to_int(duration: Option<&str>) -> Option<i32> {
                      * 4 capture groups (with 0th being the full match).
                      * Depending on the string format, however, some of
                      * these may return None. We first loop through the
-                     * capture groups and push Some results to a vector.
-                     * After that, we convert from a vector of Results to
-                     * a Result with a vector, using the collect() method.
-                     * This will fail on the first error, so the duration
-                     * is parsed only if all components of it were
-                     * successfully converted to integers. Finally, we
-                     * convert hours, minutes, and seconds into a total
-                     * duration in seconds and return.
+                     * capture groups and push Some results to an array.
+                     * This will fail on the first non-numeric value,
+                     * so the duration is parsed only if all components
+                     * of it were successfully converted to integers.
+                     * Finally, we convert hours, minutes, and seconds
+                     * into a total duration in seconds and return.
                      */
 
-                    let mut times = Vec::new();
-                    let mut first = true;
-                    for c in cap.iter() {
-                        // cap[0] is always full match
-                        if first {
-                            first = false;
-                            continue;
-                        }
-
-                        if let Some(value) = c {
-                            times.push(regex_to_int(value));
+                    let mut times = [None; 3];
+                    let mut counter = 0;
+                    // cap[0] is always full match
+                    for c in cap.iter().skip(1).flatten() {
+                        if let Ok(intval) = regex_to_int(c) {
+                            times[counter] = Some(intval);
+                            counter += 1;
+                        } else {
+                            return None;
                         }
                     }
 
-                    match times.len() {
+                    return match counter {
                         // HH:MM:SS
-                        3 => {
-                            let result: Result<Vec<_>, _> = times.into_iter().collect();
-                            match result {
-                                Ok(v) => Some(v[0] * 60 * 60 + v[1] * 60 + v[2]),
-                                Err(_) => None,
-                            }
-                        }
+                        3 => Some(
+                            times[0].unwrap() * 60 * 60
+                                + times[1].unwrap() * 60
+                                + times[2].unwrap(),
+                        ),
                         // MM:SS
-                        2 => {
-                            let result: Result<Vec<_>, _> = times.into_iter().collect();
-                            match result {
-                                Ok(v) => Some(v[0] * 60 + v[1]),
-                                Err(_) => None,
-                            }
-                        }
+                        2 => Some(times[0].unwrap() * 60 + times[1].unwrap()),
                         // SS
-                        1 => match times[0] {
-                            Ok(i) => Some(i),
-                            Err(_) => None,
-                        },
+                        1 => times[0],
                         _ => None,
-                    }
+                    };
                 }
                 None => None,
             }

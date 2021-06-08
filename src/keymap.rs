@@ -1,5 +1,5 @@
+use ahash::AHashMap;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use std::collections::HashMap;
 
 use crate::config::KeybindingsFromToml;
 
@@ -42,12 +42,12 @@ pub enum UserAction {
 /// keys may perform the same action, but each key may only perform one
 /// action.
 #[derive(Debug, Clone)]
-pub struct Keybindings(HashMap<String, UserAction>);
+pub struct Keybindings(AHashMap<String, UserAction>);
 
 impl Keybindings {
     /// Returns a new Keybindings struct.
     pub fn new() -> Self {
-        return Self(HashMap::new());
+        return Self(AHashMap::new());
     }
 
     /// Returns a Keybindings struct with all default values set.
@@ -64,7 +64,6 @@ impl Keybindings {
     /// all fields may be missing), create a Keybindings struct using
     /// user-defined keys where specified, and default values otherwise.
     pub fn from_config(config: KeybindingsFromToml) -> Self {
-        let defaults = Self::_defaults();
         let config_actions: Vec<(Option<Vec<String>>, UserAction)> = vec![
             (config.left, UserAction::Left),
             (config.right, UserAction::Right),
@@ -92,12 +91,11 @@ impl Keybindings {
             (config.quit, UserAction::Quit),
         ];
 
-        let mut keymap = Self::new();
+        let mut keymap = Self::default();
         for (config, action) in config_actions.into_iter() {
-            keymap.insert_from_vec(
-                config.unwrap_or_else(|| defaults.get(&action).unwrap().clone()),
-                action,
-            );
+            if let Some(config) = config {
+                keymap.insert_from_vec(config, action);
+            }
         }
         return keymap;
     }
@@ -142,8 +140,8 @@ impl Keybindings {
             .collect();
     }
 
-    fn _defaults() -> HashMap<UserAction, Vec<String>> {
-        let action_map: Vec<(UserAction, Vec<String>)> = vec![
+    fn _defaults() -> Vec<(UserAction, Vec<String>)> {
+        return vec![
             (UserAction::Left, vec!["Left".to_string(), "h".to_string()]),
             (UserAction::Right, vec![
                 "Right".to_string(),
@@ -172,11 +170,6 @@ impl Keybindings {
             (UserAction::Help, vec!["?".to_string()]),
             (UserAction::Quit, vec!["q".to_string()]),
         ];
-        let mut default_map = HashMap::new();
-        for (action, defaults) in action_map.into_iter() {
-            default_map.insert(action, defaults);
-        }
-        return default_map;
     }
 }
 
