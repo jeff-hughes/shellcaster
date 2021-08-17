@@ -21,8 +21,8 @@ rss = "1.10.0"
 rusqlite = "0.21.0"
 clap = "2.33.1"
 toml = "0.5.8"
-anyhow = "1.0.40"
-serde = { version = "1.0.125", features = ["derive"] }
+anyhow = "1.0.43"
+serde = { version = "1.0.127", features = ["derive"] }
 chrono = "0.4.11"
 lazy_static = "1.4.0"
 regex = "1.5.4"
@@ -32,13 +32,13 @@ dirs = { package = "dirs-next", version = "2.0.0" }
 opml = "0.2.4"
 ahash = "0.7.4"
 nohash-hasher = "0.2.0"
-unicode-segmentation = "1.7.1"
+unicode-segmentation = "1.8.0"
 textwrap = "0.13.4"
 escaper = "0.1.0"
 semver = "0.10.0"
 
 [dependencies.ureq]
-version = "1.5.4"
+version = "1.5.5"
 default-features = false
 
 
