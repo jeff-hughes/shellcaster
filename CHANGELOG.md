@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.2.1 (2021-09-08)
+- This is a simple patch release to fix a compilation issue resulting from the update to rustc v1.54.0.
+
 ## v1.2.0 (2021-05-11)
 - Adds new keybindings for scrolling up/down a quarter of the page,
   scrolling a full page up/down, and scrolling to the top or bottom

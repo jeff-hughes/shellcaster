@@ -40,7 +40,11 @@ Next, there are two options for compiling the program:
 1. You can install the latest version of the binary directly from crates.io with one command:
 
 ```bash
-cargo install shellcaster --no-track --root "/usr/local"  # add or remove any features with --features
+# for MacOS or Linux
+sudo cargo install shellcaster --no-track --root "/usr/local"  # add or remove any features with --features
+
+# or for Linux, without needing root permissions
+cargo install shellcaster --no-track --root "$HOME/.local"
 ```
 
 2. You can clone the Github repo and compile it yourself:
@@ -50,7 +54,11 @@ git clone https://github.com/jeff-hughes/shellcaster.git
 cd shellcaster
 cargo build --release  # add or remove any features with --features
 
+# for MacOS or Linux
 sudo cp target/release/shellcaster /usr/local/bin/
+
+# or for Linux, no root permissions
+cp target/release/shellcaster ~/.local/bin
 ```
 
 See below for the list of available features when compiling.
@@ -74,14 +82,14 @@ By default, `native-tls` and `wide` features are enabled. Here is the full list 
 To specify different features when compiling, here is the format:
 
 ```bash
-cargo install --no-track --no-default-features --features "<feature1>,<feature2>" --root "/usr/local"
+cargo install --no-track --no-default-features --features "<feature1>,<feature2>" --root "$HOME/.local"
 ```
 
 The format is the same when using `cargo build` instead:
 
 ```bash
 cargo build --release --no-default-features --features "<feature1>,<feature2>"
-sudo cp target/release/shellcaster /usr/local/bin/
+cp target/release/shellcaster ~/.local/bin/
 ```
 
 ## Running shellcaster

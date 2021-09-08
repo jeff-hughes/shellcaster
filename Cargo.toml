@@ -1,6 +1,6 @@
 [package]
 name = "shellcaster"
-version = "1.2.0"
+version = "1.2.1"
 authors = ["Jeff Hughes <jeff.hughes@gmail.com>"]
 edition = "2018"
 license = "GPL-3.0-or-later"
@@ -29,7 +29,7 @@ regex = "1.5.4"
 sanitize-filename = "0.2.1"
 shellexpand = "2.1.0"
 dirs = { package = "dirs-next", version = "2.0.0" }
-opml = "0.2.4"
+opml = "0.3.0"
 ahash = "0.7.4"
 nohash-hasher = "0.2.0"
 unicode-segmentation = "1.8.0"

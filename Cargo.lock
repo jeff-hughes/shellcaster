@@ -572,9 +572,9 @@ dependencies = [
 
 [[package]]
 name = "opml"
-version = "0.2.4"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5cd697395344133c42c91d1e50adb21db8339122cd6fa813a1c6dd8a0bf7a19b"
+checksum = "045aa841087ee62d99f3b39df48dfa891b99ab703b671a478af72106e893771d"
 dependencies = [
  "regex",
  "serde",
@@ -896,7 +896,7 @@ dependencies = [
 
 [[package]]
 name = "shellcaster"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "ahash",
  "anyhow",
