@@ -409,6 +409,7 @@ mod tests {
                 pod_id: 1,
                 title: t.to_string(),
                 url: String::new(),
+                guid: String::new(),
                 description: String::new(),
                 pubdate: Some(Utc::now()),
                 duration: Some(12345),

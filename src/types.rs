@@ -117,6 +117,7 @@ pub struct Episode {
     pub pod_id: i64,
     pub title: String,
     pub url: String,
+    pub guid: String,
     pub description: String,
     pub pubdate: Option<DateTime<Utc>>,
     pub duration: Option<i64>,
@@ -224,6 +225,7 @@ pub struct PodcastNoId {
 pub struct EpisodeNoId {
     pub title: String,
     pub url: String,
+    pub guid: String,
     pub description: String,
     pub pubdate: Option<DateTime<Utc>>,
     pub duration: Option<i64>,

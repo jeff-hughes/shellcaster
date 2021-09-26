@@ -162,6 +162,10 @@ fn parse_episode_data(item: &Item) -> EpisodeNoId {
         Some(enc) => enc.url().to_string(),
         None => "".to_string(),
     };
+    let guid = match item.guid() {
+        Some(guid) => guid.value().to_string(),
+        None => "".to_string(),
+    };
     let description = match item.description() {
         Some(dsc) => dsc.to_string(),
         None => "".to_string(),
@@ -189,6 +193,7 @@ fn parse_episode_data(item: &Item) -> EpisodeNoId {
     return EpisodeNoId {
         title: title,
         url: url,
+        guid: guid,
         description: description,
         pubdate: pubdate,
         duration: duration,
