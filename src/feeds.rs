@@ -207,7 +207,7 @@ fn parse_episode_data(item: &Item) -> EpisodeNoId {
 fn duration_to_int(duration: Option<&str>) -> Option<i32> {
     match duration {
         Some(dur) => {
-            match RE_DURATION.captures(&dur) {
+            match RE_DURATION.captures(dur) {
                 Some(cap) => {
                     /*
                      * Provided that the regex succeeds, we should have

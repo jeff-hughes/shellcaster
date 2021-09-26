@@ -208,17 +208,15 @@ impl NotifWin {
                         }
                     }
                     KeyCode::Char(c) => {
+                        current_max_x += 1;
+                        cursor_x += 1;
                         if cursor_x < current_max_x {
-                            current_max_x += 1;
-                            cursor_x += 1;
                             inputs.insert(cursor_idx, c);
                             for i in inputs.chars().skip(cursor_idx) {
                                 execute!(io::stdout(), style::Print(i)).unwrap();
                             }
                             execute!(io::stdout(), cursor::MoveTo(cursor_x, self.start_y)).unwrap();
                         } else {
-                            current_max_x += 1;
-                            cursor_x += 1;
                             inputs.push(c);
                             execute!(io::stdout(), style::Print(c)).unwrap();
                         }

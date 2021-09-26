@@ -110,7 +110,7 @@ impl AppColors {
             }
             return Err(anyhow!("Invalid color hex code"));
         } else if text.starts_with("rgb") || text.starts_with("RGB") {
-            #[allow(clippy::clippy::from_str_radix_10)]
+            #[allow(clippy::from_str_radix_10)]
             if let Some(cap) = RE_COLOR_RGB.captures(text) {
                 return Ok(Color::Rgb {
                     r: u8::from_str_radix(&cap[1], 10)?,

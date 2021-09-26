@@ -191,7 +191,7 @@ impl Database {
         let pod_id = stmt.query_row::<i64, _, _>(params![podcast.url], |row| row.get(0))?;
         let mut ep_ids = Vec::new();
         for ep in podcast.episodes.iter().rev() {
-            let id = self.insert_episode(pod_id, &ep)?;
+            let id = self.insert_episode(pod_id, ep)?;
             let new_ep = NewEpisode {
                 id: id,
                 pod_id: pod_id,
@@ -389,7 +389,7 @@ impl Database {
                     }
                 }
                 None => {
-                    let id = self.insert_episode(podcast_id, &new_ep)?;
+                    let id = self.insert_episode(podcast_id, new_ep)?;
                     let new_ep = NewEpisode {
                         id: id,
                         pod_id: podcast_id,
@@ -520,7 +520,7 @@ impl Database {
                 url: row.get("url")?,
                 guid: row
                     .get::<&str, Option<String>>("guid")?
-                    .unwrap_or("".to_string()),
+                    .unwrap_or_else(|| "".to_string()),
                 description: row.get("description")?,
                 pubdate: convert_date(row.get("pubdate")),
                 duration: row.get("duration")?,

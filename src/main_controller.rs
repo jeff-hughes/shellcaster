@@ -16,6 +16,7 @@ use crate::types::*;
 use crate::ui::{Ui, UiMsg};
 
 /// Enum used for communicating with other threads.
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug)]
 pub enum MainMessage {
     UiUpdateMenus,
@@ -52,7 +53,7 @@ impl MainController {
         let (tx_to_main, rx_to_main) = mpsc::channel();
 
         // get connection to the database
-        let db_inst = Database::connect(&db_path)?;
+        let db_inst = Database::connect(db_path)?;
 
         // set up threadpool
         let threadpool = Threadpool::new(config.simultaneous_downloads);
@@ -362,7 +363,7 @@ impl MainController {
             // if there is a local file, try to play that
             Some(path) => match path.to_str() {
                 Some(p) => {
-                    if play_file::execute(&self.config.play_command, &p).is_err() {
+                    if play_file::execute(&self.config.play_command, p).is_err() {
                         self.notif_to_ui(
                             "Error: Could not play file. Check configuration.".to_string(),
                             true,

@@ -371,7 +371,7 @@ fn import(db_path: &Path, config: Config, args: &clap::ArgMatches) -> Result<()>
 /// Exports all podcasts to OPML format, either printing to stdout or
 /// exporting to a file.
 fn export(db_path: &Path, args: &clap::ArgMatches) -> Result<()> {
-    let db_inst = Database::connect(&db_path)?;
+    let db_inst = Database::connect(db_path)?;
     let podcast_list = db_inst.get_podcasts()?;
     let opml = opml::export(podcast_list);
 

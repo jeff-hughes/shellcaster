@@ -87,7 +87,7 @@ impl<T: Clone + Menuable> Menu<T> {
             // for visible rows, print strings from list
             for i in self.start_row..self.panel.get_rows() {
                 if let Some(elem_id) = order.get(self.get_menu_idx(i)) {
-                    let elem = map.get(&elem_id).expect("Could not retrieve menu item.");
+                    let elem = map.get(elem_id).expect("Could not retrieve menu item.");
 
                     if i == self.selected || !elem.is_played() {
                         let style = if !elem.is_played() {
