@@ -91,6 +91,9 @@ delete_all = [ "X" ]
 remove = [ "r" ]
 remove_all = [ "R" ]
 
+filter_played = [ "1" ]
+filter_downloaded = [ "2" ]
+
 help = [ "?" ]
 quit = [ "q" ]
 

@@ -93,6 +93,8 @@ pub struct KeybindingsFromToml {
     pub delete_all: Option<Vec<String>>,
     pub remove: Option<Vec<String>>,
     pub remove_all: Option<Vec<String>>,
+    pub filter_played: Option<Vec<String>>,
+    pub filter_downloaded: Option<Vec<String>>,
     pub help: Option<Vec<String>>,
     pub quit: Option<Vec<String>>,
 }
@@ -157,6 +159,8 @@ impl Config {
                     delete_all: None,
                     remove: None,
                     remove_all: None,
+                    filter_played: None,
+                    filter_downloaded: None,
                     help: None,
                     quit: None,
                 };

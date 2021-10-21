@@ -34,6 +34,9 @@ pub enum UserAction {
     Remove,
     RemoveAll,
 
+    FilterPlayed,
+    FilterDownloaded,
+
     Help,
     Quit,
 }
@@ -87,6 +90,8 @@ impl Keybindings {
             (config.delete_all, UserAction::DeleteAll),
             (config.remove, UserAction::Remove),
             (config.remove_all, UserAction::RemoveAll),
+            (config.filter_played, UserAction::FilterPlayed),
+            (config.filter_downloaded, UserAction::FilterDownloaded),
             (config.help, UserAction::Help),
             (config.quit, UserAction::Quit),
         ];
@@ -167,6 +172,8 @@ impl Keybindings {
             (UserAction::DeleteAll, vec!["X".to_string()]),
             (UserAction::Remove, vec!["r".to_string()]),
             (UserAction::RemoveAll, vec!["R".to_string()]),
+            (UserAction::FilterPlayed, vec!["1".to_string()]),
+            (UserAction::FilterDownloaded, vec!["2".to_string()]),
             (UserAction::Help, vec!["?".to_string()]),
             (UserAction::Quit, vec!["q".to_string()]),
         ];

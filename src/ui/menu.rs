@@ -75,7 +75,7 @@ impl<T: Clone + Menuable> Menu<T> {
             self.selected = self.start_row;
         }
 
-        let (map, order) = self.items.borrow();
+        let (map, _, order) = self.items.borrow();
         if !order.is_empty() {
             // update selected item if list has gotten shorter
             let current_selected = self.get_menu_idx(self.selected);
@@ -288,7 +288,7 @@ impl Menu<Podcast> {
     /// currently selected podcast.
     pub fn get_episodes(&self) -> LockVec<Episode> {
         let index = self.get_menu_idx(self.selected);
-        let (borrowed_map, borrowed_order) = self.items.borrow();
+        let (borrowed_map, _, borrowed_order) = self.items.borrow();
         let pod_id = borrowed_order
             .get(index)
             .expect("Could not retrieve podcast.");
@@ -347,7 +347,7 @@ impl Menu<NewEpisode> {
     /// selected; if all are selected already, only then will it convert
     /// all to unselected.
     pub fn select_all_items(&mut self) {
-        let all_selected = self.items.map(|ep| ep.selected).iter().all(|x| *x);
+        let all_selected = self.items.map(|ep| ep.selected, false).iter().all(|x| *x);
         let changed =
             self.change_item_selections((0..self.items.len()).collect(), Some(!all_selected));
         if changed {
@@ -364,7 +364,7 @@ impl Menu<NewEpisode> {
     fn change_item_selections(&mut self, indexes: Vec<usize>, selection: Option<bool>) -> bool {
         let mut changed = false;
         {
-            let (mut borrowed_map, borrowed_order) = self.items.borrow();
+            let (mut borrowed_map, borrowed_order, _) = self.items.borrow();
             for idx in indexes {
                 if let Some(ep_id) = borrowed_order.get(idx) {
                     if let Entry::Occupied(mut ep) = borrowed_map.entry(*ep_id) {

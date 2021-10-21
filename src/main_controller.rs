@@ -13,7 +13,7 @@ use crate::feeds::{self, FeedMsg, PodcastFeed};
 use crate::play_file;
 use crate::threadpool::Threadpool;
 use crate::types::*;
-use crate::ui::{Ui, UiMsg};
+use crate::ui::{FilterStatus, Filters, Ui, UiMsg};
 
 /// Enum used for communicating with other threads.
 #[allow(clippy::enum_variant_names)]
@@ -161,6 +161,8 @@ impl MainController {
                     self.remove_all_episodes(pod_id, delete_files)
                 }
 
+                Message::Ui(UiMsg::FilterChange(filters)) => self.update_filters(filters),
+
                 Message::Ui(UiMsg::Noop) => (),
             }
         }
@@ -248,9 +250,10 @@ impl MainController {
             ),
             // get all of 'em!
             None => {
-                pod_data = self.podcasts.map(|pod| {
-                    PodcastFeed::new(Some(pod.id), pod.url.clone(), Some(pod.title.clone()))
-                })
+                pod_data = self.podcasts.map(
+                    |pod| PodcastFeed::new(Some(pod.id), pod.url.clone(), Some(pod.title.clone())),
+                    false,
+                )
             }
         }
         for feed in pod_data.into_iter() {
@@ -682,12 +685,47 @@ impl MainController {
         }
 
         let mut podcast = self.podcasts.clone_podcast(pod_id).unwrap();
-        podcast.episodes.map(|ep| {
-            let _ = self.db.hide_episode(ep.id, true);
-        });
+        podcast.episodes.map(
+            |ep| {
+                let _ = self.db.hide_episode(ep.id, true);
+            },
+            false,
+        );
         podcast.episodes = LockVec::new(Vec::new());
         self.podcasts.replace(pod_id, podcast);
 
+        self.tx_to_ui
+            .send(MainMessage::UiUpdateMenus)
+            .expect("Thread messaging error");
+    }
+
+    /// Updates the user-selected filters to show only played/unplayed
+    /// or downloaded/not downloaded episodes.
+    pub fn update_filters(&self, filters: Filters) {
+        {
+            let brrw_map = self.podcasts.borrow_map();
+            for (_, pod) in brrw_map.iter() {
+                let new_filter = pod.episodes.filter_map(|ep| {
+                    let play_filter = match filters.played {
+                        FilterStatus::All => false,
+                        FilterStatus::PositiveCases => !ep.is_played(),
+                        FilterStatus::NegativeCases => ep.is_played(),
+                    };
+                    let download_filter = match filters.downloaded {
+                        FilterStatus::All => false,
+                        FilterStatus::PositiveCases => ep.path.is_none(),
+                        FilterStatus::NegativeCases => ep.path.is_some(),
+                    };
+                    if !(play_filter | download_filter) {
+                        return Some(ep.id);
+                    } else {
+                        return None;
+                    }
+                });
+                let mut filtered_order = pod.episodes.borrow_filtered_order();
+                *filtered_order = new_filter;
+            }
+        }
         self.tx_to_ui
             .send(MainMessage::UiUpdateMenus)
             .expect("Thread messaging error");

@@ -47,7 +47,7 @@ impl Podcast {
     fn num_unplayed(&self) -> usize {
         return self
             .episodes
-            .map(|ep| !ep.is_played() as usize)
+            .map(|ep| !ep.is_played() as usize, false)
             .iter()
             .sum();
     }
@@ -279,12 +279,22 @@ impl Menuable for NewEpisode {
 /// Primarily, the LockVec is used to provide methods that abstract
 /// away some of the logic necessary for borrowing and locking the
 /// Arc<Mutex<_>>.
+///
+/// The data is structured in a way to allow for quick access both by
+/// item ID (using a hash map), as well as by the order of an item in
+/// the list (using a vector of the item IDs). The `order` vector
+/// provides the full order of all the podcasts/episodes that are
+/// present in the hash map; the `filtered_order` vector provides the
+/// order only for the items that are currently filtered in, if the
+/// user has set an active filter for played/unplayed or downloaded/
+/// undownloaded.
 #[derive(Debug)]
 pub struct LockVec<T>
 where T: Clone + Menuable
 {
     data: Arc<Mutex<HashMap<i64, T, BuildNoHashHasher<i64>>>>,
     order: Arc<Mutex<Vec<i64>>>,
+    filtered_order: Arc<Mutex<Vec<i64>>>,
 }
 
 impl<T: Clone + Menuable> LockVec<T> {
@@ -300,7 +310,8 @@ impl<T: Clone + Menuable> LockVec<T> {
 
         return LockVec {
             data: Arc::new(Mutex::new(hm)),
-            order: Arc::new(Mutex::new(order)),
+            order: Arc::new(Mutex::new(order.clone())),
+            filtered_order: Arc::new(Mutex::new(order)),
         };
     }
 
@@ -314,6 +325,11 @@ impl<T: Clone + Menuable> LockVec<T> {
         return self.order.lock().expect("Mutex error");
     }
 
+    /// Lock the LockVec filtered order vector for reading/writing.
+    pub fn borrow_filtered_order(&self) -> MutexGuard<Vec<i64>> {
+        return self.filtered_order.lock().expect("Mutex error");
+    }
+
     /// Lock the LockVec hashmap for reading/writing.
     #[allow(clippy::type_complexity)]
     pub fn borrow(
@@ -321,10 +337,12 @@ impl<T: Clone + Menuable> LockVec<T> {
     ) -> (
         MutexGuard<HashMap<i64, T, BuildNoHashHasher<i64>>>,
         MutexGuard<Vec<i64>>,
+        MutexGuard<Vec<i64>>,
     ) {
         return (
             self.data.lock().expect("Mutex error"),
             self.order.lock().expect("Mutex error"),
+            self.filtered_order.lock().expect("Mutex error"),
         );
     }
 
@@ -337,13 +355,15 @@ impl<T: Clone + Menuable> LockVec<T> {
 
     /// Empty out and replace all the data in the LockVec.
     pub fn replace_all(&self, data: Vec<T>) {
-        let (mut map, mut order) = self.borrow();
+        let (mut map, mut order, mut filtered_order) = self.borrow();
         map.clear();
         order.clear();
+        filtered_order.clear();
         for i in data.into_iter() {
             let id = i.get_id();
             map.insert(i.get_id(), i);
             order.push(id);
+            filtered_order.push(id);
         }
     }
 
@@ -351,13 +371,20 @@ impl<T: Clone + Menuable> LockVec<T> {
     /// as an Iterator. However, to avoid issues with keeping the borrow
     /// alive, the function returns a Vec of the collected results,
     /// rather than an iterator.
-    pub fn map<B, F>(&self, mut f: F) -> Vec<B>
+    pub fn map<B, F>(&self, mut f: F, filtered: bool) -> Vec<B>
     where F: FnMut(&T) -> B {
-        let (map, order) = self.borrow();
-        return order
-            .iter()
-            .map(|id| f(map.get(id).expect("Index error in LockVec")))
-            .collect();
+        let (map, order, filtered_order) = self.borrow();
+        if filtered {
+            return filtered_order
+                .iter()
+                .map(|id| f(map.get(id).expect("Index error in LockVec")))
+                .collect();
+        } else {
+            return order
+                .iter()
+                .map(|id| f(map.get(id).expect("Index error in LockVec")))
+                .collect();
+        }
     }
 
     /// Maps a closure to a single element in the LockVec, specified by
@@ -376,7 +403,7 @@ impl<T: Clone + Menuable> LockVec<T> {
     /// this returns None.
     pub fn map_single_by_index<B, F>(&self, index: usize, f: F) -> Option<B>
     where F: FnOnce(&T) -> B {
-        let order = self.borrow_order();
+        let order = self.borrow_filtered_order();
         return match order.get(index) {
             Some(id) => self.map_single(*id, f),
             None => None,
@@ -385,32 +412,19 @@ impl<T: Clone + Menuable> LockVec<T> {
 
     /// Maps a closure to every element in the LockVec, in the same way
     /// as the `filter_map()` does on an Iterator, both mapping and
-    /// filtering, over a specified range.
-    /// Does not check if the range is valid!
-    /// However, to avoid issues with keeping the borrow
-    /// alive, the function returns a Vec of the collected results,
-    /// rather than an iterator.
-    // pub fn map_by_range<B, F>(&self, start: usize, end: usize, mut f: F) -> Vec<B>
-    // where F: FnMut(&T) -> Option<B> {
-    //     let (map, order) = self.borrow();
-    //     return (start..end)
-    //         .into_iter()
-    //         .filter_map(|id| {
-    //             f(map
-    //                 .get(order.get(id).expect("Index error in LockVec"))
-    //                 .expect("Index error in LockVec"))
-    //         })
-    //         .collect();
-    // }
-
-    /// Maps a closure to every element in the LockVec, in the same way
-    /// as the `filter_map()` does on an Iterator, both mapping and
     /// filtering. However, to avoid issues with keeping the borrow
     /// alive, the function returns a Vec of the collected results,
     /// rather than an iterator.
+    ///
+    /// Note that the word "filter" in this sense represents the concept
+    /// from functional programming, providing a function that evaluates
+    /// items in the list and returns a boolean value. The word "filter"
+    /// is used elsewhere in the code to represent user-selected
+    /// filters to show only selected podcasts/episodes, but this is
+    /// *not* the sense of the word here.
     pub fn filter_map<B, F>(&self, mut f: F) -> Vec<B>
     where F: FnMut(&T) -> Option<B> {
-        let (map, order) = self.borrow();
+        let (map, order, _) = self.borrow();
         return order
             .iter()
             .filter_map(|id| f(map.get(id).expect("Index error in LockVec")))
@@ -433,6 +447,7 @@ impl<T: Clone + Menuable> Clone for LockVec<T> {
         return LockVec {
             data: Arc::clone(&self.data),
             order: Arc::clone(&self.order),
+            filtered_order: Arc::clone(&self.filtered_order),
         };
     }
 }
