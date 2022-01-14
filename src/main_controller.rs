@@ -13,7 +13,7 @@ use crate::feeds::{self, FeedMsg, PodcastFeed};
 use crate::play_file;
 use crate::threadpool::Threadpool;
 use crate::types::*;
-use crate::ui::{FilterStatus, Filters, Ui, UiMsg};
+use crate::ui::{Ui, UiMsg};
 
 /// Enum used for communicating with other threads.
 #[allow(clippy::enum_variant_names)]
@@ -34,6 +34,7 @@ pub struct MainController {
     db: Database,
     threadpool: Threadpool,
     podcasts: LockVec<Podcast>,
+    filters: Filters,
     sync_counter: usize,
     sync_tracker: Vec<SyncResult>,
     download_tracker: HashSet<i64>,
@@ -80,6 +81,7 @@ impl MainController {
             db: db_inst,
             threadpool: threadpool,
             podcasts: podcast_list,
+            filters: Filters::default(),
             ui_thread: ui_thread,
             sync_counter: 0,
             sync_tracker: Vec::new(),
@@ -161,7 +163,56 @@ impl MainController {
                     self.remove_all_episodes(pod_id, delete_files)
                 }
 
-                Message::Ui(UiMsg::FilterChange(filters)) => self.update_filters(filters),
+                Message::Ui(UiMsg::FilterChange(filter_type)) => {
+                    let new_filter;
+                    let message;
+                    match filter_type {
+                        // we need to handle these separately because the
+                        // order that makes the most sense to me is
+                        // different:
+                        // played goes from all -> neg -> pos;
+                        // downloaded goes from all -> pos -> neg;
+                        // this is purely based on the idea that people
+                        // are most likely to want to specifically find
+                        // unplayed episodes, or downloaded episodes
+                        FilterType::Played => {
+                            match self.filters.played {
+                                FilterStatus::All => {
+                                    new_filter = FilterStatus::NegativeCases;
+                                    message = "Unplayed only";
+                                }
+                                FilterStatus::NegativeCases => {
+                                    new_filter = FilterStatus::PositiveCases;
+                                    message = "Played only";
+                                }
+                                FilterStatus::PositiveCases => {
+                                    new_filter = FilterStatus::All;
+                                    message = "Played and unplayed";
+                                }
+                            }
+                            self.filters.played = new_filter;
+                        }
+                        FilterType::Downloaded => {
+                            match self.filters.downloaded {
+                                FilterStatus::All => {
+                                    new_filter = FilterStatus::PositiveCases;
+                                    message = "Downloaded only";
+                                }
+                                FilterStatus::PositiveCases => {
+                                    new_filter = FilterStatus::NegativeCases;
+                                    message = "Undownloaded only";
+                                }
+                                FilterStatus::NegativeCases => {
+                                    new_filter = FilterStatus::All;
+                                    message = "Downloaded and undownloaded";
+                                }
+                            }
+                            self.filters.downloaded = new_filter;
+                        }
+                    }
+                    self.notif_to_ui(format!("Filter: {}", message), false);
+                    self.update_filters(self.filters, true);
+                }
 
                 Message::Ui(UiMsg::Noop) => (),
             }
@@ -293,9 +344,7 @@ impl MainController {
                             .expect("Error retrieving info from database."),
                     );
                 }
-                self.tx_to_ui
-                    .send(MainMessage::UiUpdateMenus)
-                    .expect("Thread messaging error");
+                self.update_filters(self.filters, true);
 
                 if pod_id.is_some() {
                     self.sync_tracker.push(result);
@@ -399,9 +448,7 @@ impl MainController {
         podcast.episodes.replace(ep_id, episode);
 
         self.podcasts.replace(pod_id, podcast);
-        self.tx_to_ui
-            .send(MainMessage::UiUpdateMenus)
-            .expect("Thread messaging error");
+        self.update_filters(self.filters, true);
     }
 
     /// Given a podcast, it marks all episodes for that podcast as
@@ -422,9 +469,7 @@ impl MainController {
         );
 
         self.podcasts.replace(pod_id, podcast);
-        self.tx_to_ui
-            .send(MainMessage::UiUpdateMenus)
-            .expect("Thread messaging error");
+        self.update_filters(self.filters, true);
     }
 
     /// Given a podcast index (and not an episode index), this will send
@@ -542,9 +587,7 @@ impl MainController {
             self.notif_to_ui("Downloads complete.".to_string(), false);
         }
 
-        self.tx_to_ui
-            .send(MainMessage::UiUpdateMenus)
-            .expect("Thread messaging error");
+        self.update_filters(self.filters, true);
     }
 
     /// Given a podcast title, creates a download directory for that
@@ -580,9 +623,7 @@ impl MainController {
                     episode.path = None;
                     podcast.episodes.replace(ep_id, episode);
 
-                    self.tx_to_ui
-                        .send(MainMessage::UiUpdateMenus)
-                        .expect("Thread messaging error");
+                    self.update_filters(self.filters, true);
                     self.notif_to_ui(format!("Deleted \"{}\"", title), false);
                 }
                 Err(_) => self.notif_to_ui(format!("Error deleting \"{}\"", title), true),
@@ -619,9 +660,7 @@ impl MainController {
         if res.is_err() {
             success = false;
         }
-        self.tx_to_ui
-            .send(MainMessage::UiUpdateMenus)
-            .expect("Thread messaging error");
+        self.update_filters(self.filters, true);
 
         if success {
             self.notif_to_ui("Files successfully deleted.".to_string(), false);
@@ -701,9 +740,10 @@ impl MainController {
 
     /// Updates the user-selected filters to show only played/unplayed
     /// or downloaded/not downloaded episodes.
-    pub fn update_filters(&self, filters: Filters) {
+    pub fn update_filters(&self, filters: Filters, update_menus: bool) {
         {
             let brrw_map = self.podcasts.borrow_map();
+            let mut new_filtered_pods = Vec::new();
             for (_, pod) in brrw_map.iter() {
                 let new_filter = pod.episodes.filter_map(|ep| {
                     let play_filter = match filters.played {
@@ -722,12 +762,19 @@ impl MainController {
                         return None;
                     }
                 });
+                if !new_filter.is_empty() {
+                    new_filtered_pods.push(pod.id);
+                }
                 let mut filtered_order = pod.episodes.borrow_filtered_order();
                 *filtered_order = new_filter;
             }
+            let mut brrw_filtered_pods = self.podcasts.borrow_filtered_order();
+            *brrw_filtered_pods = new_filtered_pods;
         }
-        self.tx_to_ui
-            .send(MainMessage::UiUpdateMenus)
-            .expect("Thread messaging error");
+        if update_menus {
+            self.tx_to_ui
+                .send(MainMessage::UiUpdateMenus)
+                .expect("Thread messaging error");
+        }
     }
 }

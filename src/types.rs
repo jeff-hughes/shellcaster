@@ -493,6 +493,39 @@ pub enum Message {
 }
 
 
+/// Simple enum to designate the status of a filter. "Positive" and
+/// "Negative" cases represent, e.g., "played" vs. "unplayed".
+#[derive(Debug, Clone, Copy)]
+pub enum FilterStatus {
+    PositiveCases,
+    NegativeCases,
+    All,
+}
+
+/// Enum to identify which filters has been changed
+#[derive(Debug, Clone, Copy)]
+pub enum FilterType {
+    Played,
+    Downloaded,
+}
+
+/// Struct holding information about all active filters.
+#[derive(Debug, Clone, Copy)]
+pub struct Filters {
+    pub played: FilterStatus,
+    pub downloaded: FilterStatus,
+}
+
+impl Default for Filters {
+    fn default() -> Self {
+        return Self {
+            played: FilterStatus::All,
+            downloaded: FilterStatus::All,
+        };
+    }
+}
+
+
 /// Some helper functions for dealing with Unicode strings.
 pub trait StringUtils {
     fn substr(&self, start: usize, length: usize) -> String;

@@ -68,7 +68,7 @@ pub enum UiMsg {
     RemovePodcast(i64, bool),
     RemoveEpisode(i64, i64, bool),
     RemoveAllEpisodes(i64, bool),
-    FilterChange(Filters),
+    FilterChange(FilterType),
     Quit,
     Noop,
 }
@@ -80,34 +80,9 @@ enum ActiveMenu {
     EpisodeMenu,
 }
 
-/// Simple enum to designate the status of a filter. "Positive" and
-/// "Negative" cases represent, e.g., "played" vs. "unplayed".
-#[derive(Debug, Clone, Copy)]
-pub enum FilterStatus {
-    PositiveCases,
-    NegativeCases,
-    All,
-}
-
-/// Struct holding information about all active filters.
-#[derive(Debug, Clone, Copy)]
-pub struct Filters {
-    pub played: FilterStatus,
-    pub downloaded: FilterStatus,
-}
-
-impl Default for Filters {
-    fn default() -> Self {
-        return Self {
-            played: FilterStatus::All,
-            downloaded: FilterStatus::All,
-        };
-    }
-}
-
-/// Struct containing all interface elements of the TUI. Functionally, it
-/// encapsulates the terminal menus and panels, and holds data about the
-/// size of the screen.
+/// Struct containing all interface elements of the TUI. Functionally,
+/// it encapsulates the terminal menus and panels, and holds data about
+/// the size of the screen.
 #[derive(Debug)]
 pub struct Ui<'a> {
     n_row: u16,
@@ -120,7 +95,6 @@ pub struct Ui<'a> {
     details_panel: Option<Panel>,
     notif_win: NotifWin,
     popup_win: PopupWin<'a>,
-    filters: Filters,
 }
 
 impl<'a> Ui<'a> {
@@ -251,7 +225,6 @@ impl<'a> Ui<'a> {
             details_panel: details_panel,
             notif_win: notif_win,
             popup_win: popup_win,
-            filters: Filters::default(),
         };
     }
 
@@ -421,46 +394,10 @@ impl<'a> Ui<'a> {
                             }
 
                             Some(UserAction::FilterPlayed) => {
-                                let new_filter;
-                                let message;
-                                match self.filters.played {
-                                    FilterStatus::All => {
-                                        new_filter = FilterStatus::NegativeCases;
-                                        message = "Unplayed only";
-                                    }
-                                    FilterStatus::NegativeCases => {
-                                        new_filter = FilterStatus::PositiveCases;
-                                        message = "Played only";
-                                    }
-                                    FilterStatus::PositiveCases => {
-                                        new_filter = FilterStatus::All;
-                                        message = "Played and unplayed";
-                                    }
-                                }
-                                self.filters.played = new_filter;
-                                self.timed_notif(format!("Filter: {}", message), 5000, false);
-                                return UiMsg::FilterChange(self.filters);
+                                return UiMsg::FilterChange(FilterType::Played);
                             }
                             Some(UserAction::FilterDownloaded) => {
-                                let new_filter;
-                                let message;
-                                match self.filters.downloaded {
-                                    FilterStatus::All => {
-                                        new_filter = FilterStatus::PositiveCases;
-                                        message = "Downloaded only";
-                                    }
-                                    FilterStatus::PositiveCases => {
-                                        new_filter = FilterStatus::NegativeCases;
-                                        message = "Undownloaded only";
-                                    }
-                                    FilterStatus::NegativeCases => {
-                                        new_filter = FilterStatus::All;
-                                        message = "Downloaded and undownloaded";
-                                    }
-                                }
-                                self.filters.downloaded = new_filter;
-                                self.timed_notif(format!("Filter: {}", message), 5000, false);
-                                return UiMsg::FilterChange(self.filters);
+                                return UiMsg::FilterChange(FilterType::Downloaded);
                             }
 
                             Some(UserAction::Help) => self.popup_win.spawn_help_win(),
