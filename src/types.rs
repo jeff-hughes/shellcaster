@@ -66,7 +66,7 @@ impl Menuable for Podcast {
         // if the size available is big enough, we add the unplayed data
         // to the end
         if length > crate::config::PODCAST_UNPLAYED_TOTALS_LENGTH {
-            let meta_str = format!("({}/{})", self.num_unplayed(), self.episodes.len());
+            let meta_str = format!("({}/{})", self.num_unplayed(), self.episodes.len(false));
             title_length = length - meta_str.chars().count() - 3;
 
             let out = self.title.substr(0, title_length);
@@ -432,8 +432,12 @@ impl<T: Clone + Menuable> LockVec<T> {
     }
 
     /// Returns the number of items in the LockVec.
-    pub fn len(&self) -> usize {
-        return self.borrow_order().len();
+    pub fn len(&self, filtered: bool) -> usize {
+        if filtered {
+            return self.borrow_filtered_order().len();
+        } else {
+            return self.borrow_order().len();
+        }
     }
 
     /// Returns whether or not there are any items in the LockVec.

@@ -742,9 +742,10 @@ impl MainController {
     /// or downloaded/not downloaded episodes.
     pub fn update_filters(&self, filters: Filters, update_menus: bool) {
         {
-            let brrw_map = self.podcasts.borrow_map();
+            let (pod_map, pod_order, mut pod_filtered_order) = self.podcasts.borrow();
             let mut new_filtered_pods = Vec::new();
-            for (_, pod) in brrw_map.iter() {
+            for pod_id in pod_order.iter() {
+                let pod = pod_map.get(pod_id).unwrap();
                 let new_filter = pod.episodes.filter_map(|ep| {
                     let play_filter = match filters.played {
                         FilterStatus::All => false,
@@ -768,8 +769,7 @@ impl MainController {
                 let mut filtered_order = pod.episodes.borrow_filtered_order();
                 *filtered_order = new_filter;
             }
-            let mut brrw_filtered_pods = self.podcasts.borrow_filtered_order();
-            *brrw_filtered_pods = new_filtered_pods;
+            *pod_filtered_order = new_filtered_pods;
         }
         if update_menus {
             self.tx_to_ui

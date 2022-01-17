@@ -135,7 +135,7 @@ impl<T: Clone + Menuable> Menu<T> {
     /// not fall out of bounds, and then updates the panel to
     /// represent the new visible list.
     pub fn scroll(&mut self, lines: Scroll) {
-        let list_len = self.items.len() as u16;
+        let list_len = self.items.len(true) as u16;
         if list_len == 0 {
             return;
         }
@@ -349,7 +349,7 @@ impl Menu<NewEpisode> {
     pub fn select_all_items(&mut self) {
         let all_selected = self.items.map(|ep| ep.selected, false).iter().all(|x| *x);
         let changed =
-            self.change_item_selections((0..self.items.len()).collect(), Some(!all_selected));
+            self.change_item_selections((0..self.items.len(false)).collect(), Some(!all_selected));
         if changed {
             self.update_items();
             self.highlight_selected();
@@ -501,7 +501,7 @@ mod tests {
             .iter()
             .filter_map(|x| if x.is_empty() { None } else { Some(x.clone()) })
             .collect();
-        assert_eq!(non_empty.len(), menu.items.len());
+        assert_eq!(non_empty.len(), menu.items.len(true));
     }
 
     #[test]
