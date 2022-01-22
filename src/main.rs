@@ -15,7 +15,6 @@ mod keymap;
 mod main_controller;
 mod opml;
 mod play_file;
-mod sanitizer;
 mod threadpool;
 mod types;
 mod ui;

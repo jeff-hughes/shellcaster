@@ -2,10 +2,10 @@ use anyhow::{anyhow, Result};
 use std::io::Read;
 use std::sync::mpsc;
 
-use crate::sanitizer::parse_from_rfc2822_with_fallback;
 use chrono::{DateTime, Utc};
 use lazy_static::lazy_static;
 use regex::{Match, Regex};
+use rfc822_sanitizer::parse_from_rfc2822_with_fallback;
 use rss::{Channel, Item};
 
 use crate::threadpool::Threadpool;

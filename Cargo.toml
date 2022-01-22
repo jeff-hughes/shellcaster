@@ -35,6 +35,7 @@ nohash-hasher = "0.2.0"
 unicode-segmentation = "1.8.0"
 textwrap = "0.13.4"
 escaper = "0.1.0"
+rfc822_sanitizer = "0.3.6"
 semver = "0.10.0"
 
 [dependencies.ureq]

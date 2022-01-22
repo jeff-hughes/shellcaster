@@ -747,6 +747,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rfc822_sanitizer"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d95e6ac0e635800681025bddc2fa6747cf1159bb897223a74e481ec54b4f5d44"
+dependencies = [
+ "chrono",
+ "lazy_static",
+ "regex",
+]
+
+[[package]]
 name = "ring"
 version = "0.16.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -909,6 +920,7 @@ dependencies = [
  "nohash-hasher",
  "opml",
  "regex",
+ "rfc822_sanitizer",
  "rss",
  "rusqlite",
  "sanitize-filename",
