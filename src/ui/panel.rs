@@ -1,11 +1,9 @@
 use std::io;
 use std::rc::Rc;
 
-use chrono::{DateTime, Utc};
 use crossterm::{cursor, queue, style};
 
 use super::AppColors;
-
 
 pub const VERTICAL: &str = "│";
 pub const HORIZONTAL: &str = "─";
@@ -16,16 +14,6 @@ pub const BOTTOM_LEFT: &str = "└";
 pub const TOP_TEE: &str = "┬";
 pub const BOTTOM_TEE: &str = "┴";
 
-
-/// Struct holding the raw data used for building the details panel.
-pub struct Details {
-    pub pod_title: Option<String>,
-    pub ep_title: Option<String>,
-    pub pubdate: Option<DateTime<Utc>>,
-    pub duration: Option<String>,
-    pub explicit: Option<bool>,
-    pub description: Option<String>,
-}
 
 /// Panels abstract away a terminal "window" (section of the screen),
 /// and handle all methods associated with writing data to that window.
@@ -98,7 +86,7 @@ impl Panel {
     pub fn clear_inner(&self) {
         let empty = vec![" "; self.n_col as usize - 2];
         let empty_string = empty.join("");
-        for r in 1..(self.n_row - 2) {
+        for r in 1..(self.n_row - 1) {
             queue!(
                 io::stdout(),
                 cursor::MoveTo(self.start_x + 1, r),
@@ -234,6 +222,9 @@ impl Panel {
     ) -> u16 {
         let mut row = start_y;
         let max_row = self.get_rows();
+        if row >= max_row {
+            return row;
+        }
         let content_style = match style {
             Some(style) => style,
             None => style::ContentStyle::new()
@@ -255,98 +246,6 @@ impl Panel {
             }
         }
         return row - 1;
-    }
-
-    /// Write the specific template used for the details panel.
-    pub fn details_template(&self, start_y: u16, details: Details) {
-        let mut row = start_y;
-        let bold = style::ContentStyle::new()
-            .foreground(self.colors.bold.0)
-            .background(self.colors.bold.1)
-            .attribute(style::Attribute::Bold);
-
-        // podcast title
-        match details.pod_title {
-            Some(t) => row = self.write_wrap_line(row, &t, Some(bold)),
-            None => row = self.write_wrap_line(row, "No title", Some(bold)),
-        }
-
-        // episode title
-        match details.ep_title {
-            Some(t) => row = self.write_wrap_line(row + 1, &t, Some(bold)),
-            None => row = self.write_wrap_line(row + 1, "No title", Some(bold)),
-        }
-
-        row += 1; // blank line
-
-        // published date
-        if let Some(date) = details.pubdate {
-            self.write_key_value_line(
-                row + 1,
-                "Published".to_string(),
-                format!("{}", date.format("%B %-d, %Y")),
-                Some(
-                    style::ContentStyle::new()
-                        .foreground(self.colors.normal.0)
-                        .background(self.colors.normal.1)
-                        .attribute(style::Attribute::Underlined),
-                ),
-                None,
-            );
-            row += 1;
-        }
-
-        // duration
-        if let Some(dur) = details.duration {
-            self.write_key_value_line(
-                row + 1,
-                "Duration".to_string(),
-                dur,
-                Some(
-                    style::ContentStyle::new()
-                        .foreground(self.colors.normal.0)
-                        .background(self.colors.normal.1)
-                        .attribute(style::Attribute::Underlined),
-                ),
-                None,
-            );
-            row += 1;
-        }
-
-        // explicit
-        if let Some(exp) = details.explicit {
-            let exp_string = if exp {
-                "Yes".to_string()
-            } else {
-                "No".to_string()
-            };
-            self.write_key_value_line(
-                row + 1,
-                "Explicit".to_string(),
-                exp_string,
-                Some(
-                    style::ContentStyle::new()
-                        .foreground(self.colors.normal.0)
-                        .background(self.colors.normal.1)
-                        .attribute(style::Attribute::Underlined),
-                ),
-                None,
-            );
-            row += 1;
-        }
-
-        row += 1; // blank line
-
-        // description
-        match details.description {
-            Some(desc) => {
-                row = self.write_wrap_line(row + 1, "Description:", Some(bold));
-                let _row = self.write_wrap_line(row + 1, &desc, None);
-            }
-            None => {
-                let _row = self.write_wrap_line(row + 1, "No description.", None);
-            }
-        }
     }
 
     /// Updates window size.

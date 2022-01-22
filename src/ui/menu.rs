@@ -3,15 +3,8 @@ use std::collections::hash_map::Entry;
 
 use crossterm::style;
 
-use super::Panel;
+use super::{Panel, Scroll};
 use crate::types::*;
-
-/// Holds a value for how much to scroll the menu up or down, without
-/// having to deal with positive/negative values.
-pub enum Scroll {
-    Up(u16),
-    Down(u16),
-}
 
 /// Generic struct holding details about a list menu. These menus are
 /// contained by the UI, and hold the list of podcasts or podcast
@@ -303,30 +296,23 @@ impl Menu<Podcast> {
     /// available for user input to modify state).
     pub fn deactivate(&mut self) {
         self.active = false;
-        // if list is empty, will return None
-        let el_details = self
-            .items
-            .map_single_by_index(self.get_menu_idx(self.selected), |el| {
-                (el.get_title(self.panel.get_cols() as usize), el.is_played())
-            });
-        if let Some((title, is_played)) = el_details {
-            let mut style = style::ContentStyle::new()
-                .foreground(self.panel.colors.highlighted.0)
-                .background(self.panel.colors.highlighted.1);
-            if !is_played {
-                style = style.attribute(style::Attribute::Bold);
-            }
-            self.panel.write_line(self.selected, title, Some(style));
-        }
+        self.highlight_item(self.selected, false);
     }
 }
 
 impl Menu<Episode> {
     /// Controls how the window changes when it is inactive (i.e., not
-    /// available for user input to modify state).
-    pub fn deactivate(&mut self) {
+    /// available for user input to modify state). If true,
+    /// `keep_highlighted` will switch the currently selected item to
+    /// the "highlighted" cursor style (as opposed to the
+    /// "highlighted_active" style).
+    pub fn deactivate(&mut self, keep_highlighted: bool) {
         self.active = false;
-        self.unhighlight_item(self.selected);
+        if keep_highlighted {
+            self.highlight_item(self.selected, false);
+        } else {
+            self.unhighlight_item(self.selected);
+        }
     }
 }
 

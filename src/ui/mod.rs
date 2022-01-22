@@ -17,14 +17,16 @@ use regex::Regex;
 mod panel;
 
 pub mod colors;
+mod details_panel;
 mod menu;
 mod notification;
 mod popup;
 
 use self::colors::AppColors;
-use self::menu::{Menu, Scroll};
+use self::details_panel::{Details, DetailsPanel};
+use self::menu::Menu;
 use self::notification::NotifWin;
-use self::panel::{Details, Panel};
+use self::panel::Panel;
 use self::popup::PopupWin;
 
 use super::MainMessage;
@@ -73,11 +75,19 @@ pub enum UiMsg {
     Noop,
 }
 
+/// Holds a value for how much to scroll the menu up or down, without
+/// having to deal with positive/negative values.
+pub enum Scroll {
+    Up(u16),
+    Down(u16),
+}
+
 /// Simple enum to identify which menu is currently active.
 #[derive(Debug)]
-enum ActiveMenu {
+enum ActivePanel {
     PodcastMenu,
     EpisodeMenu,
+    DetailsPanel,
 }
 
 /// Struct containing all interface elements of the TUI. Functionally,
@@ -91,8 +101,8 @@ pub struct Ui<'a> {
     colors: Rc<AppColors>,
     podcast_menu: Menu<Podcast>,
     episode_menu: Menu<Episode>,
-    active_menu: ActiveMenu,
-    details_panel: Option<Panel>,
+    details_panel: Option<DetailsPanel>,
+    active_panel: ActivePanel,
     notif_win: NotifWin,
     popup_win: PopupWin<'a>,
 }
@@ -201,11 +211,14 @@ impl<'a> Ui<'a> {
         let episode_menu = Menu::new(episode_panel, None, first_pod);
 
         let details_panel = if n_col > crate::config::DETAILS_PANEL_LENGTH {
-            Some(Self::make_details_panel(
+            Some(DetailsPanel::new(
+                "Details".to_string(),
+                2,
                 colors.clone(),
                 n_row - 1,
                 det_col,
                 pod_col + ep_col - 2,
+                (0, 1, 0, 1),
             ))
         } else {
             None
@@ -221,8 +234,8 @@ impl<'a> Ui<'a> {
             colors: colors,
             podcast_menu: podcast_menu,
             episode_menu: episode_menu,
-            active_menu: ActiveMenu::PodcastMenu,
             details_panel: details_panel,
+            active_panel: ActivePanel::PodcastMenu,
             notif_win: notif_win,
             popup_win: popup_win,
         };
@@ -323,15 +336,14 @@ impl<'a> Ui<'a> {
                                     }
                                 }
                             }
-                            Some(UserAction::MarkPlayed) => match self.active_menu {
-                                ActiveMenu::PodcastMenu => (),
-                                ActiveMenu::EpisodeMenu => {
+                            Some(UserAction::MarkPlayed) => {
+                                if let ActivePanel::EpisodeMenu = self.active_panel {
                                     if let Some(ui_msg) = self.mark_played(curr_pod_id, curr_ep_id)
                                     {
                                         return ui_msg;
                                     }
                                 }
-                            },
+                            }
                             Some(UserAction::MarkAllPlayed) => {
                                 if let Some(ui_msg) = self.mark_all_played(curr_pod_id) {
                                     return ui_msg;
@@ -351,42 +363,43 @@ impl<'a> Ui<'a> {
                                 }
                             }
 
-                            Some(UserAction::Delete) => match self.active_menu {
-                                ActiveMenu::PodcastMenu => (),
-                                ActiveMenu::EpisodeMenu => {
+                            Some(UserAction::Delete) => {
+                                if let ActivePanel::EpisodeMenu = self.active_panel {
                                     if let Some(pod_id) = curr_pod_id {
                                         if let Some(ep_id) = curr_ep_id {
                                             return UiMsg::Delete(pod_id, ep_id);
                                         }
                                     }
                                 }
-                            },
+                            }
                             Some(UserAction::DeleteAll) => {
                                 if let Some(pod_id) = curr_pod_id {
                                     return UiMsg::DeleteAll(pod_id);
                                 }
                             }
 
-                            Some(UserAction::Remove) => match self.active_menu {
-                                ActiveMenu::PodcastMenu => {
+                            Some(UserAction::Remove) => match self.active_panel {
+                                ActivePanel::PodcastMenu => {
                                     if let Some(ui_msg) = self.remove_podcast(curr_pod_id) {
                                         return ui_msg;
                                     }
                                 }
-                                ActiveMenu::EpisodeMenu => {
+                                ActivePanel::EpisodeMenu => {
                                     if let Some(ui_msg) =
                                         self.remove_episode(curr_pod_id, curr_ep_id)
                                     {
                                         return ui_msg;
                                     }
                                 }
+                                _ => (),
                             },
                             Some(UserAction::RemoveAll) => {
-                                let ui_msg = match self.active_menu {
-                                    ActiveMenu::PodcastMenu => self.remove_podcast(curr_pod_id),
-                                    ActiveMenu::EpisodeMenu => {
+                                let ui_msg = match self.active_panel {
+                                    ActivePanel::PodcastMenu => self.remove_podcast(curr_pod_id),
+                                    ActivePanel::EpisodeMenu => {
                                         self.remove_all_episodes(curr_pod_id)
                                     }
+                                    _ => None,
                                 };
                                 if let Some(ui_msg) = ui_msg {
                                     return ui_msg;
@@ -434,13 +447,23 @@ impl<'a> Ui<'a> {
                 self.update_details_panel();
             } else {
                 self.details_panel = None;
+                // if the details panel is currently active, but the
+                // terminal is resized so the panel disappears, switch
+                // the active focus to the episode menu automatically
+                if let ActivePanel::DetailsPanel = self.active_panel {
+                    self.active_panel = ActivePanel::EpisodeMenu;
+                    self.episode_menu.activate();
+                }
             }
         } else if det_col > 0 {
-            self.details_panel = Some(Self::make_details_panel(
+            self.details_panel = Some(DetailsPanel::new(
+                "Details".to_string(),
+                2,
                 self.colors.clone(),
                 n_row - 1,
                 det_col,
                 pod_col + ep_col - 2,
+                (0, 1, 0, 1),
             ));
             self.update_details_panel();
         }
@@ -467,12 +490,16 @@ impl<'a> Ui<'a> {
 
             UserAction::Left => {
                 if curr_pod_id.is_some() {
-                    match self.active_menu {
-                        ActiveMenu::PodcastMenu => (),
-                        ActiveMenu::EpisodeMenu => {
-                            self.active_menu = ActiveMenu::PodcastMenu;
+                    match self.active_panel {
+                        ActivePanel::PodcastMenu => (),
+                        ActivePanel::EpisodeMenu => {
+                            self.active_panel = ActivePanel::PodcastMenu;
                             self.podcast_menu.activate();
-                            self.episode_menu.deactivate();
+                            self.episode_menu.deactivate(false);
+                        }
+                        ActivePanel::DetailsPanel => {
+                            self.active_panel = ActivePanel::EpisodeMenu;
+                            self.episode_menu.activate();
                         }
                     }
                 }
@@ -480,13 +507,19 @@ impl<'a> Ui<'a> {
 
             UserAction::Right => {
                 if curr_pod_id.is_some() && curr_ep_id.is_some() {
-                    match self.active_menu {
-                        ActiveMenu::PodcastMenu => {
-                            self.active_menu = ActiveMenu::EpisodeMenu;
+                    match self.active_panel {
+                        ActivePanel::PodcastMenu => {
+                            self.active_panel = ActivePanel::EpisodeMenu;
                             self.podcast_menu.deactivate();
                             self.episode_menu.activate();
                         }
-                        ActiveMenu::EpisodeMenu => (),
+                        ActivePanel::EpisodeMenu => {
+                            if self.details_panel.is_some() {
+                                self.active_panel = ActivePanel::DetailsPanel;
+                                self.episode_menu.deactivate(true);
+                            }
+                        }
+                        ActivePanel::DetailsPanel => (),
                     }
                 }
             }
@@ -531,8 +564,8 @@ impl<'a> Ui<'a> {
     /// Scrolls the current active menu by the specified amount and
     /// refreshes the window.
     pub fn scroll_current_window(&mut self, pod_id: Option<i64>, scroll: Scroll) {
-        match self.active_menu {
-            ActiveMenu::PodcastMenu => {
+        match self.active_panel {
+            ActivePanel::PodcastMenu => {
                 if pod_id.is_some() {
                     self.podcast_menu.scroll(scroll);
 
@@ -545,10 +578,15 @@ impl<'a> Ui<'a> {
                     self.update_details_panel();
                 }
             }
-            ActiveMenu::EpisodeMenu => {
+            ActivePanel::EpisodeMenu => {
                 if pod_id.is_some() {
                     self.episode_menu.scroll(scroll);
                     self.update_details_panel();
+                }
+            }
+            ActivePanel::DetailsPanel => {
+                if let Some(ref mut det) = self.details_panel {
+                    det.scroll(scroll);
                 }
             }
         }
@@ -798,14 +836,15 @@ impl<'a> Ui<'a> {
 
     /// Forces the menus to redraw the highlighted item.
     pub fn highlight_items(&mut self) {
-        match self.active_menu {
-            ActiveMenu::PodcastMenu => {
+        match self.active_panel {
+            ActivePanel::PodcastMenu => {
                 self.podcast_menu.highlight_selected();
             }
-            ActiveMenu::EpisodeMenu => {
+            ActivePanel::EpisodeMenu => {
                 self.podcast_menu.highlight_selected();
                 self.episode_menu.highlight_selected();
             }
+            _ => (),
         }
     }
 
@@ -820,24 +859,6 @@ impl<'a> Ui<'a> {
             cursor::Show
         )
         .unwrap();
-    }
-
-    /// Create a details panel.
-    pub fn make_details_panel(
-        colors: Rc<AppColors>,
-        n_row: u16,
-        n_col: u16,
-        start_x: u16,
-    ) -> Panel {
-        return Panel::new(
-            "Details".to_string(),
-            2,
-            colors,
-            n_row,
-            n_col,
-            start_x,
-            (0, 1, 0, 1),
-        );
     }
 
     /// Updates the details panel with information about the current
@@ -897,8 +918,7 @@ impl<'a> Ui<'a> {
                             explicit: pod_explicit,
                             description: desc,
                         };
-                        det.redraw();
-                        det.details_template(0, details);
+                        det.change_details(details);
                     };
                 }
             }

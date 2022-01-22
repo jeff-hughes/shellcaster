@@ -1,20 +1,10 @@
 use std::rc::Rc;
 
-use chrono::{DateTime, Utc};
 use crossterm::style;
 
 use super::AppColors;
 
 /// Struct holding the raw data used for building the details panel.
-pub struct Details {
-    pub pod_title: Option<String>,
-    pub ep_title: Option<String>,
-    pub pubdate: Option<DateTime<Utc>>,
-    pub duration: Option<String>,
-    pub explicit: Option<bool>,
-    pub description: Option<String>,
-}
-
 #[derive(Debug)]
 pub struct Panel {
     pub buffer: Vec<String>,
@@ -96,66 +86,6 @@ impl Panel {
             }
         }
         return row - 1;
-    }
-
-    pub fn details_template(&mut self, start_y: u16, details: Details) {
-        let mut row = start_y - 1;
-
-        // podcast title
-        match details.pod_title {
-            Some(t) => row = self.write_wrap_line(row + 1, &t, None),
-            None => row = self.write_wrap_line(row + 1, "No title", None),
-        }
-
-        // episode title
-        match details.ep_title {
-            Some(t) => row = self.write_wrap_line(row + 1, &t, None),
-            None => row = self.write_wrap_line(row + 1, "No title", None),
-        }
-
-        row += 1; // blank line
-
-        // published date
-        if let Some(date) = details.pubdate {
-            self.write_key_value_line(
-                row + 1,
-                "Published".to_string(),
-                format!("{}", date.format("%B %-d, %Y")),
-                None,
-                None,
-            );
-            row += 1;
-        }
-
-        // duration
-        if let Some(dur) = details.duration {
-            self.write_key_value_line(row + 1, "Duration".to_string(), dur, None, None);
-            row += 1;
-        }
-
-        // explicit
-        if let Some(exp) = details.explicit {
-            let exp_string = if exp {
-                "Yes".to_string()
-            } else {
-                "No".to_string()
-            };
-            self.write_key_value_line(row + 1, "Explicit".to_string(), exp_string, None, None);
-            row += 1;
-        }
-
-        row += 1; // blank line
-
-        // description
-        match details.description {
-            Some(desc) => {
-                row = self.write_wrap_line(row + 1, "Description:", None);
-                let _row = self.write_wrap_line(row + 1, &desc, None);
-            }
-            None => {
-                let _row = self.write_wrap_line(row + 1, "No description.", None);
-            }
-        }
     }
 
     pub fn resize(&mut self, n_row: u16, n_col: u16, start_x: u16) {
