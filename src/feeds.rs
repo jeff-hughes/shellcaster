@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
 use std::io::Read;
 use std::sync::mpsc;
+use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use lazy_static::lazy_static;
@@ -72,18 +73,23 @@ pub fn check_feed(
 /// Given a URL, this attempts to pull the data about a podcast and its
 /// episodes from an RSS feed.
 fn get_feed_data(url: String, mut max_retries: usize) -> Result<PodcastNoId> {
+    let agent_builder = ureq::builder();
+    #[cfg(feature = "native_tls")]
+    let tls_connector = std::sync::Arc::new(native_tls::TlsConnector::new().unwrap());
+    #[cfg(feature = "native_tls")]
+    let agent_builder = agent_builder.tls_connector(tls_connector);
+    let agent = agent_builder.build();
+
     let request: Result<ureq::Response> = loop {
-        let response = ureq::get(&url)
-            .timeout_connect(5000)
-            .timeout_read(15000)
-            .call();
-        if response.error() {
-            max_retries -= 1;
-            if max_retries == 0 {
-                break Err(anyhow!("No response from feed"));
+        let response = agent.get(&url).timeout(Duration::from_secs(20)).call();
+        match response {
+            Ok(resp) => break Ok(resp),
+            Err(_) => {
+                max_retries -= 1;
+                if max_retries == 0 {
+                    break Err(anyhow!("No response from feed"));
+                }
             }
-        } else {
-            break Ok(response);
         }
     };
 

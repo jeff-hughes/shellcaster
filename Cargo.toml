@@ -19,6 +19,8 @@ readme = "README.md"
 crossterm = "0.19.0"
 rss = "1.10.0"
 rusqlite = "0.21.0"
+ureq = "2.4.0"
+native-tls = { version = "0.2.8", optional = true }
 clap = "2.33.1"
 toml = "0.5.8"
 anyhow = "1.0.43"
@@ -38,13 +40,8 @@ escaper = "0.1.0"
 rfc822_sanitizer = "0.3.6"
 semver = "0.10.0"
 
-[dependencies.ureq]
-version = "1.5.5"
-default-features = false
-
-
 [features]
-default = ["native-tls"]
+default = ["native_certs"]
 
 # bundle sqlite library with app; recommended for Windows. This is
 # turned on by default, but if you are building this for a package
@@ -52,12 +49,18 @@ default = ["native-tls"]
 # adding libsqlite3-dev or sqlite3 as a dependency on the package
 sqlite_bundled = ["rusqlite/bundled"]
 
-# by default, shellcaster uses `native-tls` crate to enable TLS support;
-# if this is causing issues for some websites, you can try building it
-# to use `rustls` crate instead; build with `--no-default-features` and
-# then specify `--features "rustls"`
-native-tls = ["ureq/native-tls"]
-rustls = ["ureq/tls"]
+# by default, shellcaster uses the `rustls` crate to enable TLS support;
+# if this is causing issues for some URLs (e.g., those using TLS 1.0 or
+# 1.1), you can try building it to use the `native-tls` crate instead by
+# specifying `--features "native_tls"`
+native_tls = ["native-tls", "ureq/native-tls"]
+
+# the `native_certs` feature (enabled by default) extracts the trusted
+# certificate roots from your OS's trust store; you can instead use a
+# bundled copy of the Mozilla Root program (which will thus not update
+# if the program is not updated). To do so, build shellcaster with
+# `--no-default-features` to turn off use of the native certificates
+native_certs = ["ureq/native-certs"]
 
 [profile.release]
 debug = 1
