@@ -5,7 +5,7 @@ use std::process;
 use std::sync::mpsc;
 
 use anyhow::{anyhow, Context, Result};
-use clap::{App, Arg, SubCommand};
+use clap::{Arg, Command};
 
 mod config;
 mod db;
@@ -59,46 +59,46 @@ fn main() -> Result<()> {
     // SETUP -----------------------------------------------------------
 
     // set up the possible command line arguments and subcommands
-    let args = App::new(clap::crate_name!())
+    let args = Command::new(clap::crate_name!())
         .version(clap::crate_version!())
         // .author(clap::crate_authors!(", "))
         .author("Jeff Hughes <jeff.hughes@gmail.com>")
         .about(clap::crate_description!())
-        .arg(Arg::with_name("config")
-            .short("c")
+        .arg(Arg::new("config")
+            .short('c')
             .long("config")
             .env("SHELLCASTER_CONFIG")
             .global(true)
             .takes_value(true)
             .value_name("FILE")
             .help("Sets a custom config file location. Can also be set with environment variable."))
-        .subcommand(SubCommand::with_name("sync")
+        .subcommand(Command::new("sync")
             .about("Syncs all podcasts in database")
-            .arg(Arg::with_name("quiet")
-                .short("q")
+            .arg(Arg::new("quiet")
+                .short('q')
                 .long("quiet")
                 .help("Suppresses output messages to stdout.")))
-        .subcommand(SubCommand::with_name("import")
+        .subcommand(Command::new("import")
             .about("Imports podcasts from an OPML file")
-            .arg(Arg::with_name("file")
-                .short("f")
+            .arg(Arg::new("file")
+                .short('f')
                 .long("file")
                 .takes_value(true)
                 .value_name("FILE")
                 .help("Specifies the filepath to the OPML file to be imported. If this flag is not set, the command will read from stdin."))
-            .arg(Arg::with_name("replace")
-                .short("r")
+            .arg(Arg::new("replace")
+                .short('r')
                 .long("replace")
                 .takes_value(false)
                 .help("If set, the contents of the OPML file will replace all existing data in the shellcaster database."))
-            .arg(Arg::with_name("quiet")
-                .short("q")
+            .arg(Arg::new("quiet")
+                .short('q')
                 .long("quiet")
                 .help("Suppresses output messages to stdout.")))
-        .subcommand(SubCommand::with_name("export")
+        .subcommand(Command::new("export")
             .about("Exports podcasts to an OPML file")
-            .arg(Arg::with_name("file")
-                .short("f")
+            .arg(Arg::new("file")
+                .short('f')
                 .long("file")
                 .takes_value(true)
                 .value_name("FILE")
@@ -123,13 +123,13 @@ fn main() -> Result<()> {
 
     return match args.subcommand() {
         // SYNC SUBCOMMAND ----------------------------------------------
-        ("sync", Some(sub_args)) => sync_podcasts(&db_path, config, sub_args),
+        Some(("sync", sub_args)) => sync_podcasts(&db_path, config, sub_args),
 
         // IMPORT SUBCOMMAND --------------------------------------------
-        ("import", Some(sub_args)) => import(&db_path, config, sub_args),
+        Some(("import", sub_args)) => import(&db_path, config, sub_args),
 
         // EXPORT SUBCOMMAND --------------------------------------------
-        ("export", Some(sub_args)) => export(&db_path, sub_args),
+        Some(("export", sub_args)) => export(&db_path, sub_args),
 
         // MAIN COMMAND -------------------------------------------------
         _ => {

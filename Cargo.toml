@@ -21,7 +21,7 @@ rss = "1.10.0"
 rusqlite = "0.21.0"
 ureq = "2.4.0"
 native-tls = { version = "0.2.8", optional = true }
-clap = "2.33.1"
+clap = { version = "3.1.2", features = ["cargo", "env"] }
 toml = "0.5.8"
 anyhow = "1.0.43"
 serde = { version = "1.0.127", features = ["derive"] }
