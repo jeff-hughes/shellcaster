@@ -61,6 +61,3 @@ native_tls = ["native-tls", "ureq/native-tls"]
 # if the program is not updated). To do so, build shellcaster with
 # `--no-default-features` to turn off use of the native certificates
 native_certs = ["ureq/native-certs"]
-
-[profile.release]
-debug = 1
