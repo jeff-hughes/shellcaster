@@ -375,7 +375,7 @@ fn export(db_path: &Path, args: &clap::ArgMatches) -> Result<()> {
     let opml = opml::export(podcast_list);
 
     let xml = opml
-        .to_xml()
+        .to_string()
         .map_err(|err| anyhow!(err))
         .with_context(|| "Could not create OPML format")?;
 

@@ -17,28 +17,28 @@ readme = "README.md"
 
 [dependencies]
 crossterm = "0.23.0"
-rss = "1.10.0"
-rusqlite = "0.21.0"
+rss = "2.0.0"
+rusqlite = "0.26.3"
 ureq = "2.4.0"
 native-tls = { version = "0.2.8", optional = true }
 clap = { version = "3.1.2", features = ["cargo", "env"] }
 toml = "0.5.8"
-anyhow = "1.0.43"
-serde = { version = "1.0.127", features = ["derive"] }
-chrono = "0.4.11"
+anyhow = "1.0.55"
+serde = { version = "1.0.136", features = ["derive"] }
+chrono = "0.4.19"
 lazy_static = "1.4.0"
 regex = "1.5.4"
-sanitize-filename = "0.2.1"
+sanitize-filename = "0.3.0"
 shellexpand = "2.1.0"
 dirs = { package = "dirs-next", version = "2.0.0" }
-opml = "0.3.0"
-ahash = "0.7.4"
+opml = "1.1.3"
+ahash = "0.7.6"
 nohash-hasher = "0.2.0"
 unicode-segmentation = "1.8.0"
-textwrap = "0.13.4"
-escaper = "0.1.0"
+textwrap = "0.14.2"
+escaper = "0.1.1"
 rfc822_sanitizer = "0.3.6"
-semver = "0.10.0"
+semver = "1.0.6"
 
 [features]
 default = ["native_certs"]
