@@ -6,6 +6,7 @@ use crossterm::{
     cursor,
     event::{self, KeyCode},
     execute, queue, style,
+    style::Stylize,
 };
 
 use super::AppColors;

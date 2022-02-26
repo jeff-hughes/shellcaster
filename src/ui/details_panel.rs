@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use chrono::{DateTime, Utc};
-use crossterm::style;
+use crossterm::style::{self, Stylize};
 
 use super::panel::Panel;
 use super::AppColors;
@@ -131,12 +131,12 @@ impl DetailsPanel {
         if let Some(details) = &self.details {
             let num_cols = self.panel.get_cols() as usize;
             let bold = style::ContentStyle::new()
-                .foreground(self.panel.colors.bold.0)
-                .background(self.panel.colors.bold.1)
+                .with(self.panel.colors.bold.0)
+                .on(self.panel.colors.bold.1)
                 .attribute(style::Attribute::Bold);
             let underlined = style::ContentStyle::new()
-                .foreground(self.panel.colors.normal.0)
-                .background(self.panel.colors.normal.1)
+                .with(self.panel.colors.normal.0)
+                .on(self.panel.colors.normal.1)
                 .attribute(style::Attribute::Underlined);
 
             self.content.clear();

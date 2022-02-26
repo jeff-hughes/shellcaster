@@ -4,6 +4,7 @@ use std::rc::Rc;
 use crossterm::{
     event::{KeyCode, KeyEvent},
     style,
+    style::Stylize,
 };
 
 use super::{AppColors, Menu, Panel, Scroll, UiMsg};
@@ -239,8 +240,8 @@ impl<'a> PopupWin<'a> {
             "Available keybindings:",
             Some(
                 style::ContentStyle::new()
-                    .foreground(self.colors.normal.0)
-                    .background(self.colors.normal.1)
+                    .with(self.colors.normal.0)
+                    .on(self.colors.normal.1)
                     .attribute(style::Attribute::Underlined),
             ),
         );

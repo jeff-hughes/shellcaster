@@ -1,7 +1,7 @@
 use std::cmp::min;
 use std::collections::hash_map::Entry;
 
-use crossterm::style;
+use crossterm::style::{self, Stylize};
 
 use super::{Panel, Scroll};
 use crate::types::*;
@@ -85,13 +85,13 @@ impl<T: Clone + Menuable> Menu<T> {
                     if i == self.selected || !elem.is_played() {
                         let style = if !elem.is_played() {
                             style::ContentStyle::new()
-                                .foreground(self.panel.colors.bold.0)
-                                .background(self.panel.colors.bold.1)
+                                .with(self.panel.colors.bold.0)
+                                .on(self.panel.colors.bold.1)
                                 .attribute(style::Attribute::Bold)
                         } else {
                             style::ContentStyle::new()
-                                .foreground(self.panel.colors.normal.0)
-                                .background(self.panel.colors.normal.1)
+                                .with(self.panel.colors.normal.0)
+                                .on(self.panel.colors.normal.1)
                         };
                         self.panel.write_line(
                             i,
@@ -197,13 +197,16 @@ impl<T: Clone + Menuable> Menu<T> {
         if let Some((title, is_played)) = el_details {
             let mut style = style::ContentStyle::new();
             if active {
-                style = style
-                    .foreground(self.panel.colors.highlighted_active.0)
-                    .background(self.panel.colors.highlighted_active.1);
+                style = style.with(self.panel.colors.highlighted_active.0).on(self
+                    .panel
+                    .colors
+                    .highlighted_active
+                    .1);
             } else {
-                style = style
-                    .foreground(self.panel.colors.highlighted.0)
-                    .background(self.panel.colors.highlighted.1);
+                style =
+                    style
+                        .with(self.panel.colors.highlighted.0)
+                        .on(self.panel.colors.highlighted.1);
             }
             style = if is_played {
                 style.attribute(style::Attribute::NormalIntensity)
@@ -226,12 +229,12 @@ impl<T: Clone + Menuable> Menu<T> {
         if let Some((title, is_played)) = el_details {
             let style = if is_played {
                 style::ContentStyle::new()
-                    .foreground(self.panel.colors.normal.0)
-                    .background(self.panel.colors.normal.1)
+                    .with(self.panel.colors.normal.0)
+                    .on(self.panel.colors.normal.1)
             } else {
                 style::ContentStyle::new()
-                    .foreground(self.panel.colors.bold.0)
-                    .background(self.panel.colors.bold.1)
+                    .with(self.panel.colors.bold.0)
+                    .on(self.panel.colors.bold.1)
                     .attribute(style::Attribute::Bold)
             };
             self.panel.write_line(item_y, title, Some(style));

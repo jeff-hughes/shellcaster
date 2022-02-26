@@ -1,7 +1,8 @@
 use std::io;
 use std::rc::Rc;
 
-use crossterm::{cursor, queue, style};
+use crossterm::style::{self, Stylize};
+use crossterm::{cursor, queue};
 
 use super::AppColors;
 
@@ -228,8 +229,8 @@ impl Panel {
         let content_style = match style {
             Some(style) => style,
             None => style::ContentStyle::new()
-                .foreground(self.colors.normal.0)
-                .background(self.colors.normal.1),
+                .with(self.colors.normal.0)
+                .on(self.colors.normal.1),
         };
         let wrapper = textwrap::wrap(string, self.get_cols() as usize);
         for line in wrapper {

@@ -16,7 +16,7 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-crossterm = "0.19.0"
+crossterm = "0.23.0"
 rss = "1.10.0"
 rusqlite = "0.21.0"
 ureq = "2.4.0"
