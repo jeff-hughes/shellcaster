@@ -2,7 +2,7 @@
 
 # Shellcaster
 
-Shellcaster is a terminal-based podcast manager, built in Rust. It provides a terminal UI (i.e., ncurses) to allow users to subscribe to podcast feeds, and sync feeds to check for new episodes. Episodes may be downloaded locally, played (with an external media player, at least for now), and marked as played/unplayed. Keybindings and other options are configurable via a config file.
+Shellcaster is a terminal-based podcast manager, built in Rust. It provides a terminal UI (i.e., an ncurses-like interface) to allow users to subscribe to podcast feeds, and sync feeds to check for new episodes. Episodes may be downloaded locally, played with an external media player, and marked as played/unplayed. Keybindings and other options are configurable via a config file.
 
 <div align="center"><img alt="screenshot of shellcaster" src="https://raw.githubusercontent.com/jeff-hughes/shellcaster/master/img/screenshot.png"/></div>
 
@@ -24,16 +24,14 @@ First, ensure you have installed the necessary dependencies:
 
   * rust
   * gcc
-  * libncurses-dev
   * pkg-config
   * libsqlite3-dev
-  * libssl-dev (not needed on MacOS)
 
 **Notes:**
 
-  * The names of these dependencies may be slightly different for your system. For `libncurses-dev`, `libssl-dev`, and `libsqlite3-dev`, you are looking for the development headers for ncurses, OpenSSL, and SQLite, which may be separate from the runtime package (e.g., with a `-dev` suffix).
-  * If you turn off the "native-tls" feature of shellcaster (enabled by default), `libssl-dev` is not necessary.
-  * If you select the "sqlite-bundled" feature of shellcaster (disabled by default), `pkg-config` and `libsqlite3-dev` are not necessary.
+  * The names of these dependencies may be slightly different for your system. For `libsqlite3-dev`, you are looking for the development headers for SQLite, which may be separate from the runtime package (e.g., with a `-dev` suffix).
+  * If you enable the "native_tls" feature of shellcaster (disabled by default), you will also need `libssl-dev`, the development headers for OpenSSL (not needed on MacOS).
+  * If you enable the "sqlite-bundled" feature of shellcaster (disabled by default), `pkg-config` and `libsqlite3-dev` are not necessary.
 
 Next, there are two options for compiling the program: 
 
@@ -65,19 +63,17 @@ See below for the list of available features when compiling.
 
 ### On Windows
 
-Shellcaster is **not currently supported on Windows**, although some work has been done to try to get it working. Unicode support is weak, however, and there are issues when resizing the screen. You *might* have better luck using the new Windows Terminal and building with the `win32` feature enabled, but this has not been tested. If you are a Windows user and want to help work out the bugs, pull requests are more than welcome!
+Shellcaster is **not currently supported on Windows**, although some work has been done to try to get it working. Unicode support is weak, however, and there are issues when resizing the screen. You *might* have better luck using the new Windows Terminal, but this has not been tested. If you are a Windows user and want to help work out the bugs, pull requests are more than welcome!
 
 ### List of compile features
 
-By default, `native-tls` and `wide` features are enabled. Here is the full list of features:
+By default, only the `native_certs` feature is enabled. Here is the full list of features:
 
 * `sqlite_bundled`: When disabled, Rust will try to link shellcaster with SQLite header files already present on your system. If enabled, Rust will instead build SQLite from source and bundle the program with shellcaster. Bundling results in a larger application size, but may be suitable if you wish to use a different version of SQLite than the one on your system, or if you are on a system where installing SQLite is more difficult.
 
-* `native-tls`/`rustls`: The `native-tls` enables TLS (i.e., URLs with https) support through the [native-tls](https://crates.io/crates/native-tls) crate, which uses OpenSSL on Linux, Secure Transport on MacOS, and SChannel on Windows. If this causes issues for some podcast feeds, you can try building it with the `rustls` feature instead, which uses the [rustls](https://crates.io/crates/rustls) crate. Note that one of these two features *must* be selected, otherwise you will not be able to sync any feeds or download any episodes originating from an https URL!
+* `native_tls`: By default, shellcaster uses the [rustls](https://crates.io/crates/rustls) crate to enable TLS support (i.e., URLs with https). This may cause issues with some podcast feeds that use earlier versions of TLS (below TLS v1.2). If you find that some feeds are unable to update, you can try enabling the `native_tls` feature, which will instead use the [native-tls](https://crates.io/crates/native-tls) crate -- which uses OpenSSL on Linux, Secure Transport on MacOS, and SChannel on Windows.
 
-* `wide`: Enables support for "wide" characters (i.e., Unicode) on Linux/Mac systems. Generally preferable unless you have a terminal that does not have wide character support.
-
-* `win32`: For Windows systems, shellcaster uses [PDCurses](https://github.com/Bill-Gray/PDCurses), which has two different "flavours": win32, and win32a. win32a is the default as it generally has better support for colours and text effects, but enabling this feature will use the win32 flavour instead.
+* `native_certs`: Shellcaster will use the trusted certificate roots from the trust store for your OS in order to validate TLS certificates. Turning this feature off will instead use a bundled copy of the Mozilla Root program, which will only be updated when you recompile shellcaster. Thus, leaving this feature enabled is recommended.
 
 To specify different features when compiling, here is the format:
 
@@ -202,6 +198,8 @@ The sample file above provides comments that should walk you through all the ava
 | Shift+X | Delete all downloaded files |
 | r       | Remove selected feed/episode from list |
 | Shift+R | Remove all feeds/episodes from list |
+| 1       | Toggle played/unplayed filter |
+| 2       | Toggle downloaded/undownloaded filter |
 
 **Note:** Actions can be mapped to more than one key (e.g., "Enter" and "p" both play an episode), but a single key may not do more than one action (e.g., you can't set "d" to both download and delete episodes).
 
