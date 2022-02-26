@@ -72,9 +72,7 @@ impl Menuable for Podcast {
             let out = self.title.substr(0, title_length);
 
             return format!(
-                " {} {:>width$} ",
-                out,
-                meta_str,
+                " {out} {meta_str:>width$} ",
                 width = length - out.grapheme_len() - 3
             ); // this pads spaces between title and totals
         } else {
@@ -135,7 +133,7 @@ impl Episode {
                 seconds -= hours * 3600;
                 let minutes = seconds / 60;
                 seconds -= minutes * 60;
-                format!("{:02}:{:02}:{:02}", hours, minutes, seconds)
+                format!("{hours:02}:{minutes:02}:{seconds:02}")
             }
             None => "--:--:--".to_string(),
         };
@@ -153,45 +151,39 @@ impl Menuable for Episode {
         let out = match self.path {
             Some(_) => {
                 let title = self.title.substr(0, length - 4);
-                format!("[D] {}", title)
+                format!("[D] {title}")
             }
             None => self.title.substr(0, length),
         };
         if length > crate::config::EPISODE_PUBDATE_LENGTH {
             let dur = self.format_duration();
-            let meta_dur = format!("[{}]", dur);
+            let meta_dur = format!("[{dur}]");
 
             if let Some(pubdate) = self.pubdate {
                 // print pubdate and duration
                 let pd = pubdate.format("%F");
-                let meta_str = format!("({}) {}", pd, meta_dur);
+                let meta_str = format!("({pd}) {meta_dur}");
                 let added_len = meta_str.chars().count();
 
                 let out_added = out.substr(0, length - added_len - 3);
                 return format!(
-                    " {} {:>width$} ",
-                    out_added,
-                    meta_str,
+                    " {out_added} {meta_str:>width$} ",
                     width = length - out_added.grapheme_len() - 3
                 );
             } else {
                 // just print duration
                 let out_added = out.substr(0, length - meta_dur.chars().count() - 3);
                 return format!(
-                    " {} {:>width$} ",
-                    out_added,
-                    meta_dur,
+                    " {out_added} {meta_dur:>width$} ",
                     width = length - out_added.grapheme_len() - 3
                 );
             }
         } else if length > crate::config::EPISODE_DURATION_LENGTH {
             let dur = self.format_duration();
-            let meta_dur = format!("[{}]", dur);
+            let meta_dur = format!("[{dur}]");
             let out_added = out.substr(0, length - meta_dur.chars().count() - 3);
             return format!(
-                " {} {:>width$} ",
-                out_added,
-                meta_dur,
+                " {out_added} {meta_dur:>width$} ",
                 width = length - out_added.grapheme_len() - 3
             );
         } else {

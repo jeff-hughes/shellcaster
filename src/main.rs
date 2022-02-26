@@ -197,18 +197,16 @@ fn sync_podcasts(db_path: &Path, config: Config, args: &clap::ArgMatches) -> Res
         match message {
             Message::Feed(FeedMsg::SyncData((pod_id, pod))) => {
                 let title = pod.title.clone();
-                let db_result;
-
-                db_result = db_inst.update_podcast(pod_id, pod);
+                let db_result = db_inst.update_podcast(pod_id, pod);
                 match db_result {
                     Ok(_) => {
                         if !args.is_present("quiet") {
-                            println!("Synced {}", title);
+                            println!("Synced {title}");
                         }
                     }
                     Err(_err) => {
                         failure = true;
-                        eprintln!("Error synchronizing {}", title);
+                        eprintln!("Error synchronizing {title}");
                     }
                 }
             }
@@ -246,10 +244,10 @@ fn import(db_path: &Path, config: Config, args: &clap::ArgMatches) -> Result<()>
     let xml = match args.value_of("file") {
         Some(filepath) => {
             let mut f = File::open(filepath)
-                .with_context(|| format!("Could not open OPML file: {}", filepath))?;
+                .with_context(|| format!("Could not open OPML file: {filepath}"))?;
             let mut contents = String::new();
             f.read_to_string(&mut contents)
-                .with_context(|| format!("Failed to read from OPML file: {}", filepath))?;
+                .with_context(|| format!("Failed to read from OPML file: {filepath}"))?;
             contents
         }
         None => {
@@ -325,18 +323,16 @@ fn import(db_path: &Path, config: Config, args: &clap::ArgMatches) -> Result<()>
         match message {
             Message::Feed(FeedMsg::NewData(pod)) => {
                 let title = pod.title.clone();
-                let db_result;
-
-                db_result = db_inst.insert_podcast(pod);
+                let db_result = db_inst.insert_podcast(pod);
                 match db_result {
                     Ok(_) => {
                         if !args.is_present("quiet") {
-                            println!("Added {}", title);
+                            println!("Added {title}");
                         }
                     }
                     Err(_err) => {
                         failure = true;
-                        eprintln!("Error adding {}", title);
+                        eprintln!("Error adding {title}");
                     }
                 }
             }
@@ -344,7 +340,7 @@ fn import(db_path: &Path, config: Config, args: &clap::ArgMatches) -> Result<()>
             Message::Feed(FeedMsg::Error(feed)) => {
                 failure = true;
                 if let Some(t) = feed.title {
-                    eprintln!("Error retrieving RSS feed: {}", t);
+                    eprintln!("Error retrieving RSS feed: {t}");
                 } else {
                     eprintln!("Error retrieving RSS feed");
                 }
@@ -383,12 +379,12 @@ fn export(db_path: &Path, args: &clap::ArgMatches) -> Result<()> {
         // export to file
         Some(file) => {
             let mut dst = File::create(file)
-                .with_context(|| format!("Could not create output file: {}", file))?;
+                .with_context(|| format!("Could not create output file: {file}"))?;
             dst.write_all(xml.as_bytes())
-                .with_context(|| format!("Could not copy OPML data to output file: {}", file))?;
+                .with_context(|| format!("Could not copy OPML data to output file: {file}"))?;
         }
         // print to stdout
-        None => println!("{}", xml),
+        None => println!("{xml}"),
     }
     return Ok(());
 }

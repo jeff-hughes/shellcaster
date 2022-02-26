@@ -123,15 +123,14 @@ impl Config {
     /// file does not exist, or if specific values are not set.
     pub fn new(path: &Path) -> Result<Config> {
         let mut config_string = String::new();
-        let config_toml: ConfigFromToml;
 
-        match File::open(path) {
+        let config_toml = match File::open(path) {
             Ok(mut file) => {
                 file.read_to_string(&mut config_string).with_context(|| {
                     "Could not read config.toml. Please ensure file is readable."
                 })?;
-                config_toml = toml::from_str(&config_string)
-                    .with_context(|| "Could not parse config.toml. Please check file syntax.")?;
+                toml::from_str(&config_string)
+                    .with_context(|| "Could not parse config.toml. Please check file syntax.")?
             }
             Err(_) => {
                 // if we can't find the file, set everything to empty
@@ -177,7 +176,7 @@ impl Config {
                     error_foreground: None,
                     error_background: None,
                 };
-                config_toml = ConfigFromToml {
+                ConfigFromToml {
                     download_path: None,
                     play_command: None,
                     download_new_episodes: None,
@@ -185,9 +184,9 @@ impl Config {
                     max_retries: None,
                     keybindings: Some(keybindings),
                     colors: Some(colors),
-                };
+                }
             }
-        }
+        };
 
         return config_with_defaults(config_toml);
     }

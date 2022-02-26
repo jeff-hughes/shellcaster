@@ -171,8 +171,8 @@ impl<'a> PopupWin<'a> {
 
     /// Create a new Panel holding a help window.
     pub fn make_help_win(&self) -> Panel {
-        let big_scroll_up = format!("Up 1/{} page:", BIG_SCROLL_AMOUNT);
-        let big_scroll_dn = format!("Down 1/{} page:", BIG_SCROLL_AMOUNT);
+        let big_scroll_up = format!("Up 1/{BIG_SCROLL_AMOUNT} page:");
+        let big_scroll_dn = format!("Down 1/{BIG_SCROLL_AMOUNT} page:");
         let actions = vec![
             (Some(UserAction::Left), "Left:"),
             (Some(UserAction::Right), "Right:"),
@@ -279,7 +279,7 @@ impl<'a> PopupWin<'a> {
                     } else {
                         longest_line
                     };
-                    line += &format!("{:<width$}", val, width = width);
+                    line += &format!("{val:<width$}", width = width);
                 }
             }
             help_win.write_line(row + 1, line, None);
@@ -449,9 +449,9 @@ impl<'a> PopupWin<'a> {
                 let mut s = "".to_string();
                 for (i, key) in keys.iter().enumerate().take(max_keys) {
                     if i == max_keys - 1 {
-                        s = format!("{}, \"{}\"", s, key);
+                        s = format!("{s}, \"{key}\"");
                     } else {
-                        s = format!("{}, or \"{}\"", s, key);
+                        s = format!("{s}, or \"{key}\"");
                     }
                 }
                 s

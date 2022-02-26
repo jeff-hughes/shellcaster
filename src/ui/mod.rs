@@ -787,9 +787,7 @@ impl<'a> Ui<'a> {
     /// return None.
     pub fn spawn_yes_no_notif(&self, prefix: &str) -> Option<bool> {
         let mut out_val = None;
-        let input = self
-            .notif_win
-            .input_notif(&format!("{} {}", prefix, "(y/n) "));
+        let input = self.notif_win.input_notif(&format!("{prefix} (y/n) "));
         if let Some(c) = input.trim().chars().next() {
             if c == 'Y' || c == 'y' {
                 out_val = Some(true);

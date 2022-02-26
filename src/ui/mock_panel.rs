@@ -65,7 +65,7 @@ impl Panel {
         _key_style: Option<style::ContentStyle>,
         _value_style: Option<style::ContentStyle>,
     ) {
-        self.buffer[y as usize] = format!("{}: {}", key, value);
+        self.buffer[y as usize] = format!("{key}: {value}");
     }
 
     pub fn write_wrap_line(

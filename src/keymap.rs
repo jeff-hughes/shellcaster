@@ -200,31 +200,31 @@ pub fn input_to_str(input: KeyEvent) -> Option<String> {
     };
     let mut tmp = [0; 4];
     return match input.code {
-        KeyCode::Backspace => Some(format!("{}{}{}Backspace", ctrl, alt, shift)),
-        KeyCode::Enter => Some(format!("{}{}{}Enter", ctrl, alt, shift)),
-        KeyCode::Left => Some(format!("{}{}{}Left", ctrl, alt, shift)),
-        KeyCode::Right => Some(format!("{}{}{}Right", ctrl, alt, shift)),
-        KeyCode::Up => Some(format!("{}{}{}Up", ctrl, alt, shift)),
-        KeyCode::Down => Some(format!("{}{}{}Down", ctrl, alt, shift)),
-        KeyCode::Home => Some(format!("{}{}{}Home", ctrl, alt, shift)),
-        KeyCode::End => Some(format!("{}{}{}End", ctrl, alt, shift)),
-        KeyCode::PageUp => Some(format!("{}{}{}PgUp", ctrl, alt, shift)),
-        KeyCode::PageDown => Some(format!("{}{}{}PgDn", ctrl, alt, shift)),
-        KeyCode::Tab => Some(format!("{}{}{}Tab", ctrl, alt, shift)),
-        KeyCode::BackTab => Some(format!("{}{}{}Tab", ctrl, alt, shift)),
-        KeyCode::Delete => Some(format!("{}{}{}Del", ctrl, alt, shift)),
-        KeyCode::Insert => Some(format!("{}{}{}Ins", ctrl, alt, shift)),
-        KeyCode::Esc => Some(format!("{}{}{}Esc", ctrl, alt, shift)),
-        KeyCode::F(num) => Some(format!("{}{}{}F{}", ctrl, alt, shift, num)), // Function keys
+        KeyCode::Backspace => Some(format!("{ctrl}{alt}{shift}Backspace")),
+        KeyCode::Enter => Some(format!("{ctrl}{alt}{shift}Enter")),
+        KeyCode::Left => Some(format!("{ctrl}{alt}{shift}Left")),
+        KeyCode::Right => Some(format!("{ctrl}{alt}{shift}Right")),
+        KeyCode::Up => Some(format!("{ctrl}{alt}{shift}Up")),
+        KeyCode::Down => Some(format!("{ctrl}{alt}{shift}Down")),
+        KeyCode::Home => Some(format!("{ctrl}{alt}{shift}Home")),
+        KeyCode::End => Some(format!("{ctrl}{alt}{shift}End")),
+        KeyCode::PageUp => Some(format!("{ctrl}{alt}{shift}PgUp")),
+        KeyCode::PageDown => Some(format!("{ctrl}{alt}{shift}PgDn")),
+        KeyCode::Tab => Some(format!("{ctrl}{alt}{shift}Tab")),
+        KeyCode::BackTab => Some(format!("{ctrl}{alt}{shift}Tab")),
+        KeyCode::Delete => Some(format!("{ctrl}{alt}{shift}Del")),
+        KeyCode::Insert => Some(format!("{ctrl}{alt}{shift}Ins")),
+        KeyCode::Esc => Some(format!("{ctrl}{alt}{shift}Esc")),
+        KeyCode::F(num) => Some(format!("{ctrl}{alt}{shift}F{num}")), // Function keys
         KeyCode::Char(c) => {
             if c == '\u{7f}' {
-                Some(format!("{}{}{}Backspace", ctrl, alt, shift))
+                Some(format!("{ctrl}{alt}{shift}Backspace"))
             } else if c == '\u{1b}' {
-                Some(format!("{}{}{}Esc", ctrl, alt, shift))
+                Some(format!("{ctrl}{alt}{shift}Esc"))
             } else if c == '\n' {
-                Some(format!("{}{}{}Enter", ctrl, alt, shift))
+                Some(format!("{ctrl}{alt}{shift}Enter"))
             } else if c == '\t' {
-                Some(format!("{}{}{}Tab", ctrl, alt, shift))
+                Some(format!("{ctrl}{alt}{shift}Tab"))
             } else {
                 // here we don't include "shift" because that will
                 // already be encoded in the character itself

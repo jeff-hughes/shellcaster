@@ -108,7 +108,7 @@ fn download_file(mut ep_data: EpData, dest: PathBuf, mut max_retries: usize) -> 
     }
 
     let mut file_path = dest;
-    file_path.push(format!("{}.{}", file_name, ext));
+    file_path.push(format!("{file_name}.{ext}"));
 
     let dst = File::create(&file_path);
     if dst.is_err() {

@@ -104,7 +104,7 @@ impl MainController {
 
                 Message::Feed(FeedMsg::Error(feed)) => match feed.title {
                     Some(t) => {
-                        self.notif_to_ui(format!("Error retrieving RSS feed for {}.", t), true)
+                        self.notif_to_ui(format!("Error retrieving RSS feed for {t}."), true)
                     }
                     None => self.notif_to_ui("Error retrieving RSS feed.".to_string(), true),
                 },
@@ -210,7 +210,7 @@ impl MainController {
                             self.filters.downloaded = new_filter;
                         }
                     }
-                    self.notif_to_ui(format!("Filter: {}", message), false);
+                    self.notif_to_ui(format!("Filter: {message}"), false);
                     self.update_filters(self.filters, true);
                 }
 
@@ -256,15 +256,13 @@ impl MainController {
 
         if sync_len > 0 && dl_len > 0 {
             let notif = format!(
-                "Syncing {} podcast{}, downloading {} episode{}...",
-                sync_len, sync_plural, dl_len, dl_plural
-            );
+                "Syncing {sync_len} podcast{sync_plural}, downloading {dl_len} episode{dl_plural}...");
             self.persistent_notif_to_ui(notif, false);
         } else if sync_len > 0 {
-            let notif = format!("Syncing {} podcast{}...", sync_len, sync_plural);
+            let notif = format!("Syncing {sync_len} podcast{sync_plural}...");
             self.persistent_notif_to_ui(notif, false);
         } else if dl_len > 0 {
-            let notif = format!("Downloading {} episode{}...", dl_len, dl_plural);
+            let notif = format!("Downloading {dl_len} episode{dl_plural}...");
             self.persistent_notif_to_ui(notif, false);
         } else {
             self.clear_persistent_notif();
@@ -330,7 +328,7 @@ impl MainController {
 
         if let Some(id) = pod_id {
             db_result = self.db.update_podcast(id, pod);
-            failure = format!("Error synchronizing {}.", title);
+            failure = format!("Error synchronizing {title}.");
         } else {
             db_result = self.db.insert_podcast(pod);
             failure = "Error adding podcast to database.".to_string();
@@ -364,10 +362,7 @@ impl MainController {
                         }
                         self.sync_tracker = Vec::new();
                         self.notif_to_ui(
-                            format!(
-                                "Sync complete: Added {}, updated {} episodes.",
-                                added, updated
-                            ),
+                            format!("Sync complete: Added {added}, updated {updated} episodes."),
                             false,
                         );
 
@@ -553,7 +548,7 @@ impl MainController {
                         self.tx_to_main.clone(),
                     );
                 }
-                Err(_) => self.notif_to_ui(format!("Could not create dir: {}", pod_title), true),
+                Err(_) => self.notif_to_ui(format!("Could not create dir: {pod_title}"), true),
             }
             self.update_tracker_notif();
         }
@@ -615,7 +610,7 @@ impl MainController {
                     let res = self.db.remove_file(episode.id);
                     if res.is_err() {
                         self.notif_to_ui(
-                            format!("Could not remove file from database: {}", title),
+                            format!("Could not remove file from database: {title}"),
                             true,
                         );
                         return;
@@ -624,9 +619,9 @@ impl MainController {
                     podcast.episodes.replace(ep_id, episode);
 
                     self.update_filters(self.filters, true);
-                    self.notif_to_ui(format!("Deleted \"{}\"", title), false);
+                    self.notif_to_ui(format!("Deleted \"{title}\""), false);
                 }
-                Err(_) => self.notif_to_ui(format!("Error deleting \"{}\"", title), true),
+                Err(_) => self.notif_to_ui(format!("Error deleting \"{title}\""), true),
             }
         }
     }
