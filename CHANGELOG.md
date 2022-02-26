@@ -1,5 +1,24 @@
 # Changelog
 
+## v2.0.0 (2022-02-26)
+Shellcaster version 2.0.0 brings many added features and performance improvements, but there are a few breaking changes to the configuration file to be aware of. These are listed below. You can download the default config file from here, to reference when updating your local config: https://raw.githubusercontent.com/jeff-hughes/shellcaster/master/config.toml
+
+### New Features
+- Switched from *ncurses* C library to Rust-native *crossterm* library for drawing to the terminal. This required a significant rewrite, but drops a significant non-Rust dependency
+- Added the ability to toggle "filters" -- to only show played or unplayed episodes (default key: "1" to toggle), or to only show downloaded or non-downloaded episodes (default key: "2" to toggle)
+- Details panel can now be scrolled by moving the cursor all the way to the right, and using the same keys to scroll up/down by line or by page
+
+### Performance Improvements
+- Added database transactions, which offers a dramatic speed-up when syncing podcasts
+- Use of GUIDs when matching against existing episodes, which also speeds up syncing podcasts. **Note:** The first time you do a full sync after updating to v2.0.0, it may take some extra time while the app records the GUIDs of all existing episodes in the database. This is a one-time process, so please be patient!
+- Switched to a non-cryptographic hashing algorithm, which offers a minor performance improvement
+
+### Breaking Changes
+- The named terminal colors available (e.g., black, blue, cyan) now split off the "dark" versions into separate names. So instead of specifying "blue", you can either specify "blue" or "darkblue". This is a result of switching from *ncurses* to *crossterm*. There are also two additional config options for specifying app colors: `bold_foreground` and `bold_background`, which are used for titles, unplayed episodes, etc. ([see default config](https://raw.githubusercontent.com/jeff-hughes/shellcaster/master/config.toml))
+- There are two extra keybindings listed in the config file, `filter_played` and `filter_downloaded`, which are used to toggle the new filters on and off. By default, they are toggled with the "1" and "2" keys, respectively ([see default config](https://raw.githubusercontent.com/jeff-hughes/shellcaster/master/config.toml))
+- Some of the available crate features have changed: "wide" and "win32" are no longer available (and should no longer be necessary), due to the switch to *crossterm*
+- In addition, the HTTP client that shellcaster uses did some significant refactoring, resulting in a few other changes in shellcaster's features as a result. The "rustls" feature has been removed -- the app now uses the *rustls* crate by default. However, you can still choose to use the *native-tls* crate instead by enabling the "native_tls" feature (note that the name has changed from "native-tls" to "native_tls"). In addition, by default *shellcaster* will use your OS's native certificate roots (via the "native_certs" feature), but if you wish to turn this off, you can instead use a bundled copy of the Mozilla Root program by building *shellcaster* with the `--no-default-features` flag
+
 ## v1.2.1 (2021-09-08)
 - This is a simple patch release to fix a compilation issue resulting from the update to rustc v1.54.0.
 

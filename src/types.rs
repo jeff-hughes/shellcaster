@@ -47,7 +47,7 @@ impl Podcast {
     fn num_unplayed(&self) -> usize {
         return self
             .episodes
-            .map(|ep| !ep.is_played() as usize)
+            .map(|ep| !ep.is_played() as usize, false)
             .iter()
             .sum();
     }
@@ -66,20 +66,17 @@ impl Menuable for Podcast {
         // if the size available is big enough, we add the unplayed data
         // to the end
         if length > crate::config::PODCAST_UNPLAYED_TOTALS_LENGTH {
-            let meta_str = format!("({}/{})", self.num_unplayed(), self.episodes.len());
-            title_length = length - meta_str.chars().count();
+            let meta_str = format!("({}/{})", self.num_unplayed(), self.episodes.len(false));
+            title_length = length - meta_str.chars().count() - 3;
 
             let out = self.title.substr(0, title_length);
 
             return format!(
-                "{} {:>width$}",
-                out,
-                meta_str,
-                width = length - out.grapheme_len()
-            );
-        // this pads spaces between title and totals
+                " {out} {meta_str:>width$} ",
+                width = length - out.grapheme_len() - 3
+            ); // this pads spaces between title and totals
         } else {
-            return self.title.substr(0, title_length);
+            return format!(" {} ", self.title.substr(0, title_length - 2));
         }
     }
 
@@ -118,6 +115,7 @@ pub struct Episode {
     pub pod_id: i64,
     pub title: String,
     pub url: String,
+    pub guid: String,
     pub description: String,
     pub pubdate: Option<DateTime<Utc>>,
     pub duration: Option<i64>,
@@ -135,7 +133,7 @@ impl Episode {
                 seconds -= hours * 3600;
                 let minutes = seconds / 60;
                 seconds -= minutes * 60;
-                format!("{:02}:{:02}:{:02}", hours, minutes, seconds)
+                format!("{hours:02}:{minutes:02}:{seconds:02}")
             }
             None => "--:--:--".to_string(),
         };
@@ -153,50 +151,43 @@ impl Menuable for Episode {
         let out = match self.path {
             Some(_) => {
                 let title = self.title.substr(0, length - 4);
-                format!("[D] {}", title)
+                format!("[D] {title}")
             }
             None => self.title.substr(0, length),
         };
-        let out_len = out.grapheme_len();
         if length > crate::config::EPISODE_PUBDATE_LENGTH {
             let dur = self.format_duration();
-            let meta_dur = format!("[{}]", dur);
+            let meta_dur = format!("[{dur}]");
 
             if let Some(pubdate) = self.pubdate {
                 // print pubdate and duration
                 let pd = pubdate.format("%F");
-                let meta_str = format!("({}) {}", pd, meta_dur);
+                let meta_str = format!("({pd}) {meta_dur}");
                 let added_len = meta_str.chars().count();
 
-                let out_added = out.substr(0, length - added_len);
+                let out_added = out.substr(0, length - added_len - 3);
                 return format!(
-                    "{} {:>width$}",
-                    out_added,
-                    meta_str,
-                    width = length - out_len
+                    " {out_added} {meta_str:>width$} ",
+                    width = length - out_added.grapheme_len() - 3
                 );
             } else {
                 // just print duration
-                let out_added = out.substr(0, length - meta_dur.chars().count());
+                let out_added = out.substr(0, length - meta_dur.chars().count() - 3);
                 return format!(
-                    "{} {:>width$}",
-                    out_added,
-                    meta_dur,
-                    width = length - out_len
+                    " {out_added} {meta_dur:>width$} ",
+                    width = length - out_added.grapheme_len() - 3
                 );
             }
         } else if length > crate::config::EPISODE_DURATION_LENGTH {
             let dur = self.format_duration();
-            let meta_dur = format!("[{}]", dur);
-            let out_added = out.substr(0, length - meta_dur.chars().count());
+            let meta_dur = format!("[{dur}]");
+            let out_added = out.substr(0, length - meta_dur.chars().count() - 3);
             return format!(
-                "{} {:>width$}",
-                out_added,
-                meta_dur,
-                width = length - out_len
+                " {out_added} {meta_dur:>width$} ",
+                width = length - out_added.grapheme_len() - 3
             );
         } else {
-            return out;
+            return format!(" {} ", out.substr(0, length - 2));
         }
     }
 
@@ -226,6 +217,7 @@ pub struct PodcastNoId {
 pub struct EpisodeNoId {
     pub title: String,
     pub url: String,
+    pub guid: String,
     pub description: String,
     pub pubdate: Option<DateTime<Utc>>,
     pub duration: Option<i64>,
@@ -252,7 +244,20 @@ impl Menuable for NewEpisode {
     /// Returns the title for the episode, up to length characters.
     fn get_title(&self, length: usize) -> String {
         let selected = if self.selected { "✓" } else { " " };
-        let full_string = format!("[{}] {} ({})", selected, self.title, self.pod_title);
+
+        let title_len = self.title.grapheme_len();
+        let pod_title_len = self.pod_title.grapheme_len();
+        let empty_string = if length > title_len + pod_title_len + 9 {
+            let empty = vec![" "; length - title_len - pod_title_len - 9];
+            empty.join("")
+        } else {
+            "".to_string()
+        };
+
+        let full_string = format!(
+            " [{}] {} ({}){} ",
+            selected, self.title, self.pod_title, empty_string
+        );
         return full_string.substr(0, length);
     }
 
@@ -266,12 +271,22 @@ impl Menuable for NewEpisode {
 /// Primarily, the LockVec is used to provide methods that abstract
 /// away some of the logic necessary for borrowing and locking the
 /// Arc<Mutex<_>>.
+///
+/// The data is structured in a way to allow for quick access both by
+/// item ID (using a hash map), as well as by the order of an item in
+/// the list (using a vector of the item IDs). The `order` vector
+/// provides the full order of all the podcasts/episodes that are
+/// present in the hash map; the `filtered_order` vector provides the
+/// order only for the items that are currently filtered in, if the
+/// user has set an active filter for played/unplayed or downloaded/
+/// undownloaded.
 #[derive(Debug)]
 pub struct LockVec<T>
 where T: Clone + Menuable
 {
     data: Arc<Mutex<HashMap<i64, T, BuildNoHashHasher<i64>>>>,
     order: Arc<Mutex<Vec<i64>>>,
+    filtered_order: Arc<Mutex<Vec<i64>>>,
 }
 
 impl<T: Clone + Menuable> LockVec<T> {
@@ -287,7 +302,8 @@ impl<T: Clone + Menuable> LockVec<T> {
 
         return LockVec {
             data: Arc::new(Mutex::new(hm)),
-            order: Arc::new(Mutex::new(order)),
+            order: Arc::new(Mutex::new(order.clone())),
+            filtered_order: Arc::new(Mutex::new(order)),
         };
     }
 
@@ -301,6 +317,11 @@ impl<T: Clone + Menuable> LockVec<T> {
         return self.order.lock().expect("Mutex error");
     }
 
+    /// Lock the LockVec filtered order vector for reading/writing.
+    pub fn borrow_filtered_order(&self) -> MutexGuard<Vec<i64>> {
+        return self.filtered_order.lock().expect("Mutex error");
+    }
+
     /// Lock the LockVec hashmap for reading/writing.
     #[allow(clippy::type_complexity)]
     pub fn borrow(
@@ -308,10 +329,12 @@ impl<T: Clone + Menuable> LockVec<T> {
     ) -> (
         MutexGuard<HashMap<i64, T, BuildNoHashHasher<i64>>>,
         MutexGuard<Vec<i64>>,
+        MutexGuard<Vec<i64>>,
     ) {
         return (
             self.data.lock().expect("Mutex error"),
             self.order.lock().expect("Mutex error"),
+            self.filtered_order.lock().expect("Mutex error"),
         );
     }
 
@@ -324,13 +347,15 @@ impl<T: Clone + Menuable> LockVec<T> {
 
     /// Empty out and replace all the data in the LockVec.
     pub fn replace_all(&self, data: Vec<T>) {
-        let (mut map, mut order) = self.borrow();
+        let (mut map, mut order, mut filtered_order) = self.borrow();
         map.clear();
         order.clear();
+        filtered_order.clear();
         for i in data.into_iter() {
             let id = i.get_id();
             map.insert(i.get_id(), i);
             order.push(id);
+            filtered_order.push(id);
         }
     }
 
@@ -338,13 +363,20 @@ impl<T: Clone + Menuable> LockVec<T> {
     /// as an Iterator. However, to avoid issues with keeping the borrow
     /// alive, the function returns a Vec of the collected results,
     /// rather than an iterator.
-    pub fn map<B, F>(&self, mut f: F) -> Vec<B>
+    pub fn map<B, F>(&self, mut f: F, filtered: bool) -> Vec<B>
     where F: FnMut(&T) -> B {
-        let (map, order) = self.borrow();
-        return order
-            .iter()
-            .map(|id| f(map.get(id).expect("Index error in LockVec")))
-            .collect();
+        let (map, order, filtered_order) = self.borrow();
+        if filtered {
+            return filtered_order
+                .iter()
+                .map(|id| f(map.get(id).expect("Index error in LockVec")))
+                .collect();
+        } else {
+            return order
+                .iter()
+                .map(|id| f(map.get(id).expect("Index error in LockVec")))
+                .collect();
+        }
     }
 
     /// Maps a closure to a single element in the LockVec, specified by
@@ -363,7 +395,7 @@ impl<T: Clone + Menuable> LockVec<T> {
     /// this returns None.
     pub fn map_single_by_index<B, F>(&self, index: usize, f: F) -> Option<B>
     where F: FnOnce(&T) -> B {
-        let order = self.borrow_order();
+        let order = self.borrow_filtered_order();
         return match order.get(index) {
             Some(id) => self.map_single(*id, f),
             None => None,
@@ -372,32 +404,19 @@ impl<T: Clone + Menuable> LockVec<T> {
 
     /// Maps a closure to every element in the LockVec, in the same way
     /// as the `filter_map()` does on an Iterator, both mapping and
-    /// filtering, over a specified range.
-    /// Does not check if the range is valid!
-    /// However, to avoid issues with keeping the borrow
-    /// alive, the function returns a Vec of the collected results,
-    /// rather than an iterator.
-    pub fn map_by_range<B, F>(&self, start: usize, end: usize, mut f: F) -> Vec<B>
-    where F: FnMut(&T) -> Option<B> {
-        let (map, order) = self.borrow();
-        return (start..end)
-            .into_iter()
-            .filter_map(|id| {
-                f(map
-                    .get(order.get(id).expect("Index error in LockVec"))
-                    .expect("Index error in LockVec"))
-            })
-            .collect();
-    }
-
-    /// Maps a closure to every element in the LockVec, in the same way
-    /// as the `filter_map()` does on an Iterator, both mapping and
     /// filtering. However, to avoid issues with keeping the borrow
     /// alive, the function returns a Vec of the collected results,
     /// rather than an iterator.
+    ///
+    /// Note that the word "filter" in this sense represents the concept
+    /// from functional programming, providing a function that evaluates
+    /// items in the list and returns a boolean value. The word "filter"
+    /// is used elsewhere in the code to represent user-selected
+    /// filters to show only selected podcasts/episodes, but this is
+    /// *not* the sense of the word here.
     pub fn filter_map<B, F>(&self, mut f: F) -> Vec<B>
     where F: FnMut(&T) -> Option<B> {
-        let (map, order) = self.borrow();
+        let (map, order, _) = self.borrow();
         return order
             .iter()
             .filter_map(|id| f(map.get(id).expect("Index error in LockVec")))
@@ -405,8 +424,12 @@ impl<T: Clone + Menuable> LockVec<T> {
     }
 
     /// Returns the number of items in the LockVec.
-    pub fn len(&self) -> usize {
-        return self.borrow_order().len();
+    pub fn len(&self, filtered: bool) -> usize {
+        if filtered {
+            return self.borrow_filtered_order().len();
+        } else {
+            return self.borrow_order().len();
+        }
     }
 
     /// Returns whether or not there are any items in the LockVec.
@@ -420,6 +443,7 @@ impl<T: Clone + Menuable> Clone for LockVec<T> {
         return LockVec {
             data: Arc::clone(&self.data),
             order: Arc::clone(&self.order),
+            filtered_order: Arc::clone(&self.filtered_order),
         };
     }
 }
@@ -428,10 +452,7 @@ impl LockVec<Podcast> {
     /// This clones the podcast with the given id.
     pub fn clone_podcast(&self, id: i64) -> Option<Podcast> {
         let pod_map = self.borrow_map();
-        return match pod_map.get(&id) {
-            Some(pod) => Some(pod.clone()),
-            None => None,
-        };
+        return pod_map.get(&id).cloned();
     }
 
     /// This clones the episode with the given id (`ep_id`), from
@@ -453,10 +474,7 @@ impl LockVec<Episode> {
     /// and can be used at that level as well if given a podcast id.
     pub fn clone_episode(&self, ep_id: i64) -> Option<Episode> {
         let ep_map = self.borrow_map();
-        return match ep_map.get(&ep_id) {
-            Some(ep) => Some(ep.clone()),
-            None => None,
-        };
+        return ep_map.get(&ep_id).cloned();
     }
 }
 
@@ -468,6 +486,39 @@ pub enum Message {
     Ui(UiMsg),
     Feed(FeedMsg),
     Dl(DownloadMsg),
+}
+
+
+/// Simple enum to designate the status of a filter. "Positive" and
+/// "Negative" cases represent, e.g., "played" vs. "unplayed".
+#[derive(Debug, Clone, Copy)]
+pub enum FilterStatus {
+    PositiveCases,
+    NegativeCases,
+    All,
+}
+
+/// Enum to identify which filters has been changed
+#[derive(Debug, Clone, Copy)]
+pub enum FilterType {
+    Played,
+    Downloaded,
+}
+
+/// Struct holding information about all active filters.
+#[derive(Debug, Clone, Copy)]
+pub struct Filters {
+    pub played: FilterStatus,
+    pub downloaded: FilterStatus,
+}
+
+impl Default for Filters {
+    fn default() -> Self {
+        return Self {
+            played: FilterStatus::All,
+            downloaded: FilterStatus::All,
+        };
+    }
 }
 
 

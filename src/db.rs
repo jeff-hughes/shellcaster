@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
+use ahash::AHashMap;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -25,6 +26,7 @@ pub struct SyncResult {
 /// with this connection.
 #[derive(Debug)]
 pub struct Database {
+    path: PathBuf,
     conn: Option<Connection>,
 }
 
@@ -36,8 +38,9 @@ impl Database {
         std::fs::create_dir_all(&db_path)
             .with_context(|| "Unable to create subdirectory for database.")?;
         db_path.push("data.db");
-        let conn = Connection::open(db_path)?;
+        let conn = Connection::open(&db_path)?;
         let db_conn = Database {
+            path: db_path,
             conn: Some(conn),
         };
         db_conn.create()?;
@@ -60,20 +63,23 @@ impl Database {
             // compare to current app version
             let curr_ver = Version::parse(crate::VERSION)?;
 
-            // (db_version exists, needs update)
-            let to_update = match vstr {
+            match vstr {
                 Ok(vstr) => {
                     let db_version = Version::parse(&vstr)?;
-                    (true, db_version < curr_ver)
+                    if db_version < curr_ver {
+                        // any version checks for DB migrations should
+                        // go here first, before we update the version
+
+                        // adding a column to capture episode guids
+                        if db_version <= Version::parse("1.2.1")? {
+                            conn.execute("ALTER TABLE episodes ADD COLUMN guid TEXT;", params![])
+                                .expect("Could not run database migrations.");
+                        }
+
+                        db_conn.update_version(curr_ver, true)?;
+                    }
                 }
-                Err(_) => (false, true),
-            };
-
-            if to_update.1 {
-                // any version checks for DB migrations should go
-                // here first, before we update the version
-
-                db_conn.update_version(curr_ver, to_update.0)?;
+                Err(_) => db_conn.update_version(curr_ver, false)?,
             }
         }
 
@@ -108,6 +114,7 @@ impl Database {
                 podcast_id INTEGER NOT NULL,
                 title TEXT NOT NULL,
                 url TEXT NOT NULL,
+                guid TEXT,
                 description TEXT,
                 pubdate INTEGER,
                 duration INTEGER,
@@ -167,26 +174,33 @@ impl Database {
     /// Inserts a new podcast and list of podcast episodes into the
     /// database.
     pub fn insert_podcast(&self, podcast: PodcastNoId) -> Result<SyncResult> {
-        let conn = self.conn.as_ref().expect("Error connecting to database.");
-        let mut stmt = conn.prepare_cached(
-            "INSERT INTO podcasts (title, url, description, author,
+        let mut conn = Connection::open(&self.path).expect("Error connecting to database.");
+        let tx = conn.transaction()?;
+        // let conn = self.conn.as_ref().expect("Error connecting to database.");
+        {
+            let mut stmt = tx.prepare_cached(
+                "INSERT INTO podcasts (title, url, description, author,
                 explicit, last_checked)
                 VALUES (?, ?, ?, ?, ?, ?);",
-        )?;
-        stmt.execute(params![
-            podcast.title,
-            podcast.url,
-            podcast.description,
-            podcast.author,
-            podcast.explicit,
-            podcast.last_checked.timestamp()
-        ])?;
+            )?;
+            stmt.execute(params![
+                podcast.title,
+                podcast.url,
+                podcast.description,
+                podcast.author,
+                podcast.explicit,
+                podcast.last_checked.timestamp()
+            ])?;
+        }
 
-        let mut stmt = conn.prepare_cached("SELECT id FROM podcasts WHERE url = ?")?;
-        let pod_id = stmt.query_row::<i64, _, _>(params![podcast.url], |row| row.get(0))?;
+        let pod_id;
+        {
+            let mut stmt = tx.prepare_cached("SELECT id FROM podcasts WHERE url = ?")?;
+            pod_id = stmt.query_row::<i64, _, _>(params![podcast.url], |row| row.get(0))?;
+        }
         let mut ep_ids = Vec::new();
         for ep in podcast.episodes.iter().rev() {
-            let id = self.insert_episode(pod_id, &ep)?;
+            let id = self.insert_episode(&tx, pod_id, ep)?;
             let new_ep = NewEpisode {
                 id: id,
                 pod_id: pod_id,
@@ -196,6 +210,7 @@ impl Database {
             };
             ep_ids.push(new_ep);
         }
+        tx.commit()?;
 
         return Ok(SyncResult {
             added: ep_ids,
@@ -204,23 +219,24 @@ impl Database {
     }
 
     /// Inserts a podcast episode into the database.
-    pub fn insert_episode(&self, podcast_id: i64, episode: &EpisodeNoId) -> Result<i64> {
-        let conn = self.conn.as_ref().expect("Error connecting to database.");
-
-        let pubdate = match episode.pubdate {
-            Some(dt) => Some(dt.timestamp()),
-            None => None,
-        };
+    pub fn insert_episode(
+        &self,
+        conn: &Connection,
+        podcast_id: i64,
+        episode: &EpisodeNoId,
+    ) -> Result<i64> {
+        let pubdate = episode.pubdate.map(|dt| dt.timestamp());
 
         let mut stmt = conn.prepare_cached(
-            "INSERT INTO episodes (podcast_id, title, url,
+            "INSERT INTO episodes (podcast_id, title, url, guid,
                 description, pubdate, duration, played, hidden)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?);",
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);",
         )?;
         stmt.execute(params![
             podcast_id,
             episode.title,
             episode.url,
+            episode.guid,
             episode.description,
             pubdate,
             episode.duration,
@@ -280,21 +296,23 @@ impl Database {
     /// changed if necessary, and episodes are updated (modified episodes
     /// are updated, new episodes are inserted).
     pub fn update_podcast(&self, pod_id: i64, podcast: PodcastNoId) -> Result<SyncResult> {
-        let conn = self.conn.as_ref().expect("Error connecting to database.");
-        let mut stmt = conn.prepare_cached(
-            "UPDATE podcasts SET title = ?, url = ?, description = ?,
+        {
+            let conn = self.conn.as_ref().expect("Error connecting to database.");
+            let mut stmt = conn.prepare_cached(
+                "UPDATE podcasts SET title = ?, url = ?, description = ?,
             author = ?, explicit = ?, last_checked = ?
             WHERE id = ?;",
-        )?;
-        stmt.execute(params![
-            podcast.title,
-            podcast.url,
-            podcast.description,
-            podcast.author,
-            podcast.explicit,
-            podcast.last_checked.timestamp(),
-            pod_id,
-        ])?;
+            )?;
+            stmt.execute(params![
+                podcast.title,
+                podcast.url,
+                podcast.description,
+                podcast.author,
+                podcast.explicit,
+                podcast.last_checked.timestamp(),
+                pod_id,
+            ])?;
+        }
 
         let result = self.update_episodes(pod_id, podcast.title, podcast.episodes)?;
         return Ok(result);
@@ -314,64 +332,70 @@ impl Database {
         podcast_title: String,
         episodes: Vec<EpisodeNoId>,
     ) -> Result<SyncResult> {
-        let conn = self.conn.as_ref().expect("Error connecting to database.");
-
         let old_episodes = self.get_episodes(podcast_id, true)?;
+        let mut old_ep_map = AHashMap::new();
+        for ep in old_episodes.iter() {
+            if !ep.guid.is_empty() {
+                old_ep_map.insert(ep.guid.clone(), ep.clone());
+            }
+        }
+
+        let mut conn = Connection::open(&self.path).expect("Error connecting to database.");
+        let tx = conn.transaction()?;
 
         let mut insert_ep = Vec::new();
         let mut update_ep = Vec::new();
         for new_ep in episodes.iter().rev() {
-            let new_pd = match new_ep.pubdate {
-                Some(dt) => Some(dt.timestamp()),
-                None => None,
-            };
+            let new_pd = new_ep.pubdate.map(|dt| dt.timestamp());
 
-            // for each existing episode, check the title, url, and
-            // pubdate -- if two of the three match, we count it as an
-            // existing episode; otherwise, we add it as a new episode
             let mut existing_id = None;
             let mut update = false;
-            for old_ep in old_episodes.iter().rev() {
-                let mut matching = 0;
-                matching += (new_ep.title == old_ep.title) as i32;
-                matching += (new_ep.url == old_ep.url) as i32;
 
-                let mut pd_match = false;
-                if let Some(pd) = new_pd {
-                    if let Some(old_pd) = old_ep.pubdate {
-                        matching += (pd == old_pd.timestamp()) as i32;
-                        pd_match = true;
-                    }
-                }
-
-                if matching >= 2 {
+            // primary matching mechanism: check guid to see if it
+            // already exists in database
+            if !new_ep.guid.is_empty() {
+                if let Some(old_ep) = old_ep_map.get(&new_ep.guid) {
                     existing_id = Some(old_ep.id);
+                    update = self.check_for_updates(old_ep, new_ep);
+                }
+            }
 
-                    // if we have a matching episode, check whether there
-                    // are details to update
-                    if !(new_ep.title == old_ep.title
-                        && new_ep.url == old_ep.url
-                        && new_ep.description == old_ep.description
-                        && new_ep.duration == old_ep.duration
-                        && pd_match)
-                    {
-                        update = true;
+            // fallback matching: for each existing episode, check the
+            // title, url, and pubdate -- if two of the three match, we
+            // count it as an existing episode; otherwise, we add it as
+            // a new episode
+            if existing_id.is_none() {
+                for old_ep in old_episodes.iter().rev() {
+                    let mut matching = 0;
+                    matching += (new_ep.title == old_ep.title) as i32;
+                    matching += (new_ep.url == old_ep.url) as i32;
+
+                    if let Some(pd) = new_pd {
+                        if let Some(old_pd) = old_ep.pubdate {
+                            matching += (pd == old_pd.timestamp()) as i32;
+                        }
                     }
-                    break;
+
+                    if matching >= 2 {
+                        existing_id = Some(old_ep.id);
+                        update = self.check_for_updates(old_ep, new_ep);
+                        break;
+                    }
                 }
             }
 
             match existing_id {
                 Some(id) => {
                     if update {
-                        let mut stmt = conn.prepare_cached(
+                        let mut stmt = tx.prepare_cached(
                             "UPDATE episodes SET title = ?, url = ?,
-                                description = ?, pubdate = ?, duration = ?
-                                WHERE id = ?;",
+                                guid = ?, description = ?, pubdate = ?,
+                                duration = ? WHERE id = ?;",
                         )?;
                         stmt.execute(params![
                             new_ep.title,
                             new_ep.url,
+                            new_ep.guid,
                             new_ep.description,
                             new_pd,
                             new_ep.duration,
@@ -381,7 +405,7 @@ impl Database {
                     }
                 }
                 None => {
-                    let id = self.insert_episode(podcast_id, &new_ep)?;
+                    let id = self.insert_episode(&tx, podcast_id, new_ep)?;
                     let new_ep = NewEpisode {
                         id: id,
                         pod_id: podcast_id,
@@ -393,10 +417,34 @@ impl Database {
                 }
             }
         }
+        tx.commit()?;
         return Ok(SyncResult {
             added: insert_ep,
             updated: update_ep,
         });
+    }
+
+    /// Checks two matching episodes to see whether there are details
+    /// that need to be updated (e.g., same episode, but the title has
+    /// been changed).
+    fn check_for_updates(&self, old_ep: &Episode, new_ep: &EpisodeNoId) -> bool {
+        let new_pd = new_ep.pubdate.map(|dt| dt.timestamp());
+        let mut pd_match = false;
+        if let Some(pd) = new_pd {
+            if let Some(old_pd) = old_ep.pubdate {
+                pd_match = pd == old_pd.timestamp();
+            }
+        }
+        if !(new_ep.title == old_ep.title
+            && new_ep.url == old_ep.url
+            && new_ep.guid == old_ep.guid
+            && new_ep.description == old_ep.description
+            && new_ep.duration == old_ep.duration
+            && pd_match)
+        {
+            return true;
+        }
+        return false;
     }
 
     /// Updates an episode to mark it as played or unplayed.
@@ -487,6 +535,9 @@ impl Database {
                 pod_id: row.get("podcast_id")?,
                 title: row.get("title")?,
                 url: row.get("url")?,
+                guid: row
+                    .get::<&str, Option<String>>("guid")?
+                    .unwrap_or_else(|| "".to_string()),
                 description: row.get("description")?,
                 pubdate: convert_date(row.get("pubdate")),
                 duration: row.get("duration")?,
@@ -494,12 +545,7 @@ impl Database {
                 played: row.get("played")?,
             })
         })?;
-        let mut episodes = Vec::new();
-        for ep in episode_iter {
-            if let Ok(ep) = ep {
-                episodes.push(ep);
-            }
-        }
+        let episodes = episode_iter.flatten().collect();
         return Ok(episodes);
     }
 
@@ -517,10 +563,9 @@ impl Database {
 /// DateTime<Utc> object
 fn convert_date(result: Result<i64, rusqlite::Error>) -> Option<DateTime<Utc>> {
     return match result {
-        Ok(timestamp) => match NaiveDateTime::from_timestamp_opt(timestamp, 0) {
-            Some(ndt) => Some(DateTime::from_utc(ndt, Utc)),
-            None => None,
-        },
+        Ok(timestamp) => {
+            NaiveDateTime::from_timestamp_opt(timestamp, 0).map(|ndt| DateTime::from_utc(ndt, Utc))
+        }
         Err(_) => None,
     };
 }

@@ -16,6 +16,7 @@ use crate::types::*;
 use crate::ui::{Ui, UiMsg};
 
 /// Enum used for communicating with other threads.
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug)]
 pub enum MainMessage {
     UiUpdateMenus,
@@ -33,6 +34,7 @@ pub struct MainController {
     db: Database,
     threadpool: Threadpool,
     podcasts: LockVec<Podcast>,
+    filters: Filters,
     sync_counter: usize,
     sync_tracker: Vec<SyncResult>,
     download_tracker: HashSet<i64>,
@@ -52,7 +54,7 @@ impl MainController {
         let (tx_to_main, rx_to_main) = mpsc::channel();
 
         // get connection to the database
-        let db_inst = Database::connect(&db_path)?;
+        let db_inst = Database::connect(db_path)?;
 
         // set up threadpool
         let threadpool = Threadpool::new(config.simultaneous_downloads);
@@ -79,6 +81,7 @@ impl MainController {
             db: db_inst,
             threadpool: threadpool,
             podcasts: podcast_list,
+            filters: Filters::default(),
             ui_thread: ui_thread,
             sync_counter: 0,
             sync_tracker: Vec::new(),
@@ -101,7 +104,7 @@ impl MainController {
 
                 Message::Feed(FeedMsg::Error(feed)) => match feed.title {
                     Some(t) => {
-                        self.notif_to_ui(format!("Error retrieving RSS feed for {}.", t), true)
+                        self.notif_to_ui(format!("Error retrieving RSS feed for {t}."), true)
                     }
                     None => self.notif_to_ui("Error retrieving RSS feed.".to_string(), true),
                 },
@@ -160,6 +163,57 @@ impl MainController {
                     self.remove_all_episodes(pod_id, delete_files)
                 }
 
+                Message::Ui(UiMsg::FilterChange(filter_type)) => {
+                    let new_filter;
+                    let message;
+                    match filter_type {
+                        // we need to handle these separately because the
+                        // order that makes the most sense to me is
+                        // different:
+                        // played goes from all -> neg -> pos;
+                        // downloaded goes from all -> pos -> neg;
+                        // this is purely based on the idea that people
+                        // are most likely to want to specifically find
+                        // unplayed episodes, or downloaded episodes
+                        FilterType::Played => {
+                            match self.filters.played {
+                                FilterStatus::All => {
+                                    new_filter = FilterStatus::NegativeCases;
+                                    message = "Unplayed only";
+                                }
+                                FilterStatus::NegativeCases => {
+                                    new_filter = FilterStatus::PositiveCases;
+                                    message = "Played only";
+                                }
+                                FilterStatus::PositiveCases => {
+                                    new_filter = FilterStatus::All;
+                                    message = "Played and unplayed";
+                                }
+                            }
+                            self.filters.played = new_filter;
+                        }
+                        FilterType::Downloaded => {
+                            match self.filters.downloaded {
+                                FilterStatus::All => {
+                                    new_filter = FilterStatus::PositiveCases;
+                                    message = "Downloaded only";
+                                }
+                                FilterStatus::PositiveCases => {
+                                    new_filter = FilterStatus::NegativeCases;
+                                    message = "Undownloaded only";
+                                }
+                                FilterStatus::NegativeCases => {
+                                    new_filter = FilterStatus::All;
+                                    message = "Downloaded and undownloaded";
+                                }
+                            }
+                            self.filters.downloaded = new_filter;
+                        }
+                    }
+                    self.notif_to_ui(format!("Filter: {message}"), false);
+                    self.update_filters(self.filters, true);
+                }
+
                 Message::Ui(UiMsg::Noop) => (),
             }
         }
@@ -202,15 +256,13 @@ impl MainController {
 
         if sync_len > 0 && dl_len > 0 {
             let notif = format!(
-                "Syncing {} podcast{}, downloading {} episode{}...",
-                sync_len, sync_plural, dl_len, dl_plural
-            );
+                "Syncing {sync_len} podcast{sync_plural}, downloading {dl_len} episode{dl_plural}...");
             self.persistent_notif_to_ui(notif, false);
         } else if sync_len > 0 {
-            let notif = format!("Syncing {} podcast{}...", sync_len, sync_plural);
+            let notif = format!("Syncing {sync_len} podcast{sync_plural}...");
             self.persistent_notif_to_ui(notif, false);
         } else if dl_len > 0 {
-            let notif = format!("Downloading {} episode{}...", dl_len, dl_plural);
+            let notif = format!("Downloading {dl_len} episode{dl_plural}...");
             self.persistent_notif_to_ui(notif, false);
         } else {
             self.clear_persistent_notif();
@@ -247,9 +299,10 @@ impl MainController {
             ),
             // get all of 'em!
             None => {
-                pod_data = self.podcasts.map(|pod| {
-                    PodcastFeed::new(Some(pod.id), pod.url.clone(), Some(pod.title.clone()))
-                })
+                pod_data = self.podcasts.map(
+                    |pod| PodcastFeed::new(Some(pod.id), pod.url.clone(), Some(pod.title.clone())),
+                    false,
+                )
             }
         }
         for feed in pod_data.into_iter() {
@@ -268,7 +321,6 @@ impl MainController {
     /// synchronizing data from the RSS feed of an existing podcast.
     /// `pod_id` will be None if a new podcast is being added (i.e.,
     /// the database has not given it an id yet).
-    #[allow(clippy::useless_let_if_seq)]
     pub fn add_or_sync_data(&mut self, pod: PodcastNoId, pod_id: Option<i64>) {
         let title = pod.title.clone();
         let db_result;
@@ -276,7 +328,7 @@ impl MainController {
 
         if let Some(id) = pod_id {
             db_result = self.db.update_podcast(id, pod);
-            failure = format!("Error synchronizing {}.", title);
+            failure = format!("Error synchronizing {title}.");
         } else {
             db_result = self.db.insert_podcast(pod);
             failure = "Error adding podcast to database.".to_string();
@@ -290,9 +342,7 @@ impl MainController {
                             .expect("Error retrieving info from database."),
                     );
                 }
-                self.tx_to_ui
-                    .send(MainMessage::UiUpdateMenus)
-                    .expect("Thread messaging error");
+                self.update_filters(self.filters, true);
 
                 if pod_id.is_some() {
                     self.sync_tracker.push(result);
@@ -312,10 +362,7 @@ impl MainController {
                         }
                         self.sync_tracker = Vec::new();
                         self.notif_to_ui(
-                            format!(
-                                "Sync complete: Added {}, updated {} episodes.",
-                                added, updated
-                            ),
+                            format!("Sync complete: Added {added}, updated {updated} episodes."),
                             false,
                         );
 
@@ -363,7 +410,7 @@ impl MainController {
             // if there is a local file, try to play that
             Some(path) => match path.to_str() {
                 Some(p) => {
-                    if play_file::execute(&self.config.play_command, &p).is_err() {
+                    if play_file::execute(&self.config.play_command, p).is_err() {
                         self.notif_to_ui(
                             "Error: Could not play file. Check configuration.".to_string(),
                             true,
@@ -396,9 +443,7 @@ impl MainController {
         podcast.episodes.replace(ep_id, episode);
 
         self.podcasts.replace(pod_id, podcast);
-        self.tx_to_ui
-            .send(MainMessage::UiUpdateMenus)
-            .expect("Thread messaging error");
+        self.update_filters(self.filters, true);
     }
 
     /// Given a podcast, it marks all episodes for that podcast as
@@ -419,9 +464,7 @@ impl MainController {
         );
 
         self.podcasts.replace(pod_id, podcast);
-        self.tx_to_ui
-            .send(MainMessage::UiUpdateMenus)
-            .expect("Thread messaging error");
+        self.update_filters(self.filters, true);
     }
 
     /// Given a podcast index (and not an episode index), this will send
@@ -505,7 +548,7 @@ impl MainController {
                         self.tx_to_main.clone(),
                     );
                 }
-                Err(_) => self.notif_to_ui(format!("Could not create dir: {}", pod_title), true),
+                Err(_) => self.notif_to_ui(format!("Could not create dir: {pod_title}"), true),
             }
             self.update_tracker_notif();
         }
@@ -539,9 +582,7 @@ impl MainController {
             self.notif_to_ui("Downloads complete.".to_string(), false);
         }
 
-        self.tx_to_ui
-            .send(MainMessage::UiUpdateMenus)
-            .expect("Thread messaging error");
+        self.update_filters(self.filters, true);
     }
 
     /// Given a podcast title, creates a download directory for that
@@ -569,7 +610,7 @@ impl MainController {
                     let res = self.db.remove_file(episode.id);
                     if res.is_err() {
                         self.notif_to_ui(
-                            format!("Could not remove file from database: {}", title),
+                            format!("Could not remove file from database: {title}"),
                             true,
                         );
                         return;
@@ -577,12 +618,10 @@ impl MainController {
                     episode.path = None;
                     podcast.episodes.replace(ep_id, episode);
 
-                    self.tx_to_ui
-                        .send(MainMessage::UiUpdateMenus)
-                        .expect("Thread messaging error");
-                    self.notif_to_ui(format!("Deleted \"{}\"", title), false);
+                    self.update_filters(self.filters, true);
+                    self.notif_to_ui(format!("Deleted \"{title}\""), false);
                 }
-                Err(_) => self.notif_to_ui(format!("Error deleting \"{}\"", title), true),
+                Err(_) => self.notif_to_ui(format!("Error deleting \"{title}\""), true),
             }
         }
     }
@@ -616,9 +655,7 @@ impl MainController {
         if res.is_err() {
             success = false;
         }
-        self.tx_to_ui
-            .send(MainMessage::UiUpdateMenus)
-            .expect("Thread messaging error");
+        self.update_filters(self.filters, true);
 
         if success {
             self.notif_to_ui("Files successfully deleted.".to_string(), false);
@@ -682,14 +719,57 @@ impl MainController {
         }
 
         let mut podcast = self.podcasts.clone_podcast(pod_id).unwrap();
-        podcast.episodes.map(|ep| {
-            let _ = self.db.hide_episode(ep.id, true);
-        });
+        podcast.episodes.map(
+            |ep| {
+                let _ = self.db.hide_episode(ep.id, true);
+            },
+            false,
+        );
         podcast.episodes = LockVec::new(Vec::new());
         self.podcasts.replace(pod_id, podcast);
 
         self.tx_to_ui
             .send(MainMessage::UiUpdateMenus)
             .expect("Thread messaging error");
+    }
+
+    /// Updates the user-selected filters to show only played/unplayed
+    /// or downloaded/not downloaded episodes.
+    pub fn update_filters(&self, filters: Filters, update_menus: bool) {
+        {
+            let (pod_map, pod_order, mut pod_filtered_order) = self.podcasts.borrow();
+            let mut new_filtered_pods = Vec::new();
+            for pod_id in pod_order.iter() {
+                let pod = pod_map.get(pod_id).unwrap();
+                let new_filter = pod.episodes.filter_map(|ep| {
+                    let play_filter = match filters.played {
+                        FilterStatus::All => false,
+                        FilterStatus::PositiveCases => !ep.is_played(),
+                        FilterStatus::NegativeCases => ep.is_played(),
+                    };
+                    let download_filter = match filters.downloaded {
+                        FilterStatus::All => false,
+                        FilterStatus::PositiveCases => ep.path.is_none(),
+                        FilterStatus::NegativeCases => ep.path.is_some(),
+                    };
+                    if !(play_filter | download_filter) {
+                        return Some(ep.id);
+                    } else {
+                        return None;
+                    }
+                });
+                if !new_filter.is_empty() {
+                    new_filtered_pods.push(pod.id);
+                }
+                let mut filtered_order = pod.episodes.borrow_filtered_order();
+                *filtered_order = new_filter;
+            }
+            *pod_filtered_order = new_filtered_pods;
+        }
+        if update_menus {
+            self.tx_to_ui
+                .send(MainMessage::UiUpdateMenus)
+                .expect("Thread messaging error");
+        }
     }
 }

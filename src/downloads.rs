@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
+use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use sanitize_filename::{sanitize_with_options, Options};
@@ -57,18 +58,26 @@ pub fn download_list(
 /// Downloads a file to a local filepath, returning DownloadMsg variant
 /// indicating success or failure.
 fn download_file(mut ep_data: EpData, dest: PathBuf, mut max_retries: usize) -> DownloadMsg {
+    let agent_builder = ureq::builder();
+    #[cfg(feature = "native_tls")]
+    let tls_connector = std::sync::Arc::new(native_tls::TlsConnector::new().unwrap());
+    #[cfg(feature = "native_tls")]
+    let agent_builder = agent_builder.tls_connector(tls_connector);
+    let agent = agent_builder.build();
+
     let request: Result<ureq::Response, ()> = loop {
-        let response = ureq::get(&ep_data.url)
-            .timeout_connect(5000)
-            .timeout_read(30000)
+        let response = agent
+            .get(&ep_data.url)
+            .timeout(Duration::from_secs(30))
             .call();
-        if response.error() {
-            max_retries -= 1;
-            if max_retries == 0 {
-                break Err(());
+        match response {
+            Ok(resp) => break Ok(resp),
+            Err(_) => {
+                max_retries -= 1;
+                if max_retries == 0 {
+                    break Err(());
+                }
             }
-        } else {
-            break Ok(response);
         }
     };
 
@@ -99,7 +108,7 @@ fn download_file(mut ep_data: EpData, dest: PathBuf, mut max_retries: usize) -> 
     }
 
     let mut file_path = dest;
-    file_path.push(format!("{}.{}", file_name, ext));
+    file_path.push(format!("{file_name}.{ext}"));
 
     let dst = File::create(&file_path);
     if dst.is_err() {

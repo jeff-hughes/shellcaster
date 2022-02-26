@@ -1,8 +1,13 @@
-use pancurses::Input;
 use std::cmp::min;
+use std::rc::Rc;
 
-use super::ColorType;
-use super::{Menu, Panel, UiMsg};
+use crossterm::{
+    event::{KeyCode, KeyEvent},
+    style,
+    style::Stylize,
+};
+
+use super::{AppColors, Menu, Panel, Scroll, UiMsg};
 use crate::config::BIG_SCROLL_AMOUNT;
 use crate::keymap::{Keybindings, UserAction};
 use crate::types::*;
@@ -34,14 +39,20 @@ impl ActivePopup {
     }
 }
 
-/// Holds all state relevant for handling popup windows.
+/// Holds all state relevant for handling popup windows. Holds an
+/// ActivePopup enum that itself contains the Panel/Menu displayed with
+/// the current popup window (if any). The `bool` values provide an
+/// indicator of which popup menus currently exist, with the possibility
+/// for multiple popup windows to exist (though only one is "active" at
+/// any given time).
 #[derive(Debug)]
 pub struct PopupWin<'a> {
     popup: ActivePopup,
     new_episodes: Vec<NewEpisode>,
     keymap: &'a Keybindings,
-    total_rows: i32,
-    total_cols: i32,
+    colors: Rc<AppColors>,
+    total_rows: u16,
+    total_cols: u16,
     pub welcome_win: bool,
     pub help_win: bool,
     pub download_win: bool,
@@ -49,11 +60,17 @@ pub struct PopupWin<'a> {
 
 impl<'a> PopupWin<'a> {
     /// Set up struct for handling popup windows.
-    pub fn new(keymap: &'a Keybindings, total_rows: i32, total_cols: i32) -> Self {
+    pub fn new(
+        keymap: &'a Keybindings,
+        colors: Rc<AppColors>,
+        total_rows: u16,
+        total_cols: u16,
+    ) -> Self {
         return Self {
             popup: ActivePopup::None,
             new_episodes: Vec::new(),
             keymap: keymap,
+            colors: colors,
             total_rows: total_rows,
             total_cols: total_cols,
             welcome_win: false,
@@ -75,30 +92,25 @@ impl<'a> PopupWin<'a> {
     }
 
     /// Resize the currently active popup window if one exists.
-    pub fn resize(&mut self, total_rows: i32, total_cols: i32) {
+    pub fn resize(&mut self, total_rows: u16, total_cols: u16) {
         self.total_rows = total_rows;
         self.total_cols = total_cols;
         match &self.popup {
             ActivePopup::WelcomeWin(_win) => {
                 let welcome_win = self.make_welcome_win();
-                welcome_win.refresh();
                 self.popup = ActivePopup::WelcomeWin(welcome_win);
             }
             ActivePopup::HelpWin(_win) => {
                 let help_win = self.make_help_win();
-                help_win.refresh();
                 self.popup = ActivePopup::HelpWin(help_win);
             }
             ActivePopup::DownloadWin(_win) => {
                 let mut download_win = self.make_download_win();
-                download_win.highlight_selected(true);
+                download_win.activate();
                 self.popup = ActivePopup::DownloadWin(download_win);
             }
             ActivePopup::None => (),
         }
-        // if let Some(panel) = &self.panel {
-        //     panel.refresh();
-        // }
     }
 
     /// Create a welcome window and draw it to the screen.
@@ -123,23 +135,30 @@ impl<'a> PopupWin<'a> {
         let mut welcome_win = Panel::new(
             "Shellcaster".to_string(),
             0,
+            self.colors.clone(),
             self.total_rows - 1,
             self.total_cols,
             0,
-            0,
+            (1, 1, 1, 1),
         );
+        welcome_win.redraw();
 
         let mut row = 0;
-        row = welcome_win.write_wrap_line(row + 1, "Welcome to shellcaster!");
+        row = welcome_win.write_wrap_line(row, "Welcome to shellcaster!", None);
 
-        row = welcome_win.write_wrap_line(row+2,
-            &format!("Your podcast list is currently empty. Press {} to add a new podcast feed, {} to quit, or see all available commands by typing {} to get help.", key_strs[0], key_strs[1], key_strs[2]));
+        row = welcome_win.write_wrap_line(row + 2,
+            &format!("Your podcast list is currently empty. Press {} to add a new podcast feed, {} to quit, or see all available commands by typing {} to get help.", key_strs[0], key_strs[1], key_strs[2]), None);
 
         row = welcome_win.write_wrap_line(
             row + 2,
             "More details of how to customize shellcaster can be found on the Github repo readme:",
+            None,
         );
-        let _ = welcome_win.write_wrap_line(row + 1, "https://github.com/jeff-hughes/shellcaster");
+        let _ = welcome_win.write_wrap_line(
+            row + 1,
+            "https://github.com/jeff-hughes/shellcaster",
+            None,
+        );
 
         return welcome_win;
     }
@@ -152,8 +171,8 @@ impl<'a> PopupWin<'a> {
 
     /// Create a new Panel holding a help window.
     pub fn make_help_win(&self) -> Panel {
-        let big_scroll_up = format!("Up 1/{} page:", BIG_SCROLL_AMOUNT);
-        let big_scroll_dn = format!("Down 1/{} page:", BIG_SCROLL_AMOUNT);
+        let big_scroll_up = format!("Up 1/{BIG_SCROLL_AMOUNT} page:");
+        let big_scroll_dn = format!("Down 1/{BIG_SCROLL_AMOUNT} page:");
         let actions = vec![
             (Some(UserAction::Left), "Left:"),
             (Some(UserAction::Right), "Right:"),
@@ -207,15 +226,25 @@ impl<'a> PopupWin<'a> {
         let mut help_win = Panel::new(
             "Help".to_string(),
             0,
+            self.colors.clone(),
             self.total_rows - 1,
             self.total_cols,
             0,
-            0,
+            (1, 1, 1, 1),
         );
+        help_win.redraw();
 
         let mut row = 0;
-        row = help_win.write_wrap_line(row + 1, "Available keybindings:");
-        help_win.change_attr(row, 0, 22, pancurses::A_UNDERLINE, ColorType::Normal);
+        row = help_win.write_wrap_line(
+            row,
+            "Available keybindings:",
+            Some(
+                style::ContentStyle::new()
+                    .with(self.colors.normal.0)
+                    .on(self.colors.normal.1)
+                    .attribute(style::Attribute::Underlined),
+            ),
+        );
         row += 1;
 
         // check how long our strings are, and map to two columns
@@ -227,12 +256,12 @@ impl<'a> PopupWin<'a> {
             .max()
             .expect("Could not parse keybindings.");
         let col_spacing = 5;
-        let n_cols = if help_win.get_cols() > (longest_line * 2 + col_spacing) as i32 {
+        let n_cols = if help_win.get_cols() > (longest_line * 2 + col_spacing) as u16 {
             2
         } else {
             1
         };
-        let keys_per_row = key_strs.len() as i32 / n_cols;
+        let keys_per_row = key_strs.len() as u16 / n_cols;
 
         // write each line of keys -- the list will be presented "down"
         // rather than "across", but we print to the screen a line at a
@@ -250,14 +279,14 @@ impl<'a> PopupWin<'a> {
                     } else {
                         longest_line
                     };
-                    line += &format!("{:<width$}", val, width = width);
+                    line += &format!("{val:<width$}", width = width);
                 }
             }
-            help_win.write_line(row + 1, line);
+            help_win.write_line(row + 1, line, None);
             row += 1;
         }
 
-        let _ = help_win.write_wrap_line(row + 2, "Press \"q\" to close this window.");
+        let _ = help_win.write_wrap_line(row + 2, "Press \"q\" to close this window.", None);
         return help_win;
     }
 
@@ -279,10 +308,11 @@ impl<'a> PopupWin<'a> {
         let mut download_panel = Panel::new(
             "New episodes".to_string(),
             0,
+            self.colors.clone(),
             self.total_rows - 1,
             self.total_cols,
             0,
-            0,
+            (1, 0, 0, 0),
         );
 
         let header = format!(
@@ -295,11 +325,12 @@ impl<'a> PopupWin<'a> {
             Some(header),
             LockVec::new(self.new_episodes.clone()),
         );
-        download_win.init();
+        download_win.redraw();
 
         return download_win;
     }
 
+    /// Appends a new episode to the list of new episodes.
     pub fn _add_episodes(&mut self, mut episodes: Vec<NewEpisode>) {
         self.new_episodes.append(&mut episodes);
     }
@@ -325,25 +356,22 @@ impl<'a> PopupWin<'a> {
     /// When there is a change to the active popup window, this should
     /// be called to check for other popup windows that are "in the
     /// queue" -- this lets one popup window appear over top of another
-    /// one, while keeping that second one in reserve. This function will
-    /// check for other popup windows to appear and change the active
-    /// window accordingly.
+    /// one, while keeping that second one in reserve. This function
+    /// will check for other popup windows to appear and change the
+    /// active window accordingly.
     fn change_win(&mut self) {
-        // The help window takes precedence over all other popup windows;
-        // the welcome window is lowest priority and only appears if all
-        // other windows are inactive
+        // The help window takes precedence over all other popup
+        // windows; the welcome window is lowest priority and only
+        // appears if all other windows are inactive
         if self.help_win && !self.popup.is_help_win() {
             let win = self.make_help_win();
-            win.refresh();
             self.popup = ActivePopup::HelpWin(win);
         } else if self.download_win && !self.popup.is_download_win() {
             let mut win = self.make_download_win();
-            win.update_items();
-            win.highlight_selected(true);
+            win.activate();
             self.popup = ActivePopup::DownloadWin(win);
         } else if self.welcome_win && !self.popup.is_welcome_win() {
             let win = self.make_welcome_win();
-            win.refresh();
             self.popup = ActivePopup::WelcomeWin(win);
         } else if !self.help_win && !self.download_win && !self.welcome_win && !self.popup.is_none()
         {
@@ -353,23 +381,23 @@ impl<'a> PopupWin<'a> {
 
     /// When a popup window is active, this handles the user's keyboard
     /// input that is relevant for that window.
-    pub fn handle_input(&mut self, input: Input) -> UiMsg {
+    pub fn handle_input(&mut self, input: KeyEvent) -> UiMsg {
         let mut msg = UiMsg::Noop;
         match self.popup {
             ActivePopup::HelpWin(ref mut _win) => {
-                match input {
-                    Input::KeyExit
-                    | Input::Character('\u{1b}') // Esc
-                    | Input::Character('q')
-                    | Input::Character('Q') => {
+                match input.code {
+                    KeyCode::Esc
+                    | KeyCode::Char('\u{1b}') // Esc
+                    | KeyCode::Char('q')
+                    | KeyCode::Char('Q') => {
                         self.turn_off_help_win();
                     }
                     _ => (),
                 }
             }
             ActivePopup::DownloadWin(ref mut menu) => match self.keymap.get_from_input(input) {
-                Some(UserAction::Down) => menu.scroll(1),
-                Some(UserAction::Up) => menu.scroll(-1),
+                Some(UserAction::Down) => menu.scroll(Scroll::Down(1)),
+                Some(UserAction::Up) => menu.scroll(Scroll::Up(1)),
 
                 Some(UserAction::MarkPlayed) => {
                     menu.select_item();
@@ -421,9 +449,9 @@ impl<'a> PopupWin<'a> {
                 let mut s = "".to_string();
                 for (i, key) in keys.iter().enumerate().take(max_keys) {
                     if i == max_keys - 1 {
-                        s = format!("{}, \"{}\"", s, key);
+                        s = format!("{s}, \"{key}\"");
                     } else {
-                        s = format!("{}, or \"{}\"", s, key);
+                        s = format!("{s}, or \"{key}\"");
                     }
                 }
                 s

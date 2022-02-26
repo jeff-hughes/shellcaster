@@ -1,11 +1,12 @@
 use anyhow::{anyhow, Result};
 use std::io::Read;
 use std::sync::mpsc;
+use std::time::Duration;
 
-use crate::sanitizer::parse_from_rfc2822_with_fallback;
 use chrono::{DateTime, Utc};
 use lazy_static::lazy_static;
 use regex::{Match, Regex};
+use rfc822_sanitizer::parse_from_rfc2822_with_fallback;
 use rss::{Channel, Item};
 
 use crate::threadpool::Threadpool;
@@ -72,18 +73,23 @@ pub fn check_feed(
 /// Given a URL, this attempts to pull the data about a podcast and its
 /// episodes from an RSS feed.
 fn get_feed_data(url: String, mut max_retries: usize) -> Result<PodcastNoId> {
+    let agent_builder = ureq::builder();
+    #[cfg(feature = "native_tls")]
+    let tls_connector = std::sync::Arc::new(native_tls::TlsConnector::new().unwrap());
+    #[cfg(feature = "native_tls")]
+    let agent_builder = agent_builder.tls_connector(tls_connector);
+    let agent = agent_builder.build();
+
     let request: Result<ureq::Response> = loop {
-        let response = ureq::get(&url)
-            .timeout_connect(5000)
-            .timeout_read(15000)
-            .call();
-        if response.error() {
-            max_retries -= 1;
-            if max_retries == 0 {
-                break Err(anyhow!("No response from feed"));
+        let response = agent.get(&url).timeout(Duration::from_secs(20)).call();
+        match response {
+            Ok(resp) => break Ok(resp),
+            Err(_) => {
+                max_retries -= 1;
+                if max_retries == 0 {
+                    break Err(anyhow!("No response from feed"));
+                }
             }
-        } else {
-            break Ok(response);
         }
     };
 
@@ -115,10 +121,7 @@ fn parse_feed_data(channel: Channel, url: &str) -> PodcastNoId {
     let mut author = None;
     let mut explicit = None;
     if let Some(itunes) = channel.itunes_ext() {
-        author = match itunes.author() {
-            None => None,
-            Some(a) => Some(a.to_string()),
-        };
+        author = itunes.author().map(|a| a.to_string());
         explicit = match itunes.explicit() {
             None => None,
             Some(s) => {
@@ -165,6 +168,10 @@ fn parse_episode_data(item: &Item) -> EpisodeNoId {
         Some(enc) => enc.url().to_string(),
         None => "".to_string(),
     };
+    let guid = match item.guid() {
+        Some(guid) => guid.value().to_string(),
+        None => "".to_string(),
+    };
     let description = match item.description() {
         Some(dsc) => dsc.to_string(),
         None => "".to_string(),
@@ -186,15 +193,13 @@ fn parse_episode_data(item: &Item) -> EpisodeNoId {
 
     let mut duration = None;
     if let Some(itunes) = item.itunes_ext() {
-        duration = match duration_to_int(itunes.duration()) {
-            Some(dur) => Some(dur as i64),
-            None => None,
-        };
+        duration = duration_to_int(itunes.duration()).map(|dur| dur as i64);
     }
 
     return EpisodeNoId {
         title: title,
         url: url,
+        guid: guid,
         description: description,
         pubdate: pubdate,
         duration: duration,
@@ -208,61 +213,46 @@ fn parse_episode_data(item: &Item) -> EpisodeNoId {
 fn duration_to_int(duration: Option<&str>) -> Option<i32> {
     match duration {
         Some(dur) => {
-            match RE_DURATION.captures(&dur) {
+            match RE_DURATION.captures(dur) {
                 Some(cap) => {
                     /*
                      * Provided that the regex succeeds, we should have
                      * 4 capture groups (with 0th being the full match).
                      * Depending on the string format, however, some of
                      * these may return None. We first loop through the
-                     * capture groups and push Some results to a vector.
-                     * After that, we convert from a vector of Results to
-                     * a Result with a vector, using the collect() method.
-                     * This will fail on the first error, so the duration
-                     * is parsed only if all components of it were
-                     * successfully converted to integers. Finally, we
-                     * convert hours, minutes, and seconds into a total
-                     * duration in seconds and return.
+                     * capture groups and push Some results to an array.
+                     * This will fail on the first non-numeric value,
+                     * so the duration is parsed only if all components
+                     * of it were successfully converted to integers.
+                     * Finally, we convert hours, minutes, and seconds
+                     * into a total duration in seconds and return.
                      */
 
-                    let mut times = Vec::new();
-                    let mut first = true;
-                    for c in cap.iter() {
-                        // cap[0] is always full match
-                        if first {
-                            first = false;
-                            continue;
-                        }
-
-                        if let Some(value) = c {
-                            times.push(regex_to_int(value));
+                    let mut times = [None; 3];
+                    let mut counter = 0;
+                    // cap[0] is always full match
+                    for c in cap.iter().skip(1).flatten() {
+                        if let Ok(intval) = regex_to_int(c) {
+                            times[counter] = Some(intval);
+                            counter += 1;
+                        } else {
+                            return None;
                         }
                     }
 
-                    match times.len() {
+                    return match counter {
                         // HH:MM:SS
-                        3 => {
-                            let result: Result<Vec<_>, _> = times.into_iter().collect();
-                            match result {
-                                Ok(v) => Some(v[0] * 60 * 60 + v[1] * 60 + v[2]),
-                                Err(_) => None,
-                            }
-                        }
+                        3 => Some(
+                            times[0].unwrap() * 60 * 60
+                                + times[1].unwrap() * 60
+                                + times[2].unwrap(),
+                        ),
                         // MM:SS
-                        2 => {
-                            let result: Result<Vec<_>, _> = times.into_iter().collect();
-                            match result {
-                                Ok(v) => Some(v[0] * 60 + v[1]),
-                                Err(_) => None,
-                            }
-                        }
+                        2 => Some(times[0].unwrap() * 60 + times[1].unwrap()),
                         // SS
-                        1 => match times[0] {
-                            Ok(i) => Some(i),
-                            Err(_) => None,
-                        },
+                        1 => times[0],
                         _ => None,
-                    }
+                    };
                 }
                 None => None,
             }

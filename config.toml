@@ -91,6 +91,9 @@ delete_all = [ "X" ]
 remove = [ "r" ]
 remove_all = [ "R" ]
 
+filter_played = [ "1" ]
+filter_downloaded = [ "2" ]
+
 help = [ "?" ]
 quit = [ "q" ]
 
@@ -99,7 +102,9 @@ quit = [ "q" ]
 
 # Colors can be identified in three ways:
 # 1. Using color names defined by your terminal:
-#    - black, blue, cyan, green, magenta, red, white, or yellow
+#    - black, darkgrey, red, darkred, green, darkgreen, yellow,
+#      darkyellow, blue, darkblue, magenta, darkmagenta, cyan,
+#      darkcyan, white, or grey
 #    - The special color name "terminal" can also be used to specify
 #      your terminal's default foreground or background color; this is
 #      particularly useful if your terminal background is transparent --
@@ -113,8 +118,13 @@ quit = [ "q" ]
 # on terminals without the ability to add/change colors.
 
 # all regular text
-normal_foreground = "white"
+normal_foreground = "grey"
 normal_background = "black"
+
+# colors for bolded text, including podcasts/episodes that are unplayed,
+# and some titles
+bold_foreground = "white"
+bold_background = "black"
 
 # colors for the currently selected podcast/episode
 highlighted_active_foreground = "rgb(85, 85, 85)"

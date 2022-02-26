@@ -1,8 +1,8 @@
 [package]
 name = "shellcaster"
-version = "1.2.1"
+version = "2.0.0"
 authors = ["Jeff Hughes <jeff.hughes@gmail.com>"]
-edition = "2018"
+edition = "2021"
 license = "GPL-3.0-or-later"
 description = "A terminal-based podcast manager to subscribe to and play podcasts."
 keywords = ["podcast", "terminal", "TUI", "curses"]
@@ -16,33 +16,32 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-pancurses = "0.16.1"
-rss = "1.10.0"
-rusqlite = "0.21.0"
-clap = "2.33.1"
+crossterm = "0.23.0"
+rss = "2.0.0"
+rusqlite = "0.26.3"
+ureq = "2.4.0"
+native-tls = { version = "0.2.8", optional = true }
+clap = { version = "3.1.2", features = ["cargo", "env"] }
 toml = "0.5.8"
-anyhow = "1.0.40"
-serde = { version = "1.0.125", features = ["derive"] }
-chrono = "0.4.11"
+anyhow = "1.0.55"
+serde = { version = "1.0.136", features = ["derive"] }
+chrono = "0.4.19"
 lazy_static = "1.4.0"
 regex = "1.5.4"
-sanitize-filename = "0.2.1"
+sanitize-filename = "0.3.0"
 shellexpand = "2.1.0"
 dirs = { package = "dirs-next", version = "2.0.0" }
-opml = "0.3.0"
+opml = "1.1.3"
+ahash = "0.7.6"
 nohash-hasher = "0.2.0"
-unicode-segmentation = "1.7.1"
-textwrap = "0.13.4"
-escaper = "0.1.0"
-semver = "0.10.0"
-
-[dependencies.ureq]
-version = "1.5.4"
-default-features = false
-
+unicode-segmentation = "1.8.0"
+textwrap = "0.14.2"
+escaper = "0.1.1"
+rfc822_sanitizer = "0.3.6"
+semver = "1.0.6"
 
 [features]
-default = ["wide", "native-tls"]
+default = ["native_certs"]
 
 # bundle sqlite library with app; recommended for Windows. This is
 # turned on by default, but if you are building this for a package
@@ -50,15 +49,15 @@ default = ["wide", "native-tls"]
 # adding libsqlite3-dev or sqlite3 as a dependency on the package
 sqlite_bundled = ["rusqlite/bundled"]
 
-# by default, shellcaster uses `native-tls` crate to enable TLS support;
-# if this is causing issues for some websites, you can try building it
-# to use `rustls` crate instead; build with `--no-default-features` and
-# then specify `--features "rustls"`
-native-tls = ["ureq/native-tls"]
-rustls = ["ureq/tls"]
+# by default, shellcaster uses the `rustls` crate to enable TLS support;
+# if this is causing issues for some URLs (e.g., those using TLS 1.0 or
+# 1.1), you can try building it to use the `native-tls` crate instead by
+# specifying `--features "native_tls"`
+native_tls = ["native-tls", "ureq/native-tls"]
 
-# specific to Unix systems; see pancurses docs for more details
-wide = ["pancurses/wide"]
-
-# specific to Windows; see pancurses docs for more details
-win32 = ["pancurses/win32"]
+# the `native_certs` feature (enabled by default) extracts the trusted
+# certificate roots from your OS's trust store; you can instead use a
+# bundled copy of the Mozilla Root program (which will thus not update
+# if the program is not updated). To do so, build shellcaster with
+# `--no-default-features` to turn off use of the native certificates
+native_certs = ["ureq/native-certs"]

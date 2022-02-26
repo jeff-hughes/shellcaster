@@ -5,7 +5,7 @@ use std::process;
 use std::sync::mpsc;
 
 use anyhow::{anyhow, Context, Result};
-use clap::{App, Arg, SubCommand};
+use clap::{Arg, Command};
 
 mod config;
 mod db;
@@ -15,7 +15,6 @@ mod keymap;
 mod main_controller;
 mod opml;
 mod play_file;
-mod sanitizer;
 mod threadpool;
 mod types;
 mod ui;
@@ -56,51 +55,50 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// *Export subcommand:*
 /// Connects to the sqlite database, and reads all podcasts into an OPML
 /// file, with the location specified from the command line arguments.
-#[allow(clippy::while_let_on_iterator)]
 fn main() -> Result<()> {
     // SETUP -----------------------------------------------------------
 
     // set up the possible command line arguments and subcommands
-    let args = App::new(clap::crate_name!())
+    let args = Command::new(clap::crate_name!())
         .version(clap::crate_version!())
         // .author(clap::crate_authors!(", "))
         .author("Jeff Hughes <jeff.hughes@gmail.com>")
         .about(clap::crate_description!())
-        .arg(Arg::with_name("config")
-            .short("c")
+        .arg(Arg::new("config")
+            .short('c')
             .long("config")
             .env("SHELLCASTER_CONFIG")
             .global(true)
             .takes_value(true)
             .value_name("FILE")
             .help("Sets a custom config file location. Can also be set with environment variable."))
-        .subcommand(SubCommand::with_name("sync")
+        .subcommand(Command::new("sync")
             .about("Syncs all podcasts in database")
-            .arg(Arg::with_name("quiet")
-                .short("q")
+            .arg(Arg::new("quiet")
+                .short('q')
                 .long("quiet")
                 .help("Suppresses output messages to stdout.")))
-        .subcommand(SubCommand::with_name("import")
+        .subcommand(Command::new("import")
             .about("Imports podcasts from an OPML file")
-            .arg(Arg::with_name("file")
-                .short("f")
+            .arg(Arg::new("file")
+                .short('f')
                 .long("file")
                 .takes_value(true)
                 .value_name("FILE")
                 .help("Specifies the filepath to the OPML file to be imported. If this flag is not set, the command will read from stdin."))
-            .arg(Arg::with_name("replace")
-                .short("r")
+            .arg(Arg::new("replace")
+                .short('r')
                 .long("replace")
                 .takes_value(false)
                 .help("If set, the contents of the OPML file will replace all existing data in the shellcaster database."))
-            .arg(Arg::with_name("quiet")
-                .short("q")
+            .arg(Arg::new("quiet")
+                .short('q')
                 .long("quiet")
                 .help("Suppresses output messages to stdout.")))
-        .subcommand(SubCommand::with_name("export")
+        .subcommand(Command::new("export")
             .about("Exports podcasts to an OPML file")
-            .arg(Arg::with_name("file")
-                .short("f")
+            .arg(Arg::new("file")
+                .short('f')
                 .long("file")
                 .takes_value(true)
                 .value_name("FILE")
@@ -125,13 +123,13 @@ fn main() -> Result<()> {
 
     return match args.subcommand() {
         // SYNC SUBCOMMAND ----------------------------------------------
-        ("sync", Some(sub_args)) => sync_podcasts(&db_path, config, sub_args),
+        Some(("sync", sub_args)) => sync_podcasts(&db_path, config, sub_args),
 
         // IMPORT SUBCOMMAND --------------------------------------------
-        ("import", Some(sub_args)) => import(&db_path, config, sub_args),
+        Some(("import", sub_args)) => import(&db_path, config, sub_args),
 
         // EXPORT SUBCOMMAND --------------------------------------------
-        ("export", Some(sub_args)) => export(&db_path, sub_args),
+        Some(("export", sub_args)) => export(&db_path, sub_args),
 
         // MAIN COMMAND -------------------------------------------------
         _ => {
@@ -199,18 +197,16 @@ fn sync_podcasts(db_path: &Path, config: Config, args: &clap::ArgMatches) -> Res
         match message {
             Message::Feed(FeedMsg::SyncData((pod_id, pod))) => {
                 let title = pod.title.clone();
-                let db_result;
-
-                db_result = db_inst.update_podcast(pod_id, pod);
+                let db_result = db_inst.update_podcast(pod_id, pod);
                 match db_result {
                     Ok(_) => {
                         if !args.is_present("quiet") {
-                            println!("Synced {}", title);
+                            println!("Synced {title}");
                         }
                     }
                     Err(_err) => {
                         failure = true;
-                        eprintln!("Error synchronizing {}", title);
+                        eprintln!("Error synchronizing {title}");
                     }
                 }
             }
@@ -248,10 +244,10 @@ fn import(db_path: &Path, config: Config, args: &clap::ArgMatches) -> Result<()>
     let xml = match args.value_of("file") {
         Some(filepath) => {
             let mut f = File::open(filepath)
-                .with_context(|| format!("Could not open OPML file: {}", filepath))?;
+                .with_context(|| format!("Could not open OPML file: {filepath}"))?;
             let mut contents = String::new();
             f.read_to_string(&mut contents)
-                .with_context(|| format!("Failed to read from OPML file: {}", filepath))?;
+                .with_context(|| format!("Failed to read from OPML file: {filepath}"))?;
             contents
         }
         None => {
@@ -327,18 +323,16 @@ fn import(db_path: &Path, config: Config, args: &clap::ArgMatches) -> Result<()>
         match message {
             Message::Feed(FeedMsg::NewData(pod)) => {
                 let title = pod.title.clone();
-                let db_result;
-
-                db_result = db_inst.insert_podcast(pod);
+                let db_result = db_inst.insert_podcast(pod);
                 match db_result {
                     Ok(_) => {
                         if !args.is_present("quiet") {
-                            println!("Added {}", title);
+                            println!("Added {title}");
                         }
                     }
                     Err(_err) => {
                         failure = true;
-                        eprintln!("Error adding {}", title);
+                        eprintln!("Error adding {title}");
                     }
                 }
             }
@@ -346,7 +340,7 @@ fn import(db_path: &Path, config: Config, args: &clap::ArgMatches) -> Result<()>
             Message::Feed(FeedMsg::Error(feed)) => {
                 failure = true;
                 if let Some(t) = feed.title {
-                    eprintln!("Error retrieving RSS feed: {}", t);
+                    eprintln!("Error retrieving RSS feed: {t}");
                 } else {
                     eprintln!("Error retrieving RSS feed");
                 }
@@ -372,12 +366,12 @@ fn import(db_path: &Path, config: Config, args: &clap::ArgMatches) -> Result<()>
 /// Exports all podcasts to OPML format, either printing to stdout or
 /// exporting to a file.
 fn export(db_path: &Path, args: &clap::ArgMatches) -> Result<()> {
-    let db_inst = Database::connect(&db_path)?;
+    let db_inst = Database::connect(db_path)?;
     let podcast_list = db_inst.get_podcasts()?;
     let opml = opml::export(podcast_list);
 
     let xml = opml
-        .to_xml()
+        .to_string()
         .map_err(|err| anyhow!(err))
         .with_context(|| "Could not create OPML format")?;
 
@@ -385,12 +379,12 @@ fn export(db_path: &Path, args: &clap::ArgMatches) -> Result<()> {
         // export to file
         Some(file) => {
             let mut dst = File::create(file)
-                .with_context(|| format!("Could not create output file: {}", file))?;
+                .with_context(|| format!("Could not create output file: {file}"))?;
             dst.write_all(xml.as_bytes())
-                .with_context(|| format!("Could not copy OPML data to output file: {}", file))?;
+                .with_context(|| format!("Could not copy OPML data to output file: {file}"))?;
         }
         // print to stdout
-        None => println!("{}", xml),
+        None => println!("{xml}"),
     }
     return Ok(());
 }

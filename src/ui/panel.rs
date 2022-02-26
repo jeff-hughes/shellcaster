@@ -1,31 +1,39 @@
-use chrono::{DateTime, Utc};
-use pancurses::{Attribute, Window};
+use std::io;
+use std::rc::Rc;
 
-use super::ColorType;
+use crossterm::style::{self, Stylize};
+use crossterm::{cursor, queue};
 
-/// Struct holding the raw data used for building the details panel.
-pub struct Details {
-    pub pod_title: Option<String>,
-    pub ep_title: Option<String>,
-    pub pubdate: Option<DateTime<Utc>>,
-    pub duration: Option<String>,
-    pub explicit: Option<bool>,
-    pub description: Option<String>,
-}
+use super::AppColors;
 
-/// Panels abstract away a pancurses window, and handles all methods
-/// associated with writing data to that window. A panel includes a
-/// border and margin around the edge of the window, and a title that
-/// appears at the top. The Panel will translate the x and y coordinates
-/// to account for the border and margins, so users of the methods can
-/// calculate rows and columns relative to the Panel.
+pub const VERTICAL: &str = "│";
+pub const HORIZONTAL: &str = "─";
+pub const TOP_RIGHT: &str = "┐";
+pub const TOP_LEFT: &str = "┌";
+pub const BOTTOM_RIGHT: &str = "┘";
+pub const BOTTOM_LEFT: &str = "└";
+pub const TOP_TEE: &str = "┬";
+pub const BOTTOM_TEE: &str = "┴";
+
+
+/// Panels abstract away a terminal "window" (section of the screen),
+/// and handle all methods associated with writing data to that window.
+/// A panel includes a border and margin around the edge of the window,
+/// and a title that appears at the top. Margins are set individually,
+/// in the order (top, right, bottom, left). The Panel will translate
+/// the x and y coordinates to account for the border and margins, so
+/// users of the methods can calculate rows and columns relative to the
+/// Panel (i.e., x = 0 and y = 0 represent the top-left printable
+/// cell in the window).
 #[derive(Debug)]
 pub struct Panel {
-    window: Window,
     screen_pos: usize,
+    pub colors: Rc<AppColors>,
     title: String,
-    n_row: i32,
-    n_col: i32,
+    start_x: u16,
+    n_row: u16,
+    n_col: u16,
+    margins: (u16, u16, u16, u16),
 }
 
 impl Panel {
@@ -33,28 +41,64 @@ impl Panel {
     pub fn new(
         title: String,
         screen_pos: usize,
-        n_row: i32,
-        n_col: i32,
-        start_y: i32,
-        start_x: i32,
+        colors: Rc<AppColors>,
+        n_row: u16,
+        n_col: u16,
+        start_x: u16,
+        margins: (u16, u16, u16, u16),
     ) -> Self {
-        let panel_win = pancurses::newwin(n_row, n_col, start_y, start_x);
-
         return Panel {
-            window: panel_win,
             screen_pos: screen_pos,
+            colors: colors,
             title: title,
+            start_x: start_x,
             n_row: n_row,
             n_col: n_col,
+            margins: margins,
         };
     }
 
     /// Redraws borders and refreshes the window to display on terminal.
-    pub fn refresh(&self) {
-        self.window
-            .bkgd(pancurses::ColorPair(ColorType::Normal as u8));
+    pub fn redraw(&self) {
+        self.clear();
         self.draw_border();
-        self.window.refresh();
+    }
+
+    /// Clears the whole Panel.
+    pub fn clear(&self) {
+        let empty = vec![" "; self.n_col as usize];
+        let empty_string = empty.join("");
+        for r in 0..(self.n_row - 1) {
+            queue!(
+                io::stdout(),
+                cursor::MoveTo(self.start_x, r),
+                style::PrintStyledContent(
+                    style::style(&empty_string)
+                        .with(self.colors.normal.0)
+                        .on(self.colors.normal.1)
+                ),
+            )
+            .unwrap();
+        }
+    }
+
+    /// Clears the inner section of the Panel, leaving the borders
+    /// intact.
+    pub fn clear_inner(&self) {
+        let empty = vec![" "; self.n_col as usize - 2];
+        let empty_string = empty.join("");
+        for r in 1..(self.n_row - 1) {
+            queue!(
+                io::stdout(),
+                cursor::MoveTo(self.start_x + 1, r),
+                style::PrintStyledContent(
+                    style::style(&empty_string)
+                        .with(self.colors.normal.0)
+                        .on(self.colors.normal.1)
+                ),
+            )
+            .unwrap();
+        }
     }
 
     /// Draws a border around the window.
@@ -63,70 +107,139 @@ impl Panel {
         let bot_left;
         match self.screen_pos {
             0 => {
-                top_left = pancurses::ACS_ULCORNER();
-                bot_left = pancurses::ACS_LLCORNER();
+                top_left = TOP_LEFT;
+                bot_left = BOTTOM_LEFT;
             }
             _ => {
-                top_left = pancurses::ACS_TTEE();
-                bot_left = pancurses::ACS_BTEE();
+                top_left = TOP_TEE;
+                bot_left = BOTTOM_TEE;
             }
         }
-        self.window.border(
-            pancurses::ACS_VLINE(),
-            pancurses::ACS_VLINE(),
-            pancurses::ACS_HLINE(),
-            pancurses::ACS_HLINE(),
-            top_left,
-            pancurses::ACS_URCORNER(),
-            bot_left,
-            pancurses::ACS_LRCORNER(),
-        );
+        let mut border_top = vec![top_left];
+        let mut border_bottom = vec![bot_left];
+        for _ in 0..(self.n_col - 2) {
+            border_top.push(HORIZONTAL);
+            border_bottom.push(HORIZONTAL);
+        }
+        border_top.push(TOP_RIGHT);
+        border_bottom.push(BOTTOM_RIGHT);
 
-        self.window.mvaddstr(0, 2, &self.title);
-    }
+        queue!(
+            io::stdout(),
+            style::SetColors(style::Colors::new(
+                self.colors.normal.0,
+                self.colors.normal.1
+            )),
+            cursor::MoveTo(self.start_x, 0),
+            style::Print(border_top.join("")),
+            cursor::MoveTo(self.start_x, self.n_row - 1),
+            style::Print(border_bottom.join("")),
+        )
+        .unwrap();
 
-    /// Erases all content on the window, and redraws the border. Does
-    /// not refresh the screen.
-    pub fn erase(&self) {
-        self.window.erase();
-        self.window
-            .bkgdset(pancurses::ColorPair(ColorType::Normal as u8));
-        self.draw_border();
+        for r in 1..(self.n_row - 1) {
+            queue!(
+                io::stdout(),
+                cursor::MoveTo(self.start_x, r),
+                style::Print(VERTICAL.to_string()),
+                cursor::MoveTo(self.start_x + self.n_col - 1, r),
+                style::Print(VERTICAL.to_string()),
+            )
+            .unwrap();
+        }
+
+        queue!(
+            io::stdout(),
+            cursor::MoveTo(self.start_x + 2, 0),
+            style::Print(&self.title),
+            style::ResetColor,
+        )
+        .unwrap();
     }
 
     /// Writes a line of text to the window. Note that this does not do
     /// checking for line length, so strings that are too long will end
-    /// up wrapping and may mess up the format. use `write_wrap_line()`
+    /// up wrapping and may mess up the format. Use `write_wrap_line()`
     /// if you need line wrapping.
-    pub fn write_line(&self, y: i32, string: String) {
-        self.window.mvaddstr(self.abs_y(y), self.abs_x(0), string);
+    pub fn write_line(&self, y: u16, string: String, style: Option<style::ContentStyle>) {
+        let styled = match style {
+            Some(style) => style.apply(string),
+            None => style::style(string)
+                .with(self.colors.normal.0)
+                .on(self.colors.normal.1),
+        };
+        queue!(
+            io::stdout(),
+            cursor::MoveTo(self.abs_x(0), self.abs_y(y)),
+            style::PrintStyledContent(styled)
+        )
+        .unwrap();
     }
 
-    /// Writes a line of text to the window, first moving all text on
-    /// line `y` and below down one row.
-    pub fn insert_line(&self, y: i32, string: String) {
-        self.window.mv(self.abs_y(y), 0);
-        self.window.insertln();
-        self.window.mv(self.abs_y(y), self.abs_x(0));
-        self.window.addstr(string);
-    }
+    /// Writes a line of styled text to the window, representing a key
+    /// and value. The text will be shown as "key: value", and styled
+    /// with the provided styles. Note that this does not do checking
+    /// for line length, so strings that are too long will end up
+    /// wrapping and may mess up the format. Use `write_wrap_line()` if
+    /// you need line wrapping.
+    pub fn write_key_value_line(
+        &self,
+        y: u16,
+        mut key: String,
+        mut value: String,
+        key_style: Option<style::ContentStyle>,
+        value_style: Option<style::ContentStyle>,
+    ) {
+        key.push(':');
+        value.insert(0, ' ');
 
-    /// Deletes a line of text from the window.
-    pub fn delete_line(&self, y: i32) {
-        self.window.mv(self.abs_y(y), self.abs_x(-1));
-        self.window.deleteln();
+        queue!(io::stdout(), cursor::MoveTo(self.abs_x(0), self.abs_y(y))).unwrap();
+
+        let key_styled = match key_style {
+            Some(kstyle) => kstyle.apply(key),
+            None => style::style(key)
+                .with(self.colors.normal.0)
+                .on(self.colors.normal.1),
+        };
+        queue!(io::stdout(), style::PrintStyledContent(key_styled)).unwrap();
+        let value_styled = match value_style {
+            Some(vstyle) => vstyle.apply(value),
+            None => style::style(value)
+                .with(self.colors.normal.0)
+                .on(self.colors.normal.1),
+        };
+        queue!(io::stdout(), style::PrintStyledContent(value_styled)).unwrap();
     }
 
     /// Writes one or more lines of text from a String, word wrapping
     /// when necessary. `start_y` refers to the row to start at (word
     /// wrapping makes it unknown where text will end). Returns the row
     /// on which the text ended.
-    pub fn write_wrap_line(&self, start_y: i32, string: &str) -> i32 {
+    pub fn write_wrap_line(
+        &self,
+        start_y: u16,
+        string: &str,
+        style: Option<style::ContentStyle>,
+    ) -> u16 {
         let mut row = start_y;
         let max_row = self.get_rows();
+        if row >= max_row {
+            return row;
+        }
+        let content_style = match style {
+            Some(style) => style,
+            None => style::ContentStyle::new()
+                .with(self.colors.normal.0)
+                .on(self.colors.normal.1),
+        };
         let wrapper = textwrap::wrap(string, self.get_cols() as usize);
         for line in wrapper {
-            self.window.mvaddstr(self.abs_y(row), self.abs_x(0), line);
+            queue!(
+                io::stdout(),
+                cursor::MoveTo(self.abs_x(0), self.abs_y(row)),
+                style::PrintStyledContent(content_style.apply(line))
+            )
+            .unwrap();
             row += 1;
 
             if row >= max_row {
@@ -136,123 +249,36 @@ impl Panel {
         return row - 1;
     }
 
-    /// Write the specific template used for the details panel. This is
-    /// not the most elegant code, but it works.
-    pub fn details_template(&self, start_y: i32, details: Details) {
-        let mut row = start_y - 1;
-
-        self.window.attron(Attribute::Bold);
-        // podcast title
-        match details.pod_title {
-            Some(t) => row = self.write_wrap_line(row + 1, &t),
-            None => row = self.write_wrap_line(row + 1, "No title"),
-        }
-
-        // episode title
-        match details.ep_title {
-            Some(t) => row = self.write_wrap_line(row + 1, &t),
-            None => row = self.write_wrap_line(row + 1, "No title"),
-        }
-        self.window.attroff(Attribute::Bold);
-
-        row += 1; // blank line
-
-        // published date
-        if let Some(date) = details.pubdate {
-            let new_row = self.write_wrap_line(
-                row + 1,
-                &format!("Published: {}", date.format("%B %-d, %Y")),
-            );
-            self.change_attr(row + 1, 0, 10, pancurses::A_UNDERLINE, ColorType::Normal);
-            row = new_row;
-        }
-
-        // duration
-        if let Some(dur) = details.duration {
-            let new_row = self.write_wrap_line(row + 1, &format!("Duration: {}", dur));
-            self.change_attr(row + 1, 0, 9, pancurses::A_UNDERLINE, ColorType::Normal);
-            row = new_row;
-        }
-
-        // explicit
-        if let Some(exp) = details.explicit {
-            let new_row = if exp {
-                self.write_wrap_line(row + 1, "Explicit: Yes")
-            } else {
-                self.write_wrap_line(row + 1, "Explicit: No")
-            };
-            self.change_attr(row + 1, 0, 9, pancurses::A_UNDERLINE, ColorType::Normal);
-            row = new_row;
-        }
-
-        row += 1; // blank line
-
-        // description
-        match details.description {
-            Some(desc) => {
-                self.window.attron(Attribute::Bold);
-                row = self.write_wrap_line(row + 1, "Description:");
-                self.window.attroff(Attribute::Bold);
-                let _row = self.write_wrap_line(row + 1, &desc);
-            }
-            None => {
-                let _row = self.write_wrap_line(row + 1, "No description.");
-            }
-        }
-    }
-
-    /// Changes the attributes (text style and color) for a line of
-    /// text.
-    pub fn change_attr(
-        &self,
-        y: i32,
-        x: i32,
-        nchars: i32,
-        attr: pancurses::chtype,
-        color: ColorType,
-    ) {
-        self.window
-            .mvchgat(self.abs_y(y), self.abs_x(x), nchars, attr, color as i16);
-    }
-
-    /// Updates window size
-    pub fn resize(&mut self, n_row: i32, n_col: i32, start_y: i32, start_x: i32) {
+    /// Updates window size.
+    pub fn resize(&mut self, n_row: u16, n_col: u16, start_x: u16) {
         self.n_row = n_row;
         self.n_col = n_col;
-
-        // apparently pancurses does not implement `wresize()`
-        // from ncurses, so instead we create an entirely new
-        // window every time the terminal is resized...not ideal,
-        // but c'est la vie
-        let oldwin = std::mem::replace(
-            &mut self.window,
-            pancurses::newwin(n_row, n_col, start_y, start_x),
-        );
-        oldwin.delwin();
+        self.start_x = start_x;
     }
 
     /// Returns the effective number of rows (accounting for borders
     /// and margins).
-    pub fn get_rows(&self) -> i32 {
-        return self.n_row - 2; // border on top and bottom
+    pub fn get_rows(&self) -> u16 {
+        // 2 for borders on top and bottom
+        return self.n_row - self.margins.0 - self.margins.2 - 2;
     }
 
     /// Returns the effective number of columns (accounting for
     /// borders and margins).
-    pub fn get_cols(&self) -> i32 {
-        return self.n_col - 5; // 2 for border, 2 for margins, and 1
-                               // extra for some reason...
+    pub fn get_cols(&self) -> u16 {
+        // 2 for borders on left and right
+        return self.n_col - self.margins.1 - self.margins.3 - 2;
     }
 
-    /// Calculates the y-value relative to the window rather than to the
-    /// panel (i.e., taking into account borders and margins).
-    fn abs_y(&self, y: i32) -> i32 {
-        return y + 1;
+    /// Calculates the y-value relative to the terminal rather than to
+    /// the panel (i.e., taking into account borders and margins).
+    fn abs_y(&self, y: u16) -> u16 {
+        return y + self.margins.0 + 1;
     }
 
-    /// Calculates the x-value relative to the window rather than to the
-    /// panel (i.e., taking into account borders and margins).
-    fn abs_x(&self, x: i32) -> i32 {
-        return x + 2;
+    /// Calculates the x-value relative to the terminal rather than to
+    /// the panel (i.e., taking into account borders and margins).
+    fn abs_x(&self, x: u16) -> u16 {
+        return x + self.start_x + self.margins.3 + 1;
     }
 }
