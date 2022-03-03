@@ -73,7 +73,9 @@ pub fn check_feed(
 /// Given a URL, this attempts to pull the data about a podcast and its
 /// episodes from an RSS feed.
 fn get_feed_data(url: String, mut max_retries: usize) -> Result<PodcastNoId> {
-    let agent_builder = ureq::builder();
+    let agent_builder = ureq::builder()
+        .timeout_connect(Duration::from_secs(5))
+        .timeout_read(Duration::from_secs(20));
     #[cfg(feature = "native_tls")]
     let tls_connector = std::sync::Arc::new(native_tls::TlsConnector::new().unwrap());
     #[cfg(feature = "native_tls")]
@@ -81,7 +83,7 @@ fn get_feed_data(url: String, mut max_retries: usize) -> Result<PodcastNoId> {
     let agent = agent_builder.build();
 
     let request: Result<ureq::Response> = loop {
-        let response = agent.get(&url).timeout(Duration::from_secs(20)).call();
+        let response = agent.get(&url).call();
         match response {
             Ok(resp) => break Ok(resp),
             Err(_) => {
