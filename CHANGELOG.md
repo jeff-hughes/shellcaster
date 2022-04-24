@@ -1,5 +1,8 @@
 # Changelog
 
+## v2.0.1 (2022-03-03)
+- Bug fix release to handle improper timeouts on HTTP requests
+
 ## v2.0.0 (2022-02-26)
 Shellcaster version 2.0.0 brings many added features and performance improvements, but there are a few breaking changes to the configuration file to be aware of. These are listed below. You can download the default config file from here, to reference when updating your local config: https://raw.githubusercontent.com/jeff-hughes/shellcaster/master/config.toml
 

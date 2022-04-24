@@ -963,7 +963,7 @@ dependencies = [
 
 [[package]]
 name = "shellcaster"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "ahash",
  "anyhow",

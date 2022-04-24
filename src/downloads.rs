@@ -58,7 +58,9 @@ pub fn download_list(
 /// Downloads a file to a local filepath, returning DownloadMsg variant
 /// indicating success or failure.
 fn download_file(mut ep_data: EpData, dest: PathBuf, mut max_retries: usize) -> DownloadMsg {
-    let agent_builder = ureq::builder();
+    let agent_builder = ureq::builder()
+        .timeout_connect(Duration::from_secs(10))
+        .timeout_read(Duration::from_secs(120));
     #[cfg(feature = "native_tls")]
     let tls_connector = std::sync::Arc::new(native_tls::TlsConnector::new().unwrap());
     #[cfg(feature = "native_tls")]
@@ -66,10 +68,7 @@ fn download_file(mut ep_data: EpData, dest: PathBuf, mut max_retries: usize) -> 
     let agent = agent_builder.build();
 
     let request: Result<ureq::Response, ()> = loop {
-        let response = agent
-            .get(&ep_data.url)
-            .timeout(Duration::from_secs(30))
-            .call();
+        let response = agent.get(&ep_data.url).call();
         match response {
             Ok(resp) => break Ok(resp),
             Err(_) => {
