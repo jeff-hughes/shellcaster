@@ -74,7 +74,7 @@ pub fn check_feed(
 /// episodes from an RSS feed.
 fn get_feed_data(url: String, mut max_retries: usize) -> Result<PodcastNoId> {
     let agent_builder = ureq::builder()
-        .timeout_connect(Duration::from_secs(5))
+        .timeout_connect(Duration::from_secs(10))
         .timeout_read(Duration::from_secs(20));
     #[cfg(feature = "native_tls")]
     let tls_connector = std::sync::Arc::new(native_tls::TlsConnector::new().unwrap());
