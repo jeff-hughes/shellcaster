@@ -1,5 +1,9 @@
 <div align="center"><img alt="shellcaster logo: Ferris the crab with headphones" src="https://raw.githubusercontent.com/jeff-hughes/shellcaster/master/img/shellcaster-logo_smol.png"/></div>
 
+# Note
+
+This project is no longer maintained. I no longer have the time, nor the motivation, to maintain it. It may still work for you, but I make no guarantees. I may come back to it at some point in the future, but no guarantees on that either.
+
 # Shellcaster
 
 Shellcaster is a terminal-based podcast manager, built in Rust. It provides a terminal UI (i.e., an ncurses-like interface) to allow users to subscribe to podcast feeds, and sync feeds to check for new episodes. Episodes may be downloaded locally, played with an external media player, and marked as played/unplayed. Keybindings and other options are configurable via a config file.
